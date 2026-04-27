@@ -10,6 +10,10 @@ import Foundation
 struct ChallengeDetector: Sendable {
 
     func detect(response: HTMLResponse) -> ChallengeKind? {
+        if Self.containsUsableNodeSeekHTML(response.html) {
+            return nil
+        }
+
         if isCloudflareChallenge(html: response.html, headers: response.headers) {
             return .cloudflare(response.finalURL)
         }
@@ -42,5 +46,13 @@ struct ChallengeDetector: Sendable {
             || html.contains("window._cf_chl_opt")
             || html.contains("/cdn-cgi/challenge-platform/")
             || html.contains("Enable JavaScript and cookies to continue")
+    }
+
+    static func containsUsableNodeSeekHTML(_ html: String) -> Bool {
+        html.contains("id=\"nsk-body\"")
+            || html.contains("class=\"post-list\"")
+            || html.contains("class=\"nsk-post\"")
+            || html.contains("class=\"post-content\"")
+            || html.contains("class=\"comments\"")
     }
 }

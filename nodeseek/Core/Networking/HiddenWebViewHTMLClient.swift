@@ -142,7 +142,7 @@ private final class HiddenWebViewLoader: NSObject, WKNavigationDelegate {
     private var initialURL: URL?
     private var completed = false
     private var challengePollCount = 0
-    private let maxChallengePollCount = 6
+    private let maxChallengePollCount = 10
     private let challengePollIntervalNanoseconds: UInt64 = 1_200_000_000
     private let logger = Logger(subsystem: "com.nodeseek.app", category: "HiddenWebViewLoader")
 
@@ -194,11 +194,12 @@ private final class HiddenWebViewLoader: NSObject, WKNavigationDelegate {
             while !Task.isCancelled {
                 do {
                     let html = try await self.readOuterHTML()
+                    let hasUsableContent = ChallengeDetector.containsUsableNodeSeekHTML(html)
                     let isChallengePage = Self.isChallengePage(html: html)
                     let shouldResolve = !isChallengePage || self.challengePollCount >= self.maxChallengePollCount
 
-                    if shouldResolve {
-                        logger.info("结束轮询，challenge 状态: \(isChallengePage), pollCount: \(self.challengePollCount)")
+                    if hasUsableContent || shouldResolve {
+                        logger.info("结束轮询，challenge 状态: \(isChallengePage), usableContent: \(hasUsableContent), pollCount: \(self.challengePollCount)")
                         await self.cookieBridge.syncWebViewCookiesToURLSession()
                         logger.info("已同步 WebView Cookie 到 URLSession")
                         self.resolve(.success(HTMLResponse(
@@ -211,7 +212,7 @@ private final class HiddenWebViewLoader: NSObject, WKNavigationDelegate {
                     }
 
                     self.challengePollCount += 1
-                    self.logger.warning("仍在 challenge 页面，继续轮询: \(self.challengePollCount)/\(self.maxChallengePollCount)")
+                    self.logger.warning("仍在 challenge 页面，usableContent=\(hasUsableContent)，继续轮询: \(self.challengePollCount)/\(self.maxChallengePollCount)")
                     try? await Task.sleep(nanoseconds: self.challengePollIntervalNanoseconds)
                 } catch {
                     self.logger.error("轮询 outerHTML 失败: \(error.localizedDescription)")

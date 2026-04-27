@@ -40,4 +40,33 @@ struct ChallengeDetectorTests {
 
         #expect(challenge == nil)
     }
+
+    @Test func doesNotTreatUsableNodeSeekHTMLAsChallengeEvenIfChallengeMarkersRemain() {
+        let html = """
+        <html>
+        <head>
+          <script>window._cf_chl_opt = {}</script>
+          <script src="/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1"></script>
+        </head>
+        <body>
+          <div id="nsk-body" class="nsk-container">
+            <ul class="post-list">
+              <li class="post-list-item">ok</li>
+            </ul>
+          </div>
+        </body>
+        </html>
+        """
+        let url = URL(string: "https://www.nodeseek.com/page-1")!
+        let response = HTMLResponse(
+            statusCode: 200,
+            headers: [:],
+            finalURL: url,
+            html: html
+        )
+
+        let challenge = ChallengeDetector().detect(response: response)
+
+        #expect(challenge == nil)
+    }
 }
