@@ -1,0 +1,173 @@
+//
+//  KannaNodeSeekParser.swift
+//  nodeseek
+//
+//  Created by Codex on 2026/4/27.
+//
+
+import Foundation
+import Kanna
+
+enum NodeSeekParserError: Error {
+    case notImplemented
+}
+
+struct KannaNodeSeekParser: NodeSeekParser {
+    let baseURL: URL
+
+    func parsePostList(html: String) throws -> [PostSummary] {
+        let document = try HTML(html: html, encoding: .utf8)
+
+        var seenIDs = Set<String>()
+        var posts: [PostSummary] = []
+
+        for item in document.xpath(XPathRules.postListItems) {
+            guard let post = parsePostListItem(item) else {
+                continue
+            }
+
+            append(post, to: &posts, seenIDs: &seenIDs)
+        }
+
+        for titleNode in document.xpath(XPathRules.fallbackPostLinks) {
+            let container = titleNode.at_xpath(XPathRules.fallbackPostContainer) ?? titleNode
+            guard let post = parsePostListItem(container, titleNode: titleNode) else {
+                continue
+            }
+
+            append(post, to: &posts, seenIDs: &seenIDs)
+        }
+
+        return posts
+    }
+
+    private func append(_ post: PostSummary, to posts: inout [PostSummary], seenIDs: inout Set<String>) {
+        guard seenIDs.insert(post.id).inserted else {
+            return
+        }
+
+        posts.append(post)
+    }
+
+    private func parsePostListItem(_ item: XMLElement, titleNode explicitTitleNode: XMLElement? = nil) -> PostSummary? {
+        guard
+            let titleNode = explicitTitleNode ?? item.at_xpath(XPathRules.postTitle),
+            let title = titleNode.text?.normalizedNonEmpty
+        else {
+            return nil
+        }
+
+        let href = titleNode["href"] ?? titleNode.at_xpath(".//a")?["href"]
+        let url = href.flatMap { URL(string: $0, relativeTo: baseURL)?.absoluteURL } ?? baseURL
+        let id = Self.postID(from: url) ?? title
+        let avatarURL = firstAttribute(
+            in: item,
+            xpaths: [XPathRules.postAvatar, XPathRules.fallbackAvatar],
+            attribute: "src"
+        ).flatMap { URL(string: $0, relativeTo: baseURL)?.absoluteURL }
+        let authorName = firstText(in: item, xpaths: [XPathRules.postAuthor, XPathRules.fallbackAuthor]) ?? "未知用户"
+        let nodeName = firstText(in: item, xpaths: [XPathRules.postNode, XPathRules.fallbackNode])
+        let replyText = item.at_xpath(XPathRules.replyCount)?.text ?? item.text ?? ""
+        let replyCount = Self.replyCount(in: replyText) ?? 0
+        let lastActivityText = firstText(in: item, xpaths: [XPathRules.lastActive, XPathRules.fallbackLastActive])
+
+        return PostSummary(
+            id: id,
+            title: title,
+            url: url,
+            authorName: authorName,
+            nodeName: nodeName,
+            replyCount: replyCount,
+            lastActivityText: lastActivityText,
+            avatarURL: avatarURL
+        )
+    }
+
+    private func firstText(in item: XMLElement, xpaths: [String]) -> String? {
+        for xpath in xpaths {
+            if let value = item.at_xpath(xpath)?.text?.normalizedNonEmpty {
+                return value
+            }
+        }
+
+        return nil
+    }
+
+    private func firstAttribute(in item: XMLElement, xpaths: [String], attribute: String) -> String? {
+        for xpath in xpaths {
+            if let value = item.at_xpath(xpath)?[attribute]?.trimmedNonEmpty {
+                return value
+            }
+        }
+
+        return nil
+    }
+
+    func parsePostDetail(html: String, url: URL) throws -> PostDetail {
+        throw NodeSeekParserError.notImplemented
+    }
+
+    func parseReplyForm(html: String, pageURL: URL) throws -> ReplyForm {
+        throw NodeSeekParserError.notImplemented
+    }
+
+    func parseCheckInState(html: String, pageURL: URL) throws -> CheckInState {
+        throw NodeSeekParserError.notImplemented
+    }
+    
+    private static func postID(from url: URL) -> String? {
+        let path = url.path
+        guard let range = path.range(of: #"post[-/](\d+)"#, options: .regularExpression) else {
+            return nil
+        }
+        
+        return String(path[range])
+            .components(separatedBy: CharacterSet.decimalDigits.inverted)
+            .joined()
+            .trimmedNonEmpty
+    }
+    
+    private static func firstInteger(in text: String) -> Int? {
+        guard let range = text.range(of: #"\d+"#, options: .regularExpression) else {
+            return nil
+        }
+        
+        return Int(text[range])
+    }
+
+    private static func replyCount(in text: String) -> Int? {
+        if let range = text.range(of: #"\d+\s*(回复|条回复|评论)"#, options: .regularExpression) {
+            return firstInteger(in: String(text[range]))
+        }
+
+        if let range = text.range(of: #"(回复|评论)\s*\d+"#, options: .regularExpression) {
+            return firstInteger(in: String(text[range]))
+        }
+
+        if let range = text.range(of: #"\d+\s*comments?"#, options: .regularExpression) {
+            return firstInteger(in: String(text[range]))
+        }
+
+        if let range = text.range(of: #"comments?\s*\d+"#, options: .regularExpression) {
+            return firstInteger(in: String(text[range]))
+        }
+
+        return firstInteger(in: text)
+    }
+}
+
+private extension String {
+    
+    var trimmedNonEmpty: String? {
+        let value = trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
+
+    var normalizedNonEmpty: String? {
+        let value = components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+
+        return value.isEmpty ? nil : value
+    }
+}

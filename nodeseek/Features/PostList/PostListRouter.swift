@@ -1,0 +1,39 @@
+//
+//  PostListRouter.swift
+//  nodeseek
+//
+//  Created by Codex on 2026/4/27.
+//
+
+import UIKit
+
+class PostListRouter: PostListRouterProtocol {
+    
+    // MARK: - Properties
+    weak var viewController: UIViewController?
+    
+    // MARK: - Static Methods
+    static func createModule() -> UIViewController {
+        let router = PostListRouter()
+        let interactor = PostListInteractor()
+        let presenter = PostListPresenter(
+            interactor: interactor,
+            router: router
+        )
+        
+        interactor.presenter = presenter
+        
+        let view = PostListViewController(presenter: presenter)
+        
+        presenter.setView(view)
+        router.viewController = view
+        
+        return view
+    }
+    
+    // MARK: - Navigation
+    func navigateToPostDetail(post: PostSummary) {
+        let detailViewController = PostDetailRouter.createModule(post: post)
+        viewController?.navigationController?.pushViewController(detailViewController, animated: true)
+    }
+}

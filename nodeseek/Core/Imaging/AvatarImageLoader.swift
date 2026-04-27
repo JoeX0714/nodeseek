@@ -9,6 +9,7 @@ import Foundation
 import Kingfisher
 import OSLog
 import UIKit
+import WebKit
 
 private let avatarRequestModifier = AnyModifier { request in
     var request = request
@@ -46,6 +47,7 @@ final class AvatarImageLoader {
     private let downloader: ImageDownloader
     private let cookieBridge: CookieBridge
     private var requestTokens: [ObjectIdentifier: UUID] = [:]
+    private let svgImageCache = NSCache<NSString, UIImage>()
 
     convenience init() {
         self.init(cookieBridge: CookieBridge())
@@ -126,6 +128,50 @@ final class AvatarImageLoader {
                     completion?(.success(url: avatarURL, cacheType: retrieveResult.cacheType))
 
                 case .failure(let error):
+                    if let svgData = self.svgDataIfAvailable(from: error) {
+                        self.logger.info(
+                            "检测到 SVG 头像，准备渲染 id=\(postID, privacy: .public), url=\(avatarURL.absoluteString, privacy: .public)"
+                        )
+                        Task { @MainActor [weak self, weak imageView] in
+                            guard let self, let imageView else { return }
+                            guard self.isCurrent(token, for: imageView) else { return }
+
+                            let cacheKey = avatarURL.absoluteString as NSString
+                            if let cachedImage = self.svgImageCache.object(forKey: cacheKey) {
+                                imageView.image = cachedImage
+                                self.finishIfCurrent(token, for: imageView)
+                                self.logger.debug(
+                                    "SVG 头像缓存命中 id=\(postID, privacy: .public), url=\(avatarURL.absoluteString, privacy: .public)"
+                                )
+                                completion?(.success(url: avatarURL, cacheType: .memory))
+                                return
+                            }
+
+                            do {
+                                let renderedImage = try await Self.renderSVGImage(
+                                    data: svgData,
+                                    targetSize: CGSize(width: 56, height: 56)
+                                )
+                                guard self.isCurrent(token, for: imageView) else { return }
+                                imageView.image = renderedImage
+                                self.svgImageCache.setObject(renderedImage, forKey: cacheKey)
+                                self.finishIfCurrent(token, for: imageView)
+                                self.logger.info(
+                                    "SVG 头像渲染成功 id=\(postID, privacy: .public), url=\(avatarURL.absoluteString, privacy: .public)"
+                                )
+                                completion?(.success(url: avatarURL, cacheType: .none))
+                            } catch {
+                                guard self.isCurrent(token, for: imageView) else { return }
+                                self.finishIfCurrent(token, for: imageView)
+                                self.logger.error(
+                                    "SVG 头像渲染失败 id=\(postID, privacy: .public), url=\(avatarURL.absoluteString, privacy: .public), error=\(error.localizedDescription, privacy: .public)"
+                                )
+                                completion?(.failure(url: avatarURL, reason: error.localizedDescription))
+                            }
+                        }
+                        return
+                    }
+
                     if allowCookieRetry, self.shouldRetryAfterCookieSync(error: error) {
                         self.logger.warning(
                             "头像疑似 challenge 页面，准备同步 Cookie 后重试 id=\(postID, privacy: .public), url=\(avatarURL.absoluteString, privacy: .public)"
@@ -200,8 +246,11 @@ final class AvatarImageLoader {
             || lowerSnippet.contains("<!doctype html")
             || lowerSnippet.contains("just a moment")
             || lowerSnippet.contains("cf_chl")
+        let isSVG = lowerSnippet.contains("<svg")
+            || lowerSnippet.contains("<?xml")
+            || lowerSnippet.contains("</svg>")
 
-        message += ", dataBytes=\(data.count), looksHTML=\(isHTML)"
+        message += ", dataBytes=\(data.count), looksHTML=\(isHTML), looksSVG=\(isSVG)"
         if !snippet.isEmpty {
             message += ", snippet=\(snippet)"
         }
@@ -220,5 +269,148 @@ final class AvatarImageLoader {
             || prefix.contains("just a moment")
             || prefix.contains("cf_chl")
             || prefix.contains("challenge-platform")
+    }
+
+    private func svgDataIfAvailable(from error: KingfisherError) -> Data? {
+        guard case let .processorError(reason) = error else { return nil }
+        guard case let .processingFailed(processor: _, item: item) = reason else { return nil }
+        guard case let .data(data) = item else { return nil }
+        return dataLooksLikeSVG(data) ? data : nil
+    }
+
+    private func dataLooksLikeSVG(_ data: Data) -> Bool {
+        guard !data.isEmpty else { return false }
+        guard let prefix = String(data: data.prefix(512), encoding: .utf8)?
+            .lowercased()
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ") else {
+            return false
+        }
+        return prefix.contains("<svg")
+            || prefix.contains("</svg>")
+            || (prefix.contains("<?xml") && prefix.contains("svg"))
+    }
+
+    private static func renderSVGImage(data: Data, targetSize: CGSize) async throws -> UIImage {
+        guard let svgContent = String(data: data, encoding: .utf8) else {
+            throw SVGRenderError.invalidUTF8
+        }
+
+        let html = """
+        <!doctype html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+              html, body {
+                margin: 0;
+                padding: 0;
+                width: \(Int(targetSize.width))px;
+                height: \(Int(targetSize.height))px;
+                overflow: hidden;
+                background: transparent;
+              }
+              svg {
+                width: 100%;
+                height: 100%;
+                display: block;
+              }
+            </style>
+          </head>
+          <body>\(svgContent)</body>
+        </html>
+        """
+
+        let loader = SVGSnapshotLoader(targetSize: targetSize)
+        return try await loader.render(html: html, baseURL: URL(string: "https://www.nodeseek.com/"))
+    }
+}
+
+private enum SVGRenderError: LocalizedError {
+    case invalidUTF8
+    case snapshotFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidUTF8:
+            return "SVG 数据编码无效"
+        case .snapshotFailed:
+            return "SVG 快照失败"
+        }
+    }
+}
+
+@MainActor
+private final class SVGSnapshotLoader: NSObject, WKNavigationDelegate {
+    private let webView: WKWebView
+    private var navigationContinuation: CheckedContinuation<Void, Error>?
+    private var completed = false
+
+    init(targetSize: CGSize) {
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        webView = WKWebView(frame: CGRect(origin: .zero, size: targetSize), configuration: configuration)
+        webView.isOpaque = false
+        webView.backgroundColor = .clear
+        super.init()
+        webView.navigationDelegate = self
+    }
+
+    deinit {
+        webView.navigationDelegate = nil
+    }
+
+    func render(html: String, baseURL: URL?) async throws -> UIImage {
+        try await withCheckedThrowingContinuation { continuation in
+            navigationContinuation = continuation
+            webView.loadHTMLString(html, baseURL: baseURL)
+        }
+
+        try? await Task.sleep(nanoseconds: 40_000_000)
+        let config = WKSnapshotConfiguration()
+        config.rect = CGRect(origin: .zero, size: webView.bounds.size)
+        config.afterScreenUpdates = true
+        return try await withCheckedThrowingContinuation { continuation in
+            webView.takeSnapshot(with: config) { image, error in
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                guard let image else {
+                    continuation.resume(throwing: SVGRenderError.snapshotFailed)
+                    return
+                }
+                continuation.resume(returning: image)
+            }
+        }
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        resolveNavigation(.success(()))
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        resolveNavigation(.failure(error))
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        didFailProvisionalNavigation navigation: WKNavigation!,
+        withError error: Error
+    ) {
+        resolveNavigation(.failure(error))
+    }
+
+    private func resolveNavigation(_ result: Result<Void, Error>) {
+        guard !completed, let continuation = navigationContinuation else { return }
+        completed = true
+        navigationContinuation = nil
+        switch result {
+        case .success:
+            continuation.resume()
+        case .failure(let error):
+            continuation.resume(throwing: error)
+        }
     }
 }
