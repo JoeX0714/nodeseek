@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import AsyncDisplayKit
 import Testing
 import UIKit
 @testable import nodeseek
@@ -64,6 +65,50 @@ struct PostDetailViewControllerTests {
         let action = try #require(refreshButton.action)
         _ = (refreshButton.target as AnyObject).perform(action)
         #expect(presenter.loadCount == 2)
+    }
+
+    @Test func detailTextureCellsCanBeConstructedOffMainThread() async throws {
+        let attributedText = NSAttributedString(string: "正文")
+        let header = PostDetailHeaderContent(
+            postID: "703863",
+            title: "标题",
+            authorName: "ipv4",
+            avatarURL: URL(string: "https://www.nodeseek.com/avatar/34378.png"),
+            metadataText: "刚刚",
+            contentHTML: "<p>正文</p>"
+        )
+        let comment = Comment(
+            id: "1",
+            authorName: "a",
+            avatarURL: URL(string: "https://www.nodeseek.com/avatar/1.png"),
+            floorText: "#1",
+            createdAtText: "1min ago",
+            contentHTML: "<p>评论</p>"
+        )
+
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                _ = PostBodyCellNode(
+                    content: header,
+                    attributedContent: attributedText,
+                    onImageTapped: { _, _ in },
+                    onTextLayoutInvalidated: {}
+                ).layoutThatFits(ASSizeRange(
+                    min: .zero,
+                    max: CGSize(width: 320, height: CGFloat.greatestFiniteMagnitude)
+                ))
+                _ = CommentCellNode(
+                    comment: comment,
+                    attributedBody: attributedText,
+                    onImageTapped: { _, _ in },
+                    onTextLayoutInvalidated: {}
+                ).layoutThatFits(ASSizeRange(
+                    min: .zero,
+                    max: CGSize(width: 320, height: CGFloat.greatestFiniteMagnitude)
+                ))
+                continuation.resume()
+            }
+        }
     }
 }
 

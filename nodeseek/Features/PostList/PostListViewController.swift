@@ -13,6 +13,11 @@ class PostListViewController: UIViewController {
     private let presenter: PostListPresenterProtocol
     private var categories: [PostListCategory] = []
     private var selectedCategory: PostListCategory = .all
+    private var currentSortMode: PostListSortMode = .replyTime
+    private var sortToggleWidthConstraint: NSLayoutConstraint?
+    private var sortToggleTrailingConstraint: NSLayoutConstraint?
+    private var sortToggleCollapseWorkItem: DispatchWorkItem?
+    private var isSortToggleExpanded = false
     
     var hasCompactTopButton: Bool {
         compactTopButton.superview != nil
@@ -45,8 +50,8 @@ class PostListViewController: UIViewController {
         configuration.baseForegroundColor = .secondaryLabel
         configuration.baseBackgroundColor = .tertiarySystemFill
         configuration.cornerStyle = .capsule
-        configuration.imagePadding = 3
-        configuration.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 9, bottom: 6, trailing: 10)
+        configuration.imagePadding = 0
+        configuration.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 10, bottom: 6, trailing: 10)
         configuration.titleLineBreakMode = .byTruncatingTail
         button.configuration = configuration
         button.accessibilityIdentifier = "post-list-sort-toggle"
@@ -137,6 +142,16 @@ class PostListViewController: UIViewController {
         view.addSubview(loadingIndicator)
         tabScrollView.addSubview(tabStackView)
 
+        let sortToggleTrailingConstraint = sortToggleButton.trailingAnchor.constraint(
+            equalTo: view.safeAreaLayoutGuide.trailingAnchor,
+            constant: SortToggleLayout.collapsedTrailing
+        )
+        let sortToggleWidthConstraint = sortToggleButton.widthAnchor.constraint(
+            equalToConstant: SortToggleLayout.collapsedWidth
+        )
+        self.sortToggleTrailingConstraint = sortToggleTrailingConstraint
+        self.sortToggleWidthConstraint = sortToggleWidthConstraint
+
         NSLayoutConstraint.activate([
             pageContainerView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             pageContainerView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -148,9 +163,9 @@ class PostListViewController: UIViewController {
             compactTopButton.widthAnchor.constraint(equalToConstant: 36),
             compactTopButton.heightAnchor.constraint(equalToConstant: 36),
 
-            sortToggleButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -18),
+            sortToggleTrailingConstraint,
             sortToggleButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -18),
-            sortToggleButton.widthAnchor.constraint(equalToConstant: 126),
+            sortToggleWidthConstraint,
             sortToggleButton.heightAnchor.constraint(equalToConstant: 34),
 
             tabScrollView.leadingAnchor.constraint(equalTo: compactTopButton.trailingAnchor, constant: 8),
@@ -167,6 +182,8 @@ class PostListViewController: UIViewController {
             loadingIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             loadingIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor)
         ])
+
+        applySortTogglePresentation(expanded: false)
     }
     
     // MARK: - Actions
@@ -175,8 +192,10 @@ class PostListViewController: UIViewController {
     }
 
     @objc private func sortToggleButtonTapped() {
+        setSortToggleExpanded(true, animated: true)
         presenter.didToggleSortMode()
         pageContainerView.scrollToTop(for: selectedCategory, animated: false)
+        scheduleSortToggleCollapse()
     }
 
     @objc private func categoryButtonTapped(_ sender: CategoryTabButton) {
@@ -217,6 +236,63 @@ class PostListViewController: UIViewController {
         if syncPage {
             pageContainerView.setCurrentCategory(selected, animated: pageAnimated)
         }
+    }
+
+    private func scheduleSortToggleCollapse() {
+        sortToggleCollapseWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.setSortToggleExpanded(false, animated: true)
+        }
+        sortToggleCollapseWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.35, execute: workItem)
+    }
+
+    private func setSortToggleExpanded(_ expanded: Bool, animated: Bool) {
+        sortToggleCollapseWorkItem?.cancel()
+        sortToggleCollapseWorkItem = nil
+        isSortToggleExpanded = expanded
+        applySortTogglePresentation(expanded: expanded)
+        sortToggleWidthConstraint?.constant = expanded ? SortToggleLayout.expandedWidth : SortToggleLayout.collapsedWidth
+        sortToggleTrailingConstraint?.constant = expanded ? SortToggleLayout.expandedTrailing : SortToggleLayout.collapsedTrailing
+
+        let animations: () -> Void = { [weak self] in
+            self?.view.layoutIfNeeded()
+        }
+        guard animated else {
+            animations()
+            return
+        }
+        UIView.animate(
+            withDuration: 0.28,
+            delay: 0,
+            usingSpringWithDamping: 0.82,
+            initialSpringVelocity: 0.35,
+            options: [.allowUserInteraction, .beginFromCurrentState],
+            animations: animations
+        )
+    }
+
+    private func applySortTogglePresentation(expanded: Bool) {
+        let symbolConfiguration = UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
+        let image = UIImage(systemName: currentSortMode.symbolName, withConfiguration: symbolConfiguration)
+        sortToggleButton.setImage(image, for: .normal)
+        sortToggleButton.setTitle(expanded ? currentSortMode.buttonTitle : nil, for: .normal)
+        sortToggleButton.titleLabel?.font = .systemFont(ofSize: 12, weight: .medium)
+        sortToggleButton.titleLabel?.numberOfLines = 1
+        sortToggleButton.titleLabel?.lineBreakMode = .byTruncatingTail
+        sortToggleButton.titleLabel?.adjustsFontSizeToFitWidth = true
+        sortToggleButton.titleLabel?.minimumScaleFactor = 0.9
+
+        var configuration = sortToggleButton.configuration ?? UIButton.Configuration.tinted()
+        configuration.image = image
+        configuration.title = expanded ? currentSortMode.buttonTitle : nil
+        configuration.imagePadding = expanded ? 3 : 0
+        configuration.contentInsets = expanded
+            ? NSDirectionalEdgeInsets(top: 6, leading: 9, bottom: 6, trailing: 10)
+            : NSDirectionalEdgeInsets(top: 6, leading: 10, bottom: 6, trailing: 10)
+        configuration.titleLineBreakMode = .byTruncatingTail
+        sortToggleButton.configuration = configuration
+        sortToggleButton.accessibilityLabel = currentSortMode.accessibilityTitle
     }
 }
 
@@ -267,41 +343,30 @@ extension PostListViewController: PostListViewProtocol {
     }
 
     func renderSortMode(_ sortMode: PostListSortMode) {
-        let symbolName: String
-        switch sortMode {
-        case .postTime:
-            symbolName = "clock.fill"
-        case .replyTime:
-            symbolName = "clock.arrow.trianglehead.counterclockwise.rotate.90"
-        }
-
-        let symbolConfiguration = UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
-        let image = UIImage(systemName: symbolName, withConfiguration: symbolConfiguration)
-        sortToggleButton.setImage(image, for: .normal)
-        sortToggleButton.setTitle(sortMode.buttonTitle, for: .normal)
-        sortToggleButton.titleLabel?.font = .systemFont(ofSize: 12, weight: .medium)
-        sortToggleButton.titleLabel?.numberOfLines = 1
-        sortToggleButton.titleLabel?.lineBreakMode = .byTruncatingTail
-        sortToggleButton.titleLabel?.adjustsFontSizeToFitWidth = true
-        sortToggleButton.titleLabel?.minimumScaleFactor = 0.9
-
-        var configuration = sortToggleButton.configuration ?? UIButton.Configuration.tinted()
-        configuration.image = image
-        configuration.title = sortMode.buttonTitle
-        configuration.imagePadding = 3
-        configuration.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 9, bottom: 6, trailing: 10)
-        configuration.titleLineBreakMode = .byTruncatingTail
-        sortToggleButton.configuration = configuration
-        sortToggleButton.titleLabel?.font = .systemFont(ofSize: 12, weight: .medium)
-        sortToggleButton.titleLabel?.numberOfLines = 1
-        sortToggleButton.titleLabel?.lineBreakMode = .byTruncatingTail
-        sortToggleButton.titleLabel?.adjustsFontSizeToFitWidth = true
-        sortToggleButton.titleLabel?.minimumScaleFactor = 0.9
-        sortToggleButton.accessibilityLabel = sortMode.accessibilityTitle
+        currentSortMode = sortMode
+        applySortTogglePresentation(expanded: isSortToggleExpanded)
     }
     
     func render(posts: [PostSummary]) {
         pageContainerView.setPosts(posts, for: selectedCategory)
+    }
+}
+
+private enum SortToggleLayout {
+    static let collapsedWidth: CGFloat = 46
+    static let expandedWidth: CGFloat = 126
+    static let collapsedTrailing: CGFloat = 10
+    static let expandedTrailing: CGFloat = -18
+}
+
+private extension PostListSortMode {
+    var symbolName: String {
+        switch self {
+        case .postTime:
+            return "clock.fill"
+        case .replyTime:
+            return "clock.arrow.trianglehead.counterclockwise.rotate.90"
+        }
     }
 }
 

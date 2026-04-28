@@ -11,7 +11,7 @@ import UIKit
 
 @MainActor
 struct PostListViewControllerTests {
-    @Test func sortToggleButtonUsesCompactTextualPill() throws {
+    @Test func sortToggleButtonPeeksFromRightAndExpandsOnTap() throws {
         let presenter = SpyPostListPresenter()
         let viewController = PostListViewController(presenter: presenter)
         viewController.loadViewIfNeeded()
@@ -21,14 +21,26 @@ struct PostListViewControllerTests {
         viewController.view.layoutIfNeeded()
 
         let button = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-list-sort-toggle"))
-        #expect(button.title(for: .normal) == "回复优先")
+        #expect(button.title(for: .normal) == nil)
         #expect(button.image(for: .normal) != nil)
         #expect(button.bounds.height <= 40)
-        #expect(button.bounds.width >= 124)
+        #expect(button.bounds.width <= 48)
+        #expect(button.frame.maxX > viewController.view.bounds.maxX)
         #expect(button.titleLabel?.font.pointSize ?? 99 <= 12)
         #expect(button.titleLabel?.numberOfLines == 1)
         #expect(button.titleLabel?.lineBreakMode == .byTruncatingTail)
         #expect(button.configuration?.titleLineBreakMode == .byTruncatingTail)
+
+        let animationsWereEnabled = UIView.areAnimationsEnabled
+        UIView.setAnimationsEnabled(false)
+        button.sendActions(for: .touchUpInside)
+        viewController.view.layoutIfNeeded()
+        UIView.setAnimationsEnabled(animationsWereEnabled)
+
+        #expect(presenter.toggleSortCount == 1)
+        #expect(button.title(for: .normal) == "回复优先")
+        #expect(button.bounds.width >= 124)
+        #expect(button.frame.maxX < viewController.view.bounds.maxX)
 
         viewController.renderSortMode(.postTime)
         #expect(button.title(for: .normal) == "发帖优先")

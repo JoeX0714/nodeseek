@@ -6,7 +6,9 @@
 //
 
 import UIKit
+import AsyncDisplayKit
 import DTCoreText
+import ImageIO
 import OSLog
 import SafariServices
 import WebKit
@@ -23,7 +25,6 @@ class PostDetailViewController: UIViewController {
 
     private let presenter: PostDetailPresenterProtocol
     private let baseURL = URL(string: "https://www.nodeseek.com")!
-    private let headerView = PostDetailHeaderView()
     private var currentHeaderContent: PostDetailHeaderContent?
     private var headerAttributedContent: NSAttributedString?
     private var comments: [Comment] = []
@@ -34,20 +35,14 @@ class PostDetailViewController: UIViewController {
     private let sourcePostURL: URL?
     private var photoBrowserPresenter: DetailPhotoBrowserPresenter?
     private var attachmentLayoutRefreshWorkItem: DispatchWorkItem?
+    private var tableReloadWorkItem: DispatchWorkItem?
+    private var pendingReloadIndexPaths: Set<IndexPath> = []
     private let renderQueue = DispatchQueue(
         label: "com.nodeseek.app.postdetail.render",
         qos: .userInitiated
     )
 
-    private let tableView: UITableView = {
-        let tableView = UITableView(frame: .zero, style: .plain)
-        tableView.backgroundColor = .systemBackground
-        tableView.separatorStyle = .none
-        tableView.rowHeight = UITableView.automaticDimension
-        tableView.estimatedRowHeight = 120
-        tableView.translatesAutoresizingMaskIntoConstraints = false
-        return tableView
-    }()
+    private let tableNode = ASTableNode(style: .plain)
 
     private let loadingIndicator: UIActivityIndicatorView = {
         let indicator = UIActivityIndicatorView(style: .medium)
@@ -64,15 +59,10 @@ class PostDetailViewController: UIViewController {
         self.presenter = presenter
         self.sourcePostURL = sourcePostURL
         super.init(nibName: nil, bundle: nil)
-        headerView.onImageTapped = { [weak self] imageURLs, initialIndex in
-            self?.presentPhotoBrowser(imageURLs: imageURLs, initialIndex: initialIndex)
-        }
-        headerView.onTextLayoutInvalidated = { [weak self] in
-            self?.scheduleAttachmentLayoutRefresh()
-        }
 
         if let initialHeader {
-            configureHeader(initialHeader, attributedContent: nil)
+            currentHeaderContent = initialHeader
+            headerAttributedContent = nil
             scheduleHeaderRender(for: initialHeader)
         }
     }
@@ -82,6 +72,8 @@ class PostDetailViewController: UIViewController {
     }
 
     deinit {
+        attachmentLayoutRefreshWorkItem?.cancel()
+        tableReloadWorkItem?.cancel()
         NotificationCenter.default.removeObserver(self)
     }
 
@@ -111,36 +103,76 @@ class PostDetailViewController: UIViewController {
         navigationItem.rightBarButtonItems = [refreshButton, browserButton]
     }
 
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        resizeTableHeaderView()
-    }
-
     private func setupUI() {
         view.backgroundColor = .systemBackground
-        tableView.dataSource = self
-        tableView.delegate = self
-        tableView.register(PostDetailCommentCell.self, forCellReuseIdentifier: PostDetailCommentCell.reuseIdentifier)
+        tableNode.dataSource = self
+        tableNode.delegate = self
+        tableNode.view.backgroundColor = .systemBackground
+        tableNode.view.separatorStyle = .none
+        tableNode.view.showsVerticalScrollIndicator = true
+        tableNode.view.translatesAutoresizingMaskIntoConstraints = false
 
-        view.addSubview(tableView)
+        view.addSubview(tableNode.view)
         view.addSubview(loadingIndicator)
-        tableView.tableHeaderView = headerView
 
         NSLayoutConstraint.activate([
-            tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            tableView.topAnchor.constraint(equalTo: view.topAnchor),
-            tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            tableNode.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            tableNode.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            tableNode.view.topAnchor.constraint(equalTo: view.topAnchor),
+            tableNode.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
             loadingIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             loadingIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor)
         ])
+
+        if currentHeaderContent != nil || comments.isEmpty == false {
+            reloadTableData()
+        }
     }
 
     private func configureHeader(_ content: PostDetailHeaderContent, attributedContent: NSAttributedString?) {
         currentHeaderContent = content
-        headerView.configure(content, attributedContent: attributedContent)
-        resizeTableHeaderView()
+        headerAttributedContent = attributedContent
+    }
+
+    private func reloadTableData() {
+        tableReloadWorkItem?.cancel()
+        pendingReloadIndexPaths.removeAll()
+        guard isViewLoaded else { return }
+        tableNode.reloadData()
+    }
+
+    private func scheduleHeaderReload() {
+        guard currentHeaderContent != nil else { return }
+        scheduleRowsReload([IndexPath(row: 0, section: 0)])
+    }
+
+    private func scheduleCommentReload(commentID: String) {
+        let headerRowCount = currentHeaderContent == nil ? 0 : 1
+        guard let commentIndex = comments.firstIndex(where: { $0.id == commentID }) else { return }
+        scheduleRowsReload([IndexPath(row: headerRowCount + commentIndex, section: 0)])
+    }
+
+    private func scheduleRowsReload(_ indexPaths: [IndexPath]) {
+        guard isViewLoaded else { return }
+        let rowCount = tableNode(self.tableNode, numberOfRowsInSection: 0)
+        let validIndexPaths = indexPaths.filter { $0.section == 0 && $0.row >= 0 && $0.row < rowCount }
+        guard validIndexPaths.isEmpty == false else { return }
+
+        pendingReloadIndexPaths.formUnion(validIndexPaths)
+        tableReloadWorkItem?.cancel()
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, self.isViewLoaded else { return }
+            let reloadIndexPaths = self.pendingReloadIndexPaths.sorted {
+                $0.section == $1.section ? $0.row < $1.row : $0.section < $1.section
+            }
+            self.pendingReloadIndexPaths.removeAll()
+            guard reloadIndexPaths.isEmpty == false else { return }
+            self.tableNode.reloadRows(at: reloadIndexPaths, with: .none)
+        }
+        tableReloadWorkItem = workItem
+        DispatchQueue.main.async(execute: workItem)
     }
 
     private func scheduleHeaderRender(for content: PostDetailHeaderContent) {
@@ -158,8 +190,8 @@ class PostDetailViewController: UIViewController {
                 guard let self else { return }
                 guard self.renderGeneration == generation else { return }
                 guard self.currentHeaderContent?.postID == content.postID else { return }
-                self.headerAttributedContent = attributed
                 self.configureHeader(content, attributedContent: attributed)
+                self.scheduleHeaderReload()
             }
         }
     }
@@ -187,32 +219,13 @@ class PostDetailViewController: UIViewController {
         return result.length > 0 ? result : nil
     }
 
-    private func resizeTableHeaderView() {
-        guard let tableHeaderView = tableView.tableHeaderView else { return }
-
-        let width = tableView.bounds.width > 0 ? tableView.bounds.width : view.bounds.width
-        guard width > 0 else { return }
-
-        tableHeaderView.frame.size.width = width
-        let targetSize = CGSize(width: width, height: UIView.layoutFittingCompressedSize.height)
-        let height = tableHeaderView.systemLayoutSizeFitting(
-            targetSize,
-            withHorizontalFittingPriority: .required,
-            verticalFittingPriority: .fittingSizeLevel
-        ).height
-
-        guard abs(tableHeaderView.frame.height - height) > 0.5 else { return }
-        tableHeaderView.frame.size.height = height
-        tableView.tableHeaderView = tableHeaderView
-    }
-
     private var availableHeaderContentWidth: CGFloat {
-        let width = tableView.bounds.width > 0 ? tableView.bounds.width : view.bounds.width
+        let width = tableNode.view.bounds.width > 0 ? tableNode.view.bounds.width : view.bounds.width
         return max((width > 0 ? width : 320) - Layout.horizontalInset * 2, 1)
     }
 
     private var availableCommentContentWidth: CGFloat {
-        let width = tableView.bounds.width > 0 ? tableView.bounds.width : view.bounds.width
+        let width = tableNode.view.bounds.width > 0 ? tableNode.view.bounds.width : view.bounds.width
         let contentWidth = (width > 0 ? width : 320)
             - Layout.commentHorizontalInset * 2
             - Layout.commentCardInset * 2
@@ -224,10 +237,8 @@ class PostDetailViewController: UIViewController {
     private func scheduleAttachmentLayoutRefresh() {
         attachmentLayoutRefreshWorkItem?.cancel()
         let workItem = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            self.resizeTableHeaderView()
-            self.tableView.beginUpdates()
-            self.tableView.endUpdates()
+            guard let self, self.isViewLoaded else { return }
+            self.tableNode.relayoutItems()
         }
         attachmentLayoutRefreshWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: workItem)
@@ -312,10 +323,7 @@ class PostDetailViewController: UIViewController {
                 } else {
                     self.commentAttributedCache.removeValue(forKey: commentID)
                 }
-                guard let row = self.comments.firstIndex(where: { $0.id == commentID }) else { return }
-                let indexPath = IndexPath(row: row, section: 0)
-                guard self.tableView.indexPathsForVisibleRows?.contains(indexPath) == true else { return }
-                self.tableView.reloadRows(at: [indexPath], with: .none)
+                self.scheduleCommentReload(commentID: commentID)
             }
         }
     }
@@ -339,16 +347,15 @@ extension PostDetailViewController: PostDetailViewProtocol {
     func render(detail: PostDetail) {
         title = "详情"
         renderGeneration += 1
-        headerAttributedContent = nil
         let headerContent = PostDetailHeaderContent(detail: detail)
         configureHeader(headerContent, attributedContent: nil)
-        scheduleHeaderRender(for: headerContent)
         comments = detail.comments
         commentAttributedCache.removeAll(keepingCapacity: true)
         renderedCommentIDs.removeAll(keepingCapacity: true)
         commentRenderInFlight.removeAll(keepingCapacity: true)
+        reloadTableData()
+        scheduleHeaderRender(for: headerContent)
         preheatCommentRender(for: comments)
-        tableView.reloadData()
     }
 
     func renderLoginRequired(message: String) {
@@ -365,12 +372,12 @@ extension PostDetailViewController: PostDetailViewProtocol {
             contentHTML: message
         )
         configureHeader(headerContent, attributedContent: nil)
-        scheduleHeaderRender(for: headerContent)
         comments = []
         commentAttributedCache.removeAll(keepingCapacity: true)
         renderedCommentIDs.removeAll(keepingCapacity: true)
         commentRenderInFlight.removeAll(keepingCapacity: true)
-        tableView.reloadData()
+        reloadTableData()
+        scheduleHeaderRender(for: headerContent)
     }
 }
 
@@ -490,32 +497,56 @@ private final class CookieSharedWebViewController: UIViewController, WKNavigatio
     }
 }
 
-extension PostDetailViewController: UITableViewDataSource, UITableViewDelegate {
-    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        comments.count
+extension PostDetailViewController: ASTableDataSource, ASTableDelegate {
+    func tableNode(_ tableNode: ASTableNode, numberOfRowsInSection section: Int) -> Int {
+        (currentHeaderContent == nil ? 0 : 1) + comments.count
     }
 
-    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        guard let cell = tableView.dequeueReusableCell(
-            withIdentifier: PostDetailCommentCell.reuseIdentifier,
-            for: indexPath
-        ) as? PostDetailCommentCell else {
-            return UITableViewCell()
+    func tableNode(_ tableNode: ASTableNode, nodeBlockForRowAt indexPath: IndexPath) -> ASCellNodeBlock {
+        let headerRowCount = currentHeaderContent == nil ? 0 : 1
+        if indexPath.row == 0, let header = currentHeaderContent {
+            let attributedContent = headerAttributedContent
+            return { [weak self] in
+                PostBodyCellNode(
+                    content: header,
+                    attributedContent: attributedContent,
+                    onImageTapped: { imageURLs, initialIndex in
+                        self?.presentPhotoBrowser(imageURLs: imageURLs, initialIndex: initialIndex)
+                    },
+                    onTextLayoutInvalidated: {
+                        self?.scheduleAttachmentLayoutRefresh()
+                    }
+                )
+            }
         }
 
-        let comment = comments[indexPath.row]
-        cell.onImageTapped = { [weak self] imageURLs, initialIndex in
-            self?.presentPhotoBrowser(imageURLs: imageURLs, initialIndex: initialIndex)
+        let commentIndex = indexPath.row - headerRowCount
+        guard comments.indices.contains(commentIndex) else {
+            return { ASCellNode() }
         }
-        cell.onTextLayoutInvalidated = { [weak self] in
-            self?.scheduleAttachmentLayoutRefresh()
+
+        let comment = comments[commentIndex]
+        let attributedBody = commentAttributedCache[comment.id]
+        return { [weak self] in
+            CommentCellNode(
+                comment: comment,
+                attributedBody: attributedBody,
+                onImageTapped: { imageURLs, initialIndex in
+                    self?.presentPhotoBrowser(imageURLs: imageURLs, initialIndex: initialIndex)
+                },
+                onTextLayoutInvalidated: {
+                    self?.scheduleAttachmentLayoutRefresh()
+                }
+            )
         }
-        cell.configure(
-            comment: comment,
-            attributedBody: commentAttributedCache[comment.id]
-        )
-        scheduleCommentRenderIfNeeded(for: comment)
-        return cell
+    }
+
+    func tableNode(_ tableNode: ASTableNode, willDisplayRowWith node: ASCellNode) {
+        let headerRowCount = currentHeaderContent == nil ? 0 : 1
+        guard let indexPath = tableNode.indexPath(for: node), indexPath.row >= headerRowCount else { return }
+        let commentIndex = indexPath.row - headerRowCount
+        guard comments.indices.contains(commentIndex) else { return }
+        scheduleCommentRenderIfNeeded(for: comments[commentIndex])
     }
 }
 
@@ -751,13 +782,14 @@ private final class PostDetailCommentCell: UITableViewCell {
 
 }
 
-private final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextContentViewDelegate, DTLazyImageViewDelegate {
+final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextContentViewDelegate {
     private enum Layout {
         static let fixedStickerWidth: CGFloat = 65
     }
 
     private var imageTapHandler: (([URL], Int) -> Void)?
     private var layoutInvalidatedHandler: (() -> Void)?
+    private var lastLayoutWidth: CGFloat = 0
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -768,6 +800,7 @@ private final class DetailRichTextView: DTAttributedTextContentView, DTAttribute
         shouldLayoutCustomSubviews = true
         layoutFrameHeightIsConstrainedByBounds = false
         isUserInteractionEnabled = true
+        setContentCompressionResistancePriority(.required, for: .vertical)
     }
 
     required init?(coder: NSCoder) {
@@ -789,6 +822,35 @@ private final class DetailRichTextView: DTAttributedTextContentView, DTAttribute
         setNeedsLayout()
     }
 
+    override func layoutSubviews() {
+        let width = bounds.width
+        if width > 0, abs(width - lastLayoutWidth) > 0.5 {
+            lastLayoutWidth = width
+            layouter = nil
+            relayoutText()
+            invalidateIntrinsicContentSize()
+        }
+        super.layoutSubviews()
+    }
+
+    override var intrinsicContentSize: CGSize {
+        richTextSize(constrainedToWidth: bounds.width)
+    }
+
+    override func systemLayoutSizeFitting(_ targetSize: CGSize) -> CGSize {
+        let width = targetSize.width > 0 ? targetSize.width : bounds.width
+        return richTextSize(constrainedToWidth: width)
+    }
+
+    override func systemLayoutSizeFitting(
+        _ targetSize: CGSize,
+        withHorizontalFittingPriority horizontalFittingPriority: UILayoutPriority,
+        verticalFittingPriority: UILayoutPriority
+    ) -> CGSize {
+        let width = targetSize.width > 0 ? targetSize.width : bounds.width
+        return richTextSize(constrainedToWidth: width)
+    }
+
     func attributedTextContentView(
         _ attributedTextContentView: DTAttributedTextContentView,
         viewFor attachment: DTTextAttachment,
@@ -799,27 +861,27 @@ private final class DetailRichTextView: DTAttributedTextContentView, DTAttribute
             return nil
         }
 
-        let imageView = DetailLazyImageView(frame: frame, imageURL: contentURL) { [weak self] tappedURL in
-            self?.handleImageTap(tappedURL)
-        }
+        let imageView = DetailInlineImageView(
+            frame: frame,
+            imageURL: contentURL,
+            targetPixelWidth: maxImageWidth(for: contentURL) * displayScale,
+            displayScale: displayScale,
+            onImageLoaded: { [weak self] loadedURL, imageSize in
+                self?.handleLoadedImage(loadedURL, imageSize: imageSize)
+            },
+            onImageTapped: { [weak self] tappedURL in
+                self?.handleImageTap(tappedURL)
+            }
+        )
         imageView.contentMode = .scaleAspectFit
         imageView.clipsToBounds = true
-        imageView.delegate = self
-        imageView.contentView = attributedTextContentView
         imageView.image = (attachment as? DTImageTextAttachment)?.image
-
-        if let request = DetailAttachmentDataSource.shared.makeImageRequest(for: contentURL) {
-            imageView.urlRequest = request
-        } else {
-            imageView.url = contentURL
-        }
 
         return imageView
     }
 
-    func lazyImageView(_ lazyImageView: DTLazyImageView, didChangeImageSize size: CGSize) {
-        guard let url = lazyImageView.url,
-              updateImageAttachments(matching: url, originalSize: size) else {
+    private func handleLoadedImage(_ url: URL, imageSize: CGSize) {
+        guard updateImageAttachments(matching: url, originalSize: imageSize) else {
             return
         }
 
@@ -899,6 +961,29 @@ private final class DetailRichTextView: DTAttributedTextContentView, DTAttribute
         return isStickerImageURL(url) ? min(width, Layout.fixedStickerWidth) : width
     }
 
+    private func richTextSize(constrainedToWidth width: CGFloat) -> CGSize {
+        guard attributedString.length > 0 else {
+            return CGSize(width: UIView.noIntrinsicMetric, height: 0)
+        }
+        guard width > 0 else {
+            return CGSize(width: UIView.noIntrinsicMetric, height: 1)
+        }
+
+        if abs(bounds.width - width) > 0.5 {
+            var adjustedBounds = bounds
+            adjustedBounds.size.width = width
+            bounds = adjustedBounds
+        }
+        layoutFrame = nil
+        _ = layoutFrame
+        let size = super.intrinsicContentSize
+        return CGSize(width: UIView.noIntrinsicMetric, height: ceil(max(size.height, 1)))
+    }
+
+    private var displayScale: CGFloat {
+        window?.windowScene?.screen.scale ?? traitCollection.displayScale
+    }
+
     private func isStickerImageURL(_ url: URL) -> Bool {
         url.absoluteString.lowercased().contains("sticker")
     }
@@ -911,13 +996,27 @@ private final class DetailRichTextView: DTAttributedTextContentView, DTAttribute
     }
 }
 
-private final class DetailLazyImageView: DTLazyImageView {
+final class DetailInlineImageView: UIImageView {
     private let imageURL: URL
-    private let tapHandler: (URL) -> Void
+    private let targetPixelWidth: CGFloat
+    private let displayScale: CGFloat
+    private let onImageLoaded: (URL, CGSize) -> Void
+    private let onImageTapped: (URL) -> Void
+    private var loadToken: UUID?
 
-    init(frame: CGRect, imageURL: URL, tapHandler: @escaping (URL) -> Void) {
+    init(
+        frame: CGRect,
+        imageURL: URL,
+        targetPixelWidth: CGFloat,
+        displayScale: CGFloat,
+        onImageLoaded: @escaping (URL, CGSize) -> Void,
+        onImageTapped: @escaping (URL) -> Void
+    ) {
         self.imageURL = imageURL
-        self.tapHandler = tapHandler
+        self.targetPixelWidth = targetPixelWidth
+        self.displayScale = displayScale
+        self.onImageLoaded = onImageLoaded
+        self.onImageTapped = onImageTapped
         super.init(frame: frame)
         isUserInteractionEnabled = true
         addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(handleTap)))
@@ -927,9 +1026,35 @@ private final class DetailLazyImageView: DTLazyImageView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override func didMoveToSuperview() {
+        super.didMoveToSuperview()
+
+        guard superview != nil else {
+            loadToken = nil
+            return
+        }
+        guard loadToken == nil else { return }
+
+        let token = UUID()
+        loadToken = token
+        DetailAttachmentDataSource.shared.loadImageForInline(
+            imageURL,
+            maxPixelWidth: targetPixelWidth,
+            displayScale: displayScale
+        ) { [weak self] image in
+            DispatchQueue.main.async {
+                guard let self, self.loadToken == token else { return }
+                self.image = image
+                if let image {
+                    self.onImageLoaded(self.imageURL, image.size)
+                }
+            }
+        }
+    }
+
     @objc
     private func handleTap() {
-        tapHandler(imageURL)
+        onImageTapped(imageURL)
     }
 }
 
@@ -990,7 +1115,7 @@ private final class DetailPhotoBrowserPresenter: NSObject, JXPhotoBrowserDelegat
     }
 }
 
-private final class DetailAttachmentDataSource: NSObject {
+final class DetailAttachmentDataSource: NSObject {
     private struct ImagePayload {
         let data: Data
         let mimeType: String?
@@ -998,7 +1123,14 @@ private final class DetailAttachmentDataSource: NSObject {
         let isFallback: Bool
     }
 
+    private struct InlineImageCacheKey: Hashable {
+        let url: URL
+        let maxPixelWidth: Int
+        let displayScaleKey: Int
+    }
+
     private typealias PayloadCompletion = (ImagePayload) -> Void
+    private typealias InlineImageCompletion = (UIImage?) -> Void
 
     static let shared = DetailAttachmentDataSource()
 
@@ -1012,6 +1144,8 @@ private final class DetailAttachmentDataSource: NSObject {
     private let stateQueue = DispatchQueue(label: "com.nodeseek.app.detailattachment.state")
     private var payloadCache: [URL: ImagePayload] = [:]
     private var inFlightCallbacks: [URL: [PayloadCompletion]] = [:]
+    private var inlineImageCache: [InlineImageCacheKey: UIImage] = [:]
+    private var inlineImageCallbacks: [InlineImageCacheKey: [InlineImageCompletion]] = [:]
 
     private override init() {
         let configuration = URLSessionConfiguration.default
@@ -1030,26 +1164,51 @@ private final class DetailAttachmentDataSource: NSObject {
         }
     }
 
-    func makeImageRequest(for imageURL: URL) -> NSMutableURLRequest? {
-        guard let resolvedURL = AvatarImageLoader.resolveImageURL(imageURL) else { return nil }
-
-        var request = URLRequest(url: resolvedURL)
-        request.httpMethod = "GET"
-        request.timeoutInterval = 20
-        request.cachePolicy = .returnCacheDataElseLoad
-        WebRequestFingerprint.applyImageHeaders(to: &request)
-
-        let mutableRequest = NSMutableURLRequest(
-            url: resolvedURL,
-            cachePolicy: request.cachePolicy,
-            timeoutInterval: request.timeoutInterval
+    func loadImageForInline(
+        _ imageURL: URL,
+        maxPixelWidth: CGFloat,
+        displayScale: CGFloat,
+        completion: @escaping (UIImage?) -> Void
+    ) {
+        let pixelWidth = max(1, Int(ceil(maxPixelWidth)))
+        let imageScale = max(displayScale, 1)
+        let cacheURL = AvatarImageLoader.resolveImageURL(imageURL) ?? imageURL
+        let key = InlineImageCacheKey(
+            url: cacheURL,
+            maxPixelWidth: pixelWidth,
+            displayScaleKey: Int((imageScale * 100).rounded())
         )
-        mutableRequest.httpMethod = request.httpMethod ?? "GET"
-        mutableRequest.httpShouldHandleCookies = true
-        request.allHTTPHeaderFields?.forEach { key, value in
-            mutableRequest.setValue(value, forHTTPHeaderField: key)
+
+        if let cachedImage = stateQueue.sync(execute: { inlineImageCache[key] }) {
+            completion(cachedImage)
+            return
         }
-        return mutableRequest
+
+        let shouldStartLoad = stateQueue.sync { () -> Bool in
+            if var callbacks = inlineImageCallbacks[key] {
+                callbacks.append(completion)
+                inlineImageCallbacks[key] = callbacks
+                return false
+            }
+            inlineImageCallbacks[key] = [completion]
+            return true
+        }
+        guard shouldStartLoad else { return }
+
+        fetchPayload(for: imageURL) { [weak self] payload in
+            guard let self else { return }
+            let image = self.downsampleImage(
+                data: payload.data,
+                maxPixelSize: pixelWidth
+            ) ?? payload.image
+            let callbacks = self.stateQueue.sync {
+                if payload.isFallback == false {
+                    self.inlineImageCache[key] = image
+                }
+                return self.inlineImageCallbacks.removeValue(forKey: key) ?? []
+            }
+            callbacks.forEach { $0(image) }
+        }
     }
 
     private func fetchPayload(for imageURL: URL, completion: @escaping PayloadCompletion) {
@@ -1169,6 +1328,28 @@ private final class DetailAttachmentDataSource: NSObject {
             image: image,
             isFallback: false
         )
+    }
+
+    private func downsampleImage(data: Data, maxPixelSize: Int) -> UIImage? {
+        guard maxPixelSize > 0 else { return nil }
+
+        let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions) else {
+            return nil
+        }
+
+        let downsampleOptions = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
+        ] as CFDictionary
+
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, downsampleOptions) else {
+            return nil
+        }
+
+        return UIImage(cgImage: image, scale: 1, orientation: .up)
     }
 
     private static let fallbackPNGData: Data = {
