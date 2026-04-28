@@ -13,6 +13,7 @@
 		7A10000C2FA0000000000001 /* SwiftDraw in Frameworks */ = {isa = PBXBuildFile; productRef = 7A10000B2FA0000000000001 /* SwiftDraw */; };
 		7A1000112FA0000000000001 /* ZMarkupParser in Frameworks */ = {isa = PBXBuildFile; productRef = 7A1000122FA0000000000001 /* ZMarkupParser */; };
 		7A1000152FA0000000000001 /* JXPhotoBrowser in Frameworks */ = {isa = PBXBuildFile; productRef = 7A1000172FA0000000000001 /* JXPhotoBrowser */; };
+		7A1000182FA0000000000001 /* DTCoreText in Frameworks */ = {isa = PBXBuildFile; productRef = 7A1000192FA0000000000001 /* DTCoreText */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -73,14 +74,15 @@
 		5CD3D94E2F9EFACE008DB075 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
-				files = (
-					7A1000012FA0000000000001 /* Kanna in Frameworks */,
-					7A1000042FA0000000000001 /* AsyncDisplayKit in Frameworks */,
-					7A1000092FA0000000000001 /* Kingfisher in Frameworks */,
-					7A10000C2FA0000000000001 /* SwiftDraw in Frameworks */,
-					7A1000112FA0000000000001 /* ZMarkupParser in Frameworks */,
-					7A1000152FA0000000000001 /* JXPhotoBrowser in Frameworks */,
-				);
+			files = (
+				7A1000012FA0000000000001 /* Kanna in Frameworks */,
+				7A1000042FA0000000000001 /* AsyncDisplayKit in Frameworks */,
+				7A1000092FA0000000000001 /* Kingfisher in Frameworks */,
+				7A10000C2FA0000000000001 /* SwiftDraw in Frameworks */,
+				7A1000112FA0000000000001 /* ZMarkupParser in Frameworks */,
+				7A1000152FA0000000000001 /* JXPhotoBrowser in Frameworks */,
+				7A1000182FA0000000000001 /* DTCoreText in Frameworks */,
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		5CD3D9642F9EFAD0008DB075 /* Frameworks */ = {
@@ -139,14 +141,15 @@
 				5CD3D9532F9EFACE008DB075 /* nodeseek */,
 			);
 			name = nodeseek;
-				packageProductDependencies = (
-					7A1000022FA0000000000001 /* Kanna */,
-					7A1000052FA0000000000001 /* AsyncDisplayKit */,
-					7A1000082FA0000000000001 /* Kingfisher */,
-					7A10000B2FA0000000000001 /* SwiftDraw */,
-					7A1000122FA0000000000001 /* ZMarkupParser */,
-					7A1000172FA0000000000001 /* JXPhotoBrowser */,
-				);
+			packageProductDependencies = (
+				7A1000022FA0000000000001 /* Kanna */,
+				7A1000052FA0000000000001 /* AsyncDisplayKit */,
+				7A1000082FA0000000000001 /* Kingfisher */,
+				7A10000B2FA0000000000001 /* SwiftDraw */,
+				7A1000122FA0000000000001 /* ZMarkupParser */,
+				7A1000172FA0000000000001 /* JXPhotoBrowser */,
+				7A1000192FA0000000000001 /* DTCoreText */,
+			);
 			productName = nodeseek;
 			productReference = 5CD3D9512F9EFACE008DB075 /* nodeseek.app */;
 			productType = "com.apple.product-type.application";
@@ -229,14 +232,15 @@
 			);
 			mainGroup = 5CD3D9482F9EFACE008DB075;
 			minimizedProjectReferenceProxies = 1;
-				packageReferences = (
-					7A1000032FA0000000000001 /* XCRemoteSwiftPackageReference "Kanna" */,
-					7A1000062FA0000000000001 /* XCRemoteSwiftPackageReference "Texture" */,
-					7A1000072FA0000000000001 /* XCRemoteSwiftPackageReference "Kingfisher" */,
-					7A10000D2FA0000000000001 /* XCRemoteSwiftPackageReference "SwiftDraw" */,
-					7A1000132FA0000000000001 /* XCRemoteSwiftPackageReference "ZMarkupParser" */,
-					7A1000162FA0000000000001 /* XCRemoteSwiftPackageReference "PhotoBrowser" */,
-				);
+			packageReferences = (
+				7A1000032FA0000000000001 /* XCRemoteSwiftPackageReference "Kanna" */,
+				7A1000062FA0000000000001 /* XCRemoteSwiftPackageReference "Texture" */,
+				7A1000072FA0000000000001 /* XCRemoteSwiftPackageReference "Kingfisher" */,
+				7A10000D2FA0000000000001 /* XCRemoteSwiftPackageReference "SwiftDraw" */,
+				7A1000132FA0000000000001 /* XCRemoteSwiftPackageReference "ZMarkupParser" */,
+				7A1000162FA0000000000001 /* XCRemoteSwiftPackageReference "PhotoBrowser" */,
+				7A10001A2FA0000000000001 /* XCRemoteSwiftPackageReference "DTCoreText" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 5CD3D9522F9EFACE008DB075 /* Products */;
 			projectDirPath = "";
@@ -666,6 +670,14 @@
 				minimumVersion = 4.0.0;
 			};
 		};
+		7A10001A2FA0000000000001 /* XCRemoteSwiftPackageReference "DTCoreText" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/Cocoanetics/DTCoreText.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.6.28;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -698,6 +710,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 7A1000162FA0000000000001 /* XCRemoteSwiftPackageReference "PhotoBrowser" */;
 			productName = JXPhotoBrowser;
+		};
+		7A1000192FA0000000000001 /* DTCoreText */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7A10001A2FA0000000000001 /* XCRemoteSwiftPackageReference "DTCoreText" */;
+			productName = DTCoreText;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
