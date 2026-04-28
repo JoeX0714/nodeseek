@@ -12,9 +12,9 @@ final class PostSummaryCellNode: ASCellNode {
 
     private enum Layout {
         static let horizontalSpacing: CGFloat = 12
-        static let verticalSpacing: CGFloat = 6
+        static let verticalSpacing: CGFloat = 4
         static let avatarSize: CGFloat = 56
-        static let contentInset = UIEdgeInsets(top: 10, left: 16, bottom: 10, right: 12)
+        static let contentInset = UIEdgeInsets(top: 9, left: 16, bottom: 9, right: 12)
     }
 
     private let post: PostSummary
@@ -88,22 +88,11 @@ final class PostSummaryCellNode: ASCellNode {
 
     private func configureText() {
         titleNode.maximumNumberOfLines = 0
-        titleNode.attributedText = NSAttributedString(
-            string: post.title,
-            attributes: [
-                .font: UIFont.preferredFont(forTextStyle: .headline),
-                .foregroundColor: UIColor.label
-            ]
-        )
+        titleNode.attributedText = Self.titleAttributedText(for: post)
 
         metadataNode.maximumNumberOfLines = 1
-        metadataNode.attributedText = NSAttributedString(
-            string: Self.metadataText(for: post),
-            attributes: [
-                .font: UIFont.preferredFont(forTextStyle: .subheadline),
-                .foregroundColor: UIColor.secondaryLabel
-            ]
-        )
+        metadataNode.truncationMode = .byTruncatingTail
+        metadataNode.attributedText = Self.metadataAttributedText(for: post)
     }
 
     private func requestAvatarIfNeeded() {
@@ -118,17 +107,99 @@ final class PostSummaryCellNode: ASCellNode {
         avatarLoader.cancel(on: avatarImageView)
     }
 
-    private static func metadataText(for post: PostSummary) -> String {
-        var parts = [
-            post.authorName,
-            post.nodeName ?? "NodeSeek",
-            "\(post.replyCount) 回复"
+    static func metadataAttributedText(for post: PostSummary) -> NSAttributedString {
+        let font = UIFont.preferredFont(forTextStyle: .footnote)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: UIColor.secondaryLabel
         ]
+        let metadata = NSMutableAttributedString()
 
-        if let lastActive = post.lastActivityText?.trimmingCharacters(in: .whitespacesAndNewlines), !lastActive.isEmpty {
-            parts.append(lastActive)
+        func appendSeparatorIfNeeded() {
+            guard metadata.length > 0 else { return }
+            metadata.append(NSAttributedString(string: "  ", attributes: attributes))
         }
 
-        return parts.joined(separator: " · ")
+        appendSeparatorIfNeeded()
+        metadata.append(NSAttributedString(string: post.authorName, attributes: attributes))
+
+        appendSeparatorIfNeeded()
+        metadata.append(metricAttributedText(
+            systemName: "eye",
+            value: post.viewCount,
+            font: font,
+            attributes: attributes
+        ))
+
+        appendSeparatorIfNeeded()
+        metadata.append(metricAttributedText(
+            systemName: "bubble.left",
+            value: post.replyCount,
+            font: font,
+            attributes: attributes
+        ))
+
+        if let lastActive = post.lastActivityText?.trimmingCharacters(in: .whitespacesAndNewlines), !lastActive.isEmpty {
+            appendSeparatorIfNeeded()
+            metadata.append(NSAttributedString(string: lastActive, attributes: attributes))
+        }
+
+        return metadata
+    }
+
+    private static func titleAttributedText(for post: PostSummary) -> NSAttributedString {
+        let font = UIFont.preferredFont(forTextStyle: .headline)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: UIColor.label
+        ]
+        let title = NSMutableAttributedString(string: post.title, attributes: attributes)
+
+        guard post.isLocked else {
+            return title
+        }
+
+        title.append(NSAttributedString(string: " ", attributes: attributes))
+        let configuration = UIImage.SymbolConfiguration(font: font, scale: .small)
+
+        if let image = UIImage(systemName: "lock.fill", withConfiguration: configuration)?
+            .withTintColor(.systemRed, renderingMode: .alwaysOriginal) {
+            let attachment = NSTextAttachment(image: image)
+            attachment.bounds = CGRect(
+                x: 0,
+                y: (font.capHeight - image.size.height) / 2,
+                width: image.size.width,
+                height: image.size.height
+            )
+            title.append(NSAttributedString(attachment: attachment))
+        }
+
+        return title
+    }
+
+    private static func metricAttributedText(
+        systemName: String,
+        value: Int,
+        font: UIFont,
+        attributes: [NSAttributedString.Key: Any]
+    ) -> NSAttributedString {
+        let text = NSMutableAttributedString()
+        let configuration = UIImage.SymbolConfiguration(font: font, scale: .small)
+
+        if let image = UIImage(systemName: systemName, withConfiguration: configuration)?
+            .withTintColor(.secondaryLabel, renderingMode: .alwaysOriginal) {
+            let attachment = NSTextAttachment(image: image)
+            attachment.bounds = CGRect(
+                x: 0,
+                y: (font.capHeight - image.size.height) / 2,
+                width: image.size.width,
+                height: image.size.height
+            )
+            text.append(NSAttributedString(attachment: attachment))
+            text.append(NSAttributedString(string: " ", attributes: attributes))
+        }
+
+        text.append(NSAttributedString(string: "\(value)", attributes: attributes))
+        return text
     }
 }

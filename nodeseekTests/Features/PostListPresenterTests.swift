@@ -129,10 +129,13 @@ struct PostListPresenterTests {
 
         presenter.viewDidLoad()
         #expect(interactor.loadPostsCategories == [.all])
+        #expect(interactor.loadPostsSortModes == [.replyTime])
+        #expect(view.renderedSortMode == .replyTime)
 
         presenter.didLoadPosts([allPost], category: .all)
         presenter.didSelectCategory(.tech)
         #expect(interactor.loadPostsCategories == [.all, .tech])
+        #expect(interactor.loadPostsSortModes == [.replyTime, .replyTime])
 
         presenter.didLoadPosts([techPost], category: .tech)
         presenter.didSelectCategory(.all)
@@ -181,6 +184,49 @@ struct PostListPresenterTests {
         presenter.didLoadPosts([refreshedPost], category: .all)
         #expect(view.hideRefreshingCount == hideRefreshingBefore + 1)
         #expect(view.lastRenderedPostIDs == ["all-2"])
+    }
+
+    @Test func togglingSortModeReloadsCurrentCategoryFromFirstPage() {
+        let view = SpyPostListView()
+        let interactor = SpyPostListInteractor()
+        let router = SpyPostListRouter()
+        let presenter = PostListPresenter(interactor: interactor, router: router)
+        presenter.setView(view)
+        let first = PostSummary(
+            id: "1",
+            title: "标题1",
+            url: URL(string: "https://www.nodeseek.com/post-1")!,
+            authorName: "mist",
+            nodeName: "开发",
+            replyCount: 3,
+            lastActivityText: "刚刚"
+        )
+        let second = PostSummary(
+            id: "2",
+            title: "标题2",
+            url: URL(string: "https://www.nodeseek.com/post-2")!,
+            authorName: "mist",
+            nodeName: "开发",
+            replyCount: 4,
+            lastActivityText: "1 分钟前"
+        )
+
+        presenter.viewDidLoad()
+        presenter.didLoadPosts([first], category: .all)
+        presenter.didApproachBottom(currentIndex: 0, totalCount: 1)
+        presenter.didLoadMorePosts([second], page: 2, category: .all)
+
+        presenter.didToggleSortMode()
+
+        #expect(view.renderedSortMode == .postTime)
+        #expect(view.lastRenderedPostIDs.isEmpty)
+        #expect(interactor.loadPostsCategories == [.all, .all])
+        #expect(interactor.loadPostsSortModes == [.replyTime, .postTime])
+
+        presenter.didLoadPosts([second], category: .all, sortMode: .postTime)
+        presenter.didApproachBottom(currentIndex: 0, totalCount: 1)
+        #expect(interactor.loadMorePages == [2, 2])
+        #expect(interactor.loadMoreSortModes == [.replyTime, .postTime])
     }
 
     @Test func firstPageCompletionRendersPostsBeforeHidingSkeleton() {
@@ -256,6 +302,7 @@ private final class SpyPostListView: PostListViewProtocol {
     var lastErrorMessage: String?
     var renderedCategories: [PostListCategory] = []
     var selectedCategory: PostListCategory = .all
+    var renderedSortMode: PostListSortMode?
     var events: [String] = []
 
     func showLoading() {
@@ -298,6 +345,11 @@ private final class SpyPostListView: PostListViewProtocol {
         events.append("renderCategories")
     }
 
+    func renderSortMode(_ sortMode: PostListSortMode) {
+        renderedSortMode = sortMode
+        events.append("renderSortMode")
+    }
+
     func render(posts: [PostSummary]) {
         renderCallCount += 1
         lastRenderedPostsCount = posts.count
@@ -310,17 +362,21 @@ private final class SpyPostListView: PostListViewProtocol {
 private final class SpyPostListInteractor: PostListInteractorInput {
     var loadPostsCallCount = 0
     var loadPostsCategories: [PostListCategory] = []
+    var loadPostsSortModes: [PostListSortMode] = []
     var loadMorePages: [Int] = []
     var loadMoreCategories: [PostListCategory] = []
+    var loadMoreSortModes: [PostListSortMode] = []
 
-    func loadPosts(category: PostListCategory) {
+    func loadPosts(category: PostListCategory, sortMode: PostListSortMode) {
         loadPostsCallCount += 1
         loadPostsCategories.append(category)
+        loadPostsSortModes.append(sortMode)
     }
 
-    func loadMorePosts(page: Int, category: PostListCategory) {
+    func loadMorePosts(page: Int, category: PostListCategory, sortMode: PostListSortMode) {
         loadMorePages.append(page)
         loadMoreCategories.append(category)
+        loadMoreSortModes.append(sortMode)
     }
 }
 

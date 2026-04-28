@@ -68,9 +68,13 @@ struct KannaNodeSeekParser: NodeSeekParser {
         ).flatMap { URL(string: $0, relativeTo: baseURL)?.absoluteURL }
         let authorName = firstText(in: item, xpaths: [XPathRules.postAuthor, XPathRules.fallbackAuthor]) ?? "未知用户"
         let nodeName = firstText(in: item, xpaths: [XPathRules.postNode, XPathRules.fallbackNode])
+        let viewNode = item.at_xpath(XPathRules.viewCount)
+        let viewText = viewNode?["title"] ?? viewNode?.text ?? ""
+        let viewCount = Self.firstInteger(in: viewText) ?? 0
         let replyText = item.at_xpath(XPathRules.replyCount)?.text ?? item.text ?? ""
         let replyCount = Self.replyCount(in: replyText) ?? 0
         let lastActivityText = firstText(in: item, xpaths: [XPathRules.lastActive, XPathRules.fallbackLastActive])
+        let isLocked = item.at_xpath(XPathRules.postLocked) != nil
 
         return PostSummary(
             id: id,
@@ -79,7 +83,9 @@ struct KannaNodeSeekParser: NodeSeekParser {
             authorName: authorName,
             nodeName: nodeName,
             replyCount: replyCount,
+            viewCount: viewCount,
             lastActivityText: lastActivityText,
+            isLocked: isLocked,
             avatarURL: avatarURL
         )
     }

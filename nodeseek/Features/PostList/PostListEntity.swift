@@ -45,9 +45,42 @@ enum PostListCategory: String, CaseIterable, Sendable {
     }
 }
 
+enum PostListSortMode: String, Sendable {
+    case postTime
+    case replyTime
+
+    var toggled: PostListSortMode {
+        switch self {
+        case .postTime:
+            return .replyTime
+        case .replyTime:
+            return .postTime
+        }
+    }
+
+    var accessibilityTitle: String {
+        switch self {
+        case .postTime:
+            return "按发帖时间排序"
+        case .replyTime:
+            return "按回复时间排序"
+        }
+    }
+
+    var buttonTitle: String {
+        switch self {
+        case .postTime:
+            return "发帖优先"
+        case .replyTime:
+            return "回复优先"
+        }
+    }
+}
+
 struct PostListRequest {
     let page: Int
     let category: PostListCategory
+    let sortMode: PostListSortMode
 }
 
 struct PostListResponse {

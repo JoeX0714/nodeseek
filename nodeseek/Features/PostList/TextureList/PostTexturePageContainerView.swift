@@ -96,6 +96,10 @@ final class PostTexturePageContainerView: UIView {
         hostViewControllers[category]?.setPosts(posts)
     }
 
+    func scrollToTop(for category: PostListCategory, animated: Bool) {
+        hostViewControllers[category]?.scrollToTop(animated: animated)
+    }
+
     func showLoadingSkeleton(for category: PostListCategory) {
         hostViewControllers[category]?.showLoadingSkeleton()
     }
@@ -285,6 +289,11 @@ final class PostTextureListHostViewController: UIViewController {
     func hideRefreshing() {
         loadViewIfNeeded()
         listView.hideRefreshing()
+    }
+
+    func scrollToTop(animated: Bool) {
+        loadViewIfNeeded()
+        listView.scrollToTop(animated: animated)
     }
 }
 

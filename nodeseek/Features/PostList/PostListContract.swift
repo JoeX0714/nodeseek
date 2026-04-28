@@ -17,6 +17,7 @@ protocol PostListViewProtocol: AnyObject {
     func hideLoadingMore()
     func showError(message: String)
     func renderCategories(_ categories: [PostListCategory], selected: PostListCategory)
+    func renderSortMode(_ sortMode: PostListSortMode)
     func render(posts: [PostSummary])
 }
 
@@ -24,6 +25,7 @@ protocol PostListViewProtocol: AnyObject {
 protocol PostListPresenterProtocol: AnyObject {
     func viewDidLoad()
     func didSelectCategory(_ category: PostListCategory)
+    func didToggleSortMode()
     func didPullToRefresh()
     func didSelectPost(at index: Int)
     func didApproachBottom(currentIndex: Int, totalCount: Int)
@@ -31,16 +33,16 @@ protocol PostListPresenterProtocol: AnyObject {
 
 // MARK: - Interactor Input (Presenter -> Interactor)
 protocol PostListInteractorInput: AnyObject {
-    func loadPosts(category: PostListCategory)
-    func loadMorePosts(page: Int, category: PostListCategory)
+    func loadPosts(category: PostListCategory, sortMode: PostListSortMode)
+    func loadMorePosts(page: Int, category: PostListCategory, sortMode: PostListSortMode)
 }
 
 // MARK: - Interactor Output (Interactor -> Presenter)
 protocol PostListInteractorOutput: AnyObject {
-    func didLoadPosts(_ posts: [PostSummary], category: PostListCategory)
-    func didLoadMorePosts(_ posts: [PostSummary], page: Int, category: PostListCategory)
-    func didFailLoadPosts(error: String, category: PostListCategory)
-    func didFailLoadMorePosts(error: String, page: Int, category: PostListCategory)
+    func didLoadPosts(_ posts: [PostSummary], category: PostListCategory, sortMode: PostListSortMode)
+    func didLoadMorePosts(_ posts: [PostSummary], page: Int, category: PostListCategory, sortMode: PostListSortMode)
+    func didFailLoadPosts(error: String, category: PostListCategory, sortMode: PostListSortMode)
+    func didFailLoadMorePosts(error: String, page: Int, category: PostListCategory, sortMode: PostListSortMode)
 }
 
 // MARK: - Router Protocol (Presenter -> Router)

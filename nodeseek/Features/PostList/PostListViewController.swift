@@ -38,6 +38,34 @@ class PostListViewController: UIViewController {
         button.translatesAutoresizingMaskIntoConstraints = false
         return button
     }()
+
+    private let sortToggleButton: UIButton = {
+        let button = UIButton(type: .system)
+        var configuration = UIButton.Configuration.tinted()
+        configuration.baseForegroundColor = .secondaryLabel
+        configuration.baseBackgroundColor = .tertiarySystemFill
+        configuration.cornerStyle = .capsule
+        configuration.imagePadding = 3
+        configuration.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 9, bottom: 6, trailing: 10)
+        configuration.titleLineBreakMode = .byTruncatingTail
+        button.configuration = configuration
+        button.accessibilityIdentifier = "post-list-sort-toggle"
+        button.titleLabel?.font = .systemFont(ofSize: 12, weight: .medium)
+        button.titleLabel?.numberOfLines = 1
+        button.titleLabel?.lineBreakMode = .byTruncatingTail
+        button.titleLabel?.adjustsFontSizeToFitWidth = true
+        button.titleLabel?.minimumScaleFactor = 0.9
+        button.backgroundColor = .clear
+        button.layer.cornerRadius = 17
+        button.layer.borderWidth = 0.5
+        button.layer.borderColor = UIColor.separator.withAlphaComponent(0.55).cgColor
+        button.layer.shadowColor = UIColor.black.cgColor
+        button.layer.shadowOpacity = 0.08
+        button.layer.shadowRadius = 8
+        button.layer.shadowOffset = CGSize(width: 0, height: 3)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        return button
+    }()
     
     private let loadingIndicator: UIActivityIndicatorView = {
         let indicator = UIActivityIndicatorView(style: .medium)
@@ -101,8 +129,10 @@ class PostListViewController: UIViewController {
         pageContainerView.delegate = self
         pageContainerView.attach(to: self)
         compactTopButton.addTarget(self, action: #selector(leftButtonTapped), for: .touchUpInside)
+        sortToggleButton.addTarget(self, action: #selector(sortToggleButtonTapped), for: .touchUpInside)
         view.addSubview(pageContainerView)
         view.addSubview(compactTopButton)
+        view.addSubview(sortToggleButton)
         view.addSubview(tabScrollView)
         view.addSubview(loadingIndicator)
         tabScrollView.addSubview(tabStackView)
@@ -117,6 +147,11 @@ class PostListViewController: UIViewController {
             compactTopButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 4),
             compactTopButton.widthAnchor.constraint(equalToConstant: 36),
             compactTopButton.heightAnchor.constraint(equalToConstant: 36),
+
+            sortToggleButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -18),
+            sortToggleButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -18),
+            sortToggleButton.widthAnchor.constraint(equalToConstant: 126),
+            sortToggleButton.heightAnchor.constraint(equalToConstant: 34),
 
             tabScrollView.leadingAnchor.constraint(equalTo: compactTopButton.trailingAnchor, constant: 8),
             tabScrollView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -8),
@@ -137,6 +172,11 @@ class PostListViewController: UIViewController {
     // MARK: - Actions
     @objc private func leftButtonTapped() {
         // 功能后续补齐。
+    }
+
+    @objc private func sortToggleButtonTapped() {
+        presenter.didToggleSortMode()
+        pageContainerView.scrollToTop(for: selectedCategory, animated: false)
     }
 
     @objc private func categoryButtonTapped(_ sender: CategoryTabButton) {
@@ -224,6 +264,40 @@ extension PostListViewController: PostListViewProtocol {
         }
         selectedCategory = selected
         applySelectedCategory(selected, syncPage: categoriesChanged, pageAnimated: false)
+    }
+
+    func renderSortMode(_ sortMode: PostListSortMode) {
+        let symbolName: String
+        switch sortMode {
+        case .postTime:
+            symbolName = "clock.fill"
+        case .replyTime:
+            symbolName = "clock.arrow.trianglehead.counterclockwise.rotate.90"
+        }
+
+        let symbolConfiguration = UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
+        let image = UIImage(systemName: symbolName, withConfiguration: symbolConfiguration)
+        sortToggleButton.setImage(image, for: .normal)
+        sortToggleButton.setTitle(sortMode.buttonTitle, for: .normal)
+        sortToggleButton.titleLabel?.font = .systemFont(ofSize: 12, weight: .medium)
+        sortToggleButton.titleLabel?.numberOfLines = 1
+        sortToggleButton.titleLabel?.lineBreakMode = .byTruncatingTail
+        sortToggleButton.titleLabel?.adjustsFontSizeToFitWidth = true
+        sortToggleButton.titleLabel?.minimumScaleFactor = 0.9
+
+        var configuration = sortToggleButton.configuration ?? UIButton.Configuration.tinted()
+        configuration.image = image
+        configuration.title = sortMode.buttonTitle
+        configuration.imagePadding = 3
+        configuration.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 9, bottom: 6, trailing: 10)
+        configuration.titleLineBreakMode = .byTruncatingTail
+        sortToggleButton.configuration = configuration
+        sortToggleButton.titleLabel?.font = .systemFont(ofSize: 12, weight: .medium)
+        sortToggleButton.titleLabel?.numberOfLines = 1
+        sortToggleButton.titleLabel?.lineBreakMode = .byTruncatingTail
+        sortToggleButton.titleLabel?.adjustsFontSizeToFitWidth = true
+        sortToggleButton.titleLabel?.minimumScaleFactor = 0.9
+        sortToggleButton.accessibilityLabel = sortMode.accessibilityTitle
     }
     
     func render(posts: [PostSummary]) {

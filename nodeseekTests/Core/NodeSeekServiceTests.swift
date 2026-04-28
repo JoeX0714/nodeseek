@@ -106,6 +106,28 @@ struct NodeSeekServiceTests {
         #expect(requestedURLs.first?.path == "/page-2")
     }
 
+    @Test func loadsSortQueryWhenRequestingPostList() async throws {
+        let html = try FixtureLoader.html(named: "post-list-basic")
+        let url = URL(string: "https://www.nodeseek.com/")!
+        let htmlClient = URLCapturingHTMLClient(response: HTMLResponse(
+            statusCode: 200,
+            headers: [:],
+            finalURL: url,
+            html: html
+        ))
+        let service = NodeSeekService(
+            baseURL: url,
+            htmlClient: htmlClient,
+            parser: KannaNodeSeekParser(baseURL: url)
+        )
+
+        _ = try await service.loadPostList(page: 1, category: .all, sortMode: .postTime)
+        let requestedURLs = await htmlClient.requestedURLs()
+
+        #expect(requestedURLs.count == 1)
+        #expect(requestedURLs.first?.query == "sortBy=postTime")
+    }
+
     @Test func loadsCategoryRootURLForFirstPage() async throws {
         let html = try FixtureLoader.html(named: "post-list-basic")
         let url = URL(string: "https://www.nodeseek.com/")!

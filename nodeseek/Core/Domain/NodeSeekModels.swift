@@ -14,7 +14,9 @@ struct PostSummary: Equatable, Sendable {
     let authorName: String
     let nodeName: String?
     let replyCount: Int
+    let viewCount: Int
     let lastActivityText: String?
+    let isLocked: Bool
     let avatarURL: URL?
 
     init(
@@ -24,7 +26,9 @@ struct PostSummary: Equatable, Sendable {
         authorName: String,
         nodeName: String?,
         replyCount: Int,
+        viewCount: Int = 0,
         lastActivityText: String?,
+        isLocked: Bool = false,
         avatarURL: URL? = nil
     ) {
         self.id = id
@@ -33,7 +37,9 @@ struct PostSummary: Equatable, Sendable {
         self.authorName = authorName
         self.nodeName = nodeName
         self.replyCount = replyCount
+        self.viewCount = viewCount
         self.lastActivityText = lastActivityText
+        self.isLocked = isLocked
         self.avatarURL = avatarURL
     }
 }

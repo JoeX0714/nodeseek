@@ -30,7 +30,7 @@ struct PostListInteractorTests {
         let interactor = PostListInteractor(service: service, sessionStore: sessionStore)
         interactor.presenter = presenter
 
-        interactor.loadPosts(category: .all)
+        interactor.loadPosts(category: .all, sortMode: .replyTime)
         await waitForInteractorCallbacks()
 
         let requestedURLs = await htmlClient.requestedURLs()
@@ -51,18 +51,18 @@ private final class SpyPostListInteractorOutput: PostListInteractorOutput {
     var loadedPosts: [PostSummary]?
     var errorMessage: String?
 
-    func didLoadPosts(_ posts: [PostSummary], category: PostListCategory) {
+    func didLoadPosts(_ posts: [PostSummary], category: PostListCategory, sortMode: PostListSortMode) {
         loadedPosts = posts
     }
 
-    func didLoadMorePosts(_ posts: [PostSummary], page: Int, category: PostListCategory) {
+    func didLoadMorePosts(_ posts: [PostSummary], page: Int, category: PostListCategory, sortMode: PostListSortMode) {
     }
 
-    func didFailLoadPosts(error: String, category: PostListCategory) {
+    func didFailLoadPosts(error: String, category: PostListCategory, sortMode: PostListSortMode) {
         errorMessage = error
     }
 
-    func didFailLoadMorePosts(error: String, page: Int, category: PostListCategory) {
+    func didFailLoadMorePosts(error: String, page: Int, category: PostListCategory, sortMode: PostListSortMode) {
         errorMessage = error
     }
 }

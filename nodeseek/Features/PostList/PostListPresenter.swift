@@ -26,6 +26,7 @@ class PostListPresenter: PostListPresenterProtocol {
     private var categoryStates: [PostListCategory: CategoryState] = [:]
     private let categories = PostListCategory.allCases
     private var currentCategory: PostListCategory = .all
+    private var currentSortMode: PostListSortMode = .replyTime
     
     // MARK: - Initialization
     init(
@@ -44,6 +45,7 @@ class PostListPresenter: PostListPresenterProtocol {
     // MARK: - Methods
     func viewDidLoad() {
         view?.renderCategories(categories, selected: currentCategory)
+        view?.renderSortMode(currentSortMode)
         presentCurrentCategory(useCache: true)
     }
 
@@ -52,6 +54,13 @@ class PostListPresenter: PostListPresenterProtocol {
         currentCategory = category
         view?.renderCategories(categories, selected: currentCategory)
         presentCurrentCategory(useCache: true)
+    }
+
+    func didToggleSortMode() {
+        currentSortMode = currentSortMode.toggled
+        categoryStates = [:]
+        view?.renderSortMode(currentSortMode)
+        presentCurrentCategory(useCache: false)
     }
 
     private func presentCurrentCategory(useCache: Bool) {
@@ -103,7 +112,7 @@ class PostListPresenter: PostListPresenterProtocol {
             view?.hideLoadingMore()
         }
 
-        interactor.loadPosts(category: category)
+        interactor.loadPosts(category: category, sortMode: currentSortMode)
     }
 
     func didPullToRefresh() {
@@ -116,7 +125,7 @@ class PostListPresenter: PostListPresenterProtocol {
         state.isRefreshing = true
         categoryStates[currentCategory] = state
         view?.showRefreshing()
-        interactor.loadPosts(category: currentCategory)
+        interactor.loadPosts(category: currentCategory, sortMode: currentSortMode)
     }
     
     func didSelectPost(at index: Int) {
@@ -136,14 +145,19 @@ class PostListPresenter: PostListPresenterProtocol {
         state.isLoadingMore = true
         categoryStates[currentCategory] = state
         view?.showLoadingMore()
-        interactor.loadMorePosts(page: state.nextPage, category: currentCategory)
+        interactor.loadMorePosts(page: state.nextPage, category: currentCategory, sortMode: currentSortMode)
     }
 }
 
 // MARK: - Interactor Output
 extension PostListPresenter: PostListInteractorOutput {
     
-    func didLoadPosts(_ posts: [PostSummary], category: PostListCategory) {
+    func didLoadPosts(
+        _ posts: [PostSummary],
+        category: PostListCategory,
+        sortMode: PostListSortMode = .replyTime
+    ) {
+        guard sortMode == currentSortMode else { return }
         var state = state(for: category)
         state.posts = posts
         state.loadedIDs = Set(posts.map(\.id))
@@ -162,7 +176,13 @@ extension PostListPresenter: PostListInteractorOutput {
         view?.hideLoadingMore()
     }
 
-    func didLoadMorePosts(_ posts: [PostSummary], page: Int, category: PostListCategory) {
+    func didLoadMorePosts(
+        _ posts: [PostSummary],
+        page: Int,
+        category: PostListCategory,
+        sortMode: PostListSortMode = .replyTime
+    ) {
+        guard sortMode == currentSortMode else { return }
         var state = state(for: category)
         state.isLoadingMore = false
 
@@ -191,7 +211,12 @@ extension PostListPresenter: PostListInteractorOutput {
         view?.hideLoadingMore()
     }
     
-    func didFailLoadPosts(error: String, category: PostListCategory) {
+    func didFailLoadPosts(
+        error: String,
+        category: PostListCategory,
+        sortMode: PostListSortMode = .replyTime
+    ) {
+        guard sortMode == currentSortMode else { return }
         var state = state(for: category)
         state.isLoadingFirstPage = false
         state.isRefreshing = false
@@ -205,7 +230,13 @@ extension PostListPresenter: PostListInteractorOutput {
         view?.showError(message: error)
     }
 
-    func didFailLoadMorePosts(error: String, page: Int, category: PostListCategory) {
+    func didFailLoadMorePosts(
+        error: String,
+        page: Int,
+        category: PostListCategory,
+        sortMode: PostListSortMode = .replyTime
+    ) {
+        guard sortMode == currentSortMode else { return }
         var state = state(for: category)
         state.isLoadingMore = false
         categoryStates[category] = state

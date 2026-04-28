@@ -27,11 +27,15 @@ struct NodeSeekService: Sendable {
         self.challengeDetector = challengeDetector
     }
 
-    func loadPostList(page: Int = 1, category: PostListCategory = .all) async throws -> NodeSeekResult<[PostSummary]> {
-        let targetURL = postListURL(page: page, category: category)
-        logger.info("开始抓取 NodeSeek 列表，category=\(category.rawValue, privacy: .public), page=\(page): \(targetURL.absoluteString)")
+    func loadPostList(
+        page: Int = 1,
+        category: PostListCategory = .all,
+        sortMode: PostListSortMode = .replyTime
+    ) async throws -> NodeSeekResult<[PostSummary]> {
+        let targetURL = postListURL(page: page, category: category, sortMode: sortMode)
+        logger.info("开始抓取 NodeSeek 列表，category=\(category.rawValue, privacy: .public), sort=\(sortMode.rawValue, privacy: .public), page=\(page): \(targetURL.absoluteString)")
         let response = try await htmlClient.get(targetURL)
-        logger.info("抓取返回 category=\(category.rawValue, privacy: .public), page=\(page), status=\(response.statusCode), htmlLength=\(response.html.count), finalURL=\(response.finalURL.absoluteString)")
+        logger.info("抓取返回 category=\(category.rawValue, privacy: .public), sort=\(sortMode.rawValue, privacy: .public), page=\(page), status=\(response.statusCode), htmlLength=\(response.html.count), finalURL=\(response.finalURL.absoluteString)")
 
         if let challenge = challengeDetector.detect(response: response) {
             logger.warning("检测到 challenge: \(challenge.logDescription)")
@@ -59,26 +63,44 @@ struct NodeSeekService: Sendable {
         return .value(detail)
     }
 
-    private func postListURL(page: Int, category: PostListCategory) -> URL {
+    private func postListURL(page: Int, category: PostListCategory, sortMode: PostListSortMode) -> URL {
         let normalized = max(1, page)
+        let url: URL
         guard let pathComponent = category.pathComponent else {
-            return baseURL.appendingPathComponent("page-\(normalized)")
+            url = baseURL.appendingPathComponent("page-\(normalized)")
+            return url.appendingSortQuery(sortMode)
         }
 
         if normalized == 1 {
-            return baseURL
+            url = baseURL
                 .appendingPathComponent("categories")
                 .appendingPathComponent(pathComponent)
+            return url.appendingSortQuery(sortMode)
         }
 
-        return baseURL
+        url = baseURL
             .appendingPathComponent("categories")
             .appendingPathComponent(pathComponent)
             .appendingPathComponent("page-\(normalized)")
+        return url.appendingSortQuery(sortMode)
     }
 
     private func postDetailURL(postID: String, page: Int) -> URL {
         let normalized = max(1, page)
         return baseURL.appendingPathComponent("post-\(postID)-\(normalized)")
+    }
+}
+
+private extension URL {
+    func appendingSortQuery(_ sortMode: PostListSortMode) -> URL {
+        guard var components = URLComponents(url: self, resolvingAgainstBaseURL: true) else {
+            return self
+        }
+
+        var queryItems = components.queryItems ?? []
+        queryItems.removeAll { $0.name == "sortBy" }
+        queryItems.append(URLQueryItem(name: "sortBy", value: sortMode.rawValue))
+        components.queryItems = queryItems
+        return components.url ?? self
     }
 }

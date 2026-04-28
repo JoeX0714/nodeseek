@@ -8,9 +8,11 @@
 enum XPathRules {
     static let postListItems = "//article[contains(@class, 'post-item')] | //li[contains(@class, 'post-list-item')]"
     static let postTitle = ".//*[contains(@class, 'post-title') and self::a] | .//*[contains(@class, 'post-title')]//a[contains(@href, '/post-') or contains(@href, '/post/')]"
+    static let postLocked = ".//*[contains(@class, 'post-title')]//*[local-name()='use' and @*[local-name()='href' and .='#lock']]"
     static let postAvatar = ".//img[contains(@class, 'avatar') or contains(@src, '/avatar/')]"
     static let postAuthor = ".//*[contains(@class, 'post-author')] | .//*[contains(@class, 'info-author')]//a"
     static let postNode = ".//*[contains(@class, 'post-node')] | .//*[contains(@class, 'post-category')]"
+    static let viewCount = ".//*[contains(@class, 'info-views')]//span"
     static let replyCount = ".//*[contains(@class, 'reply-count')] | .//*[contains(@class, 'info-comments-count')]//span[last()]"
     static let lastActive = ".//*[contains(@class, 'last-active')] | .//*[contains(@class, 'info-last-comment-time')]//time"
     static let fallbackPostLinks = "//a[contains(@href, '/post-') or contains(@href, '/post/')]"

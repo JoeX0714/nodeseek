@@ -69,8 +69,15 @@ struct KannaNodeSeekParserTests {
         #expect(first.authorName == "橘子海")
         #expect(first.nodeName == "日常")
         #expect(first.replyCount == 4)
+        #expect(first.viewCount == 39)
+        #expect(first.isLocked)
         #expect(first.lastActivityText == "24s ago")
         #expect(first.avatarURL?.path == "/avatar/17843.png")
+
+        let unlockedPost = try #require(posts.dropFirst().first)
+        #expect(unlockedPost.id == "703691")
+        #expect(unlockedPost.viewCount == 45)
+        #expect(!unlockedPost.isLocked)
     }
 
     @Test func parsesPostDetailFixture() throws {
