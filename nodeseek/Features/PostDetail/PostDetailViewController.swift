@@ -6,12 +6,11 @@
 //
 
 import UIKit
+import DTCoreText
 import OSLog
-import ZNSTextAttachment
 import SafariServices
 import WebKit
 import JXPhotoBrowser
-import ObjectiveC
 
 class PostDetailViewController: UIViewController {
     private enum Layout {
@@ -34,6 +33,7 @@ class PostDetailViewController: UIViewController {
     private var renderGeneration: Int = 0
     private let sourcePostURL: URL?
     private var photoBrowserPresenter: DetailPhotoBrowserPresenter?
+    private var attachmentLayoutRefreshWorkItem: DispatchWorkItem?
     private let renderQueue = DispatchQueue(
         label: "com.nodeseek.app.postdetail.render",
         qos: .userInitiated
@@ -67,6 +67,9 @@ class PostDetailViewController: UIViewController {
         headerView.onImageTapped = { [weak self] imageURLs, initialIndex in
             self?.presentPhotoBrowser(imageURLs: imageURLs, initialIndex: initialIndex)
         }
+        headerView.onTextLayoutInvalidated = { [weak self] in
+            self?.scheduleAttachmentLayoutRefresh()
+        }
 
         if let initialHeader {
             configureHeader(initialHeader, attributedContent: nil)
@@ -84,12 +87,6 @@ class PostDetailViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleAttachmentDidLoad),
-            name: DetailAttachmentDataSource.didLoadNotification,
-            object: nil
-        )
         configureNavigationItems()
         setupUI()
         presenter.viewDidLoad()
@@ -172,7 +169,7 @@ class PostDetailViewController: UIViewController {
         baseURL: URL,
         maxImageWidth: CGFloat
     ) -> NSAttributedString? {
-        let blocks = ZMarkupHTMLContentRenderer().render(fragment: html, baseURL: baseURL, maxImageWidth: maxImageWidth)
+        let blocks = DTCoreTextHTMLContentRenderer().render(fragment: html, baseURL: baseURL, maxImageWidth: maxImageWidth)
         guard blocks.isEmpty == false else { return nil }
 
         let result = NSMutableAttributedString()
@@ -224,11 +221,16 @@ class PostDetailViewController: UIViewController {
         return max(contentWidth, 1)
     }
 
-    @objc
-    private func handleAttachmentDidLoad() {
-        resizeTableHeaderView()
-        tableView.beginUpdates()
-        tableView.endUpdates()
+    private func scheduleAttachmentLayoutRefresh() {
+        attachmentLayoutRefreshWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.resizeTableHeaderView()
+            self.tableView.beginUpdates()
+            self.tableView.endUpdates()
+        }
+        attachmentLayoutRefreshWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: workItem)
     }
 
     @objc
@@ -505,6 +507,9 @@ extension PostDetailViewController: UITableViewDataSource, UITableViewDelegate {
         cell.onImageTapped = { [weak self] imageURLs, initialIndex in
             self?.presentPhotoBrowser(imageURLs: imageURLs, initialIndex: initialIndex)
         }
+        cell.onTextLayoutInvalidated = { [weak self] in
+            self?.scheduleAttachmentLayoutRefresh()
+        }
         cell.configure(
             comment: comment,
             attributedBody: commentAttributedCache[comment.id]
@@ -559,14 +564,14 @@ private final class PostDetailHeaderView: UIView {
         return label
     }()
 
-    private let contentLabel: UILabel = {
-        let label = UILabel()
-        label.numberOfLines = 0
-        label.translatesAutoresizingMaskIntoConstraints = false
-        return label
+    private let contentView: DetailRichTextView = {
+        let view = DetailRichTextView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
     }()
     private var contentTopConstraint: NSLayoutConstraint?
     var onImageTapped: (([URL], Int) -> Void)?
+    var onTextLayoutInvalidated: (() -> Void)?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -580,13 +585,12 @@ private final class PostDetailHeaderView: UIView {
     func configure(_ content: PostDetailHeaderContent, attributedContent: NSAttributedString?) {
         titleLabel.text = content.title
         subtitleLabel.text = [content.authorName, content.metadataText].compactMap(\.self).joined(separator: " · ")
-        contentLabel.attributedText = attributedContent
-        DetailAttachmentActivator.bindAndStartIfNeeded(
-            in: contentLabel,
-            context: "header-\(content.postID)",
-            onImageTapped: onImageTapped
+        contentView.configure(
+            attributedContent,
+            onImageTapped: onImageTapped,
+            onLayoutInvalidated: onTextLayoutInvalidated
         )
-        contentLabel.isHidden = attributedContent == nil
+        contentView.isHidden = attributedContent == nil
         contentTopConstraint?.constant = attributedContent == nil ? 0 : 16
         avatarLoader.loadAvatar(into: avatarImageView, postID: content.postID, avatarURL: content.avatarURL)
     }
@@ -595,11 +599,11 @@ private final class PostDetailHeaderView: UIView {
         backgroundColor = .systemBackground
         addSubview(titleLabel)
         addSubview(authorRowView)
-        addSubview(contentLabel)
+        addSubview(contentView)
         authorRowView.addSubview(avatarImageView)
         authorRowView.addSubview(subtitleLabel)
 
-        let contentTopConstraint = contentLabel.topAnchor.constraint(equalTo: authorRowView.bottomAnchor, constant: 16)
+        let contentTopConstraint = contentView.topAnchor.constraint(equalTo: authorRowView.bottomAnchor, constant: 16)
         self.contentTopConstraint = contentTopConstraint
 
         NSLayoutConstraint.activate([
@@ -623,10 +627,10 @@ private final class PostDetailHeaderView: UIView {
             subtitleLabel.topAnchor.constraint(greaterThanOrEqualTo: authorRowView.topAnchor),
             subtitleLabel.bottomAnchor.constraint(lessThanOrEqualTo: authorRowView.bottomAnchor),
 
-            contentLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Layout.horizontalInset),
-            contentLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Layout.horizontalInset),
+            contentView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Layout.horizontalInset),
+            contentView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Layout.horizontalInset),
             contentTopConstraint,
-            contentLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Layout.bottomInset)
+            contentView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Layout.bottomInset)
         ])
     }
 }
@@ -672,13 +676,13 @@ private final class PostDetailCommentCell: UITableViewCell {
         return label
     }()
 
-    private let bodyLabel: UILabel = {
-        let label = UILabel()
-        label.numberOfLines = 0
-        label.translatesAutoresizingMaskIntoConstraints = false
-        return label
+    private let bodyView: DetailRichTextView = {
+        let view = DetailRichTextView()
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
     }()
     var onImageTapped: (([URL], Int) -> Void)?
+    var onTextLayoutInvalidated: (() -> Void)?
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -694,8 +698,9 @@ private final class PostDetailCommentCell: UITableViewCell {
         avatarLoader.cancel(on: avatarImageView)
         avatarImageView.image = nil
         metaLabel.text = nil
-        bodyLabel.attributedText = nil
+        bodyView.configure(nil, onImageTapped: nil, onLayoutInvalidated: nil)
         onImageTapped = nil
+        onTextLayoutInvalidated = nil
     }
 
     func configure(comment: Comment, attributedBody: NSAttributedString?) {
@@ -704,11 +709,10 @@ private final class PostDetailCommentCell: UITableViewCell {
             comment.authorName,
             comment.createdAtText
         ].compactMap(\.self).joined(separator: " · ")
-        bodyLabel.attributedText = attributedBody
-        DetailAttachmentActivator.bindAndStartIfNeeded(
-            in: bodyLabel,
-            context: "comment-\(comment.id)",
-            onImageTapped: onImageTapped
+        bodyView.configure(
+            attributedBody,
+            onImageTapped: onImageTapped,
+            onLayoutInvalidated: onTextLayoutInvalidated
         )
         avatarLoader.loadAvatar(into: avatarImageView, postID: comment.id, avatarURL: comment.avatarURL)
     }
@@ -720,7 +724,7 @@ private final class PostDetailCommentCell: UITableViewCell {
         contentView.addSubview(cardView)
         cardView.addSubview(avatarImageView)
         cardView.addSubview(metaLabel)
-        cardView.addSubview(bodyLabel)
+        cardView.addSubview(bodyView)
 
         NSLayoutConstraint.activate([
             cardView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: Layout.horizontalInset),
@@ -737,189 +741,195 @@ private final class PostDetailCommentCell: UITableViewCell {
             metaLabel.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -Layout.cardInset),
             metaLabel.topAnchor.constraint(equalTo: cardView.topAnchor, constant: Layout.cardInset),
 
-            bodyLabel.leadingAnchor.constraint(equalTo: metaLabel.leadingAnchor),
-            bodyLabel.trailingAnchor.constraint(equalTo: metaLabel.trailingAnchor),
-            bodyLabel.topAnchor.constraint(equalTo: metaLabel.bottomAnchor, constant: 8),
-            bodyLabel.bottomAnchor.constraint(equalTo: cardView.bottomAnchor, constant: -Layout.cardInset),
-            bodyLabel.bottomAnchor.constraint(greaterThanOrEqualTo: avatarImageView.bottomAnchor)
+            bodyView.leadingAnchor.constraint(equalTo: metaLabel.leadingAnchor),
+            bodyView.trailingAnchor.constraint(equalTo: metaLabel.trailingAnchor),
+            bodyView.topAnchor.constraint(equalTo: metaLabel.bottomAnchor, constant: 8),
+            bodyView.bottomAnchor.constraint(equalTo: cardView.bottomAnchor, constant: -Layout.cardInset),
+            bodyView.bottomAnchor.constraint(greaterThanOrEqualTo: avatarImageView.bottomAnchor)
         ])
     }
 
 }
 
-private enum DetailAttachmentActivator {
-    private static let logger = Logger(subsystem: "com.nodeseek.app", category: "DetailAttachment")
+private final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextContentViewDelegate, DTLazyImageViewDelegate {
+    private enum Layout {
+        static let fixedStickerWidth: CGFloat = 65
+    }
 
-    static func bindAndStartIfNeeded(
-        in label: UILabel,
-        context: String,
-        onImageTapped: (([URL], Int) -> Void)? = nil
+    private var imageTapHandler: (([URL], Int) -> Void)?
+    private var layoutInvalidatedHandler: (() -> Void)?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .clear
+        delegate = self
+        shouldDrawImages = false
+        shouldDrawLinks = true
+        shouldLayoutCustomSubviews = true
+        layoutFrameHeightIsConstrainedByBounds = false
+        isUserInteractionEnabled = true
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func configure(
+        _ attributedText: NSAttributedString?,
+        onImageTapped: (([URL], Int) -> Void)?,
+        onLayoutInvalidated: (() -> Void)?
     ) {
-        guard let attributedText = label.attributedText, attributedText.length > 0 else {
-            DetailImageTapCoordinator.shared.clear(label: label)
-            return
-        }
-
-        var activatedCount = 0
-        attributedText.enumerateAttribute(
-            .attachment,
-            in: NSRange(location: 0, length: attributedText.length)
-        ) { value, _, _ in
-            guard let attachment = value as? ZNSTextAttachment else { return }
-            attachment.dataSource = DetailAttachmentDataSource.shared
-            attachment.register(label)
-            attachment.startDownlaod()
-            activatedCount += 1
-        }
-
-        if activatedCount > 0 {
-            logger.debug(
-                "已触发ZNSTextAttachment下载 context=\(context, privacy: .public), count=\(activatedCount, privacy: .public)"
-            )
-        }
-
-        DetailImageTapCoordinator.shared.bind(
-            label: label,
-            attributedText: attributedText,
-            onImageTapped: onImageTapped
-        )
-    }
-}
-
-private final class DetailImageTapCoordinator: NSObject {
-    static let shared = DetailImageTapCoordinator()
-
-    private enum AssociatedKeys {
-        static var context: UInt8 = 0
-        static var gesture: UInt8 = 0
+        imageTapHandler = onImageTapped
+        layoutInvalidatedHandler = onLayoutInvalidated
+        attributedString = attributedText ?? NSAttributedString()
+        removeAllCustomViews()
+        layouter = nil
+        relayoutText()
+        invalidateIntrinsicContentSize()
+        setNeedsLayout()
     }
 
-    private struct PreviewItem {
-        let range: NSRange
-        let imageURL: URL
-    }
-
-    private final class TapContext: NSObject {
-        let items: [PreviewItem]
-        let onImageTapped: ([URL], Int) -> Void
-
-        init(items: [PreviewItem], onImageTapped: @escaping ([URL], Int) -> Void) {
-            self.items = items
-            self.onImageTapped = onImageTapped
-        }
-    }
-
-    func bind(
-        label: UILabel,
-        attributedText: NSAttributedString,
-        onImageTapped: (([URL], Int) -> Void)?
-    ) {
-        guard let onImageTapped else {
-            objc_setAssociatedObject(label, &AssociatedKeys.context, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-            return
-        }
-
-        let items = collectPreviewItems(from: attributedText)
-        guard items.isEmpty == false else {
-            objc_setAssociatedObject(label, &AssociatedKeys.context, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-            return
-        }
-
-        let context = TapContext(items: items, onImageTapped: onImageTapped)
-        objc_setAssociatedObject(
-            label,
-            &AssociatedKeys.context,
-            context,
-            .OBJC_ASSOCIATION_RETAIN_NONATOMIC
-        )
-
-        label.isUserInteractionEnabled = true
-        if objc_getAssociatedObject(label, &AssociatedKeys.gesture) as? UITapGestureRecognizer == nil {
-            let gesture = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
-            label.addGestureRecognizer(gesture)
-            objc_setAssociatedObject(
-                label,
-                &AssociatedKeys.gesture,
-                gesture,
-                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
-            )
-        }
-    }
-
-    func clear(label: UILabel) {
-        objc_setAssociatedObject(label, &AssociatedKeys.context, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-    }
-
-    @objc
-    private func handleTap(_ gesture: UITapGestureRecognizer) {
-        guard let label = gesture.view as? UILabel,
-              let context = objc_getAssociatedObject(label, &AssociatedKeys.context) as? TapContext,
-              let index = characterIndex(in: label, tapPoint: gesture.location(in: label)),
-              let tappedItemIndex = context.items.firstIndex(where: { NSLocationInRange(index, $0.range) }) else {
-            return
-        }
-
-        context.onImageTapped(context.items.map(\.imageURL), tappedItemIndex)
-    }
-
-    private func collectPreviewItems(from attributedText: NSAttributedString) -> [PreviewItem] {
-        var results: [PreviewItem] = []
-        attributedText.enumerateAttribute(
-            .attachment,
-            in: NSRange(location: 0, length: attributedText.length)
-        ) { value, range, _ in
-            guard let attachment = value as? ZNSTextAttachment,
-                  let resolvedURL = AvatarImageLoader.resolveImageURL(attachment.imageURL),
-                  resolvedURL.absoluteString.lowercased().contains("sticker") == false else {
-                return
-            }
-            results.append(PreviewItem(range: range, imageURL: resolvedURL))
-        }
-        return results
-    }
-
-    private func characterIndex(in label: UILabel, tapPoint: CGPoint) -> Int? {
-        guard let attributedText = label.attributedText, attributedText.length > 0 else { return nil }
-
-        let textStorage = NSTextStorage(attributedString: attributedText)
-        let layoutManager = NSLayoutManager()
-        textStorage.addLayoutManager(layoutManager)
-
-        let textRect = label.textRect(forBounds: label.bounds, limitedToNumberOfLines: label.numberOfLines)
-        let textContainer = NSTextContainer(size: textRect.size)
-        textContainer.lineFragmentPadding = 0
-        textContainer.maximumNumberOfLines = label.numberOfLines
-        textContainer.lineBreakMode = label.lineBreakMode
-        layoutManager.addTextContainer(textContainer)
-
-        let point = CGPoint(
-            x: tapPoint.x - textRect.origin.x,
-            y: tapPoint.y - textRect.origin.y
-        )
-        guard point.x >= 0,
-              point.y >= 0,
-              point.x <= textRect.width,
-              point.y <= textRect.height,
-              layoutManager.numberOfGlyphs > 0 else {
+    func attributedTextContentView(
+        _ attributedTextContentView: DTAttributedTextContentView,
+        viewFor attachment: DTTextAttachment,
+        frame: CGRect
+    ) -> UIView? {
+        guard attachment is DTImageTextAttachment,
+              let contentURL = attachment.contentURL else {
             return nil
         }
 
-        let glyphIndex = layoutManager.glyphIndex(for: point, in: textContainer)
-        guard glyphIndex < layoutManager.numberOfGlyphs else { return nil }
+        let imageView = DetailLazyImageView(frame: frame, imageURL: contentURL) { [weak self] tappedURL in
+            self?.handleImageTap(tappedURL)
+        }
+        imageView.contentMode = .scaleAspectFit
+        imageView.clipsToBounds = true
+        imageView.delegate = self
+        imageView.contentView = attributedTextContentView
+        imageView.image = (attachment as? DTImageTextAttachment)?.image
 
-        let glyphRect = layoutManager.boundingRect(
-            forGlyphRange: NSRange(location: glyphIndex, length: 1),
-            in: textContainer
-        )
-        guard glyphRect.contains(point) else { return nil }
+        if let request = DetailAttachmentDataSource.shared.makeImageRequest(for: contentURL) {
+            imageView.urlRequest = request
+        } else {
+            imageView.url = contentURL
+        }
 
-        let characterIndex = layoutManager.characterIndex(
-            for: point,
-            in: textContainer,
-            fractionOfDistanceBetweenInsertionPoints: nil
-        )
-        guard characterIndex < attributedText.length else { return nil }
-        return characterIndex
+        return imageView
+    }
+
+    func lazyImageView(_ lazyImageView: DTLazyImageView, didChangeImageSize size: CGSize) {
+        guard let url = lazyImageView.url,
+              updateImageAttachments(matching: url, originalSize: size) else {
+            return
+        }
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.layouter = nil
+            self.relayoutText()
+            self.invalidateIntrinsicContentSize()
+            self.setNeedsLayout()
+            self.layoutInvalidatedHandler?()
+        }
+    }
+
+    private func updateImageAttachments(matching url: URL, originalSize: CGSize) -> Bool {
+        guard attributedString.length > 0,
+              originalSize.width > 0,
+              originalSize.height > 0 else {
+            return false
+        }
+
+        var didUpdate = false
+        attributedString.enumerateAttribute(
+            .attachment,
+            in: NSRange(location: 0, length: attributedString.length)
+        ) { value, _, _ in
+            guard let attachment = value as? DTTextAttachment,
+                  attachment.contentURL == url else {
+                return
+            }
+
+            let maxWidth = maxImageWidth(for: url)
+            let displaySize = Self.scaledSize(for: originalSize, maxWidth: maxWidth)
+            guard attachment.originalSize != originalSize || attachment.displaySize != displaySize else {
+                return
+            }
+
+            attachment.originalSize = originalSize
+            attachment.displaySize = displaySize
+            didUpdate = true
+        }
+        return didUpdate
+    }
+
+    private func handleImageTap(_ tappedURL: URL) {
+        guard let onImageTapped = imageTapHandler,
+              let resolvedTappedURL = AvatarImageLoader.resolveImageURL(tappedURL) else {
+            return
+        }
+
+        let urls = previewImageURLs()
+        guard let index = urls.firstIndex(of: resolvedTappedURL) else { return }
+        onImageTapped(urls, index)
+    }
+
+    private func previewImageURLs() -> [URL] {
+        guard attributedString.length > 0 else { return [] }
+
+        var urls: [URL] = []
+        attributedString.enumerateAttribute(
+            .attachment,
+            in: NSRange(location: 0, length: attributedString.length)
+        ) { value, _, _ in
+            guard let attachment = value as? DTTextAttachment,
+                  let contentURL = attachment.contentURL,
+                  let resolvedURL = AvatarImageLoader.resolveImageURL(contentURL),
+                  isStickerImageURL(resolvedURL) == false,
+                  urls.contains(resolvedURL) == false else {
+                return
+            }
+            urls.append(resolvedURL)
+        }
+        return urls
+    }
+
+    private func maxImageWidth(for url: URL) -> CGFloat {
+        let width = bounds.width > 0 ? bounds.width : 320
+        return isStickerImageURL(url) ? min(width, Layout.fixedStickerWidth) : width
+    }
+
+    private func isStickerImageURL(_ url: URL) -> Bool {
+        url.absoluteString.lowercased().contains("sticker")
+    }
+
+    private static func scaledSize(for size: CGSize, maxWidth: CGFloat) -> CGSize {
+        guard size.width > 0, size.height > 0, maxWidth > 0 else { return size }
+        guard size.width > maxWidth else { return size }
+        let scale = maxWidth / size.width
+        return CGSize(width: maxWidth, height: max(1, size.height * scale))
+    }
+}
+
+private final class DetailLazyImageView: DTLazyImageView {
+    private let imageURL: URL
+    private let tapHandler: (URL) -> Void
+
+    init(frame: CGRect, imageURL: URL, tapHandler: @escaping (URL) -> Void) {
+        self.imageURL = imageURL
+        self.tapHandler = tapHandler
+        super.init(frame: frame)
+        isUserInteractionEnabled = true
+        addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(handleTap)))
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    @objc
+    private func handleTap() {
+        tapHandler(imageURL)
     }
 }
 
@@ -980,7 +990,7 @@ private final class DetailPhotoBrowserPresenter: NSObject, JXPhotoBrowserDelegat
     }
 }
 
-private final class DetailAttachmentDataSource: NSObject, ZNSTextAttachmentDataSource {
+private final class DetailAttachmentDataSource: NSObject {
     private struct ImagePayload {
         let data: Data
         let mimeType: String?
@@ -991,7 +1001,6 @@ private final class DetailAttachmentDataSource: NSObject, ZNSTextAttachmentDataS
     private typealias PayloadCompletion = (ImagePayload) -> Void
 
     static let shared = DetailAttachmentDataSource()
-    static let didLoadNotification = Notification.Name("DetailAttachmentDataSource.didLoad")
 
     private enum Limits {
         static let maxPixelSide: CGFloat = 16_384
@@ -1015,23 +1024,32 @@ private final class DetailAttachmentDataSource: NSObject, ZNSTextAttachmentDataS
         super.init()
     }
 
-    func zNSTextAttachment(
-        _ textAttachment: ZNSTextAttachment,
-        loadImageURL imageURL: URL,
-        completion: @escaping (Data, ZNSTextAttachmentDownloadedDataMIMEType?) -> Void
-    ) {
-        fetchPayload(for: imageURL) { payload in
-            completion(payload.data, payload.mimeType)
-            DispatchQueue.main.async {
-                NotificationCenter.default.post(name: Self.didLoadNotification, object: nil)
-            }
-        }
-    }
-
     func loadImageForPreview(_ imageURL: URL, completion: @escaping (UIImage?) -> Void) {
         fetchPayload(for: imageURL) { payload in
             completion(payload.image)
         }
+    }
+
+    func makeImageRequest(for imageURL: URL) -> NSMutableURLRequest? {
+        guard let resolvedURL = AvatarImageLoader.resolveImageURL(imageURL) else { return nil }
+
+        var request = URLRequest(url: resolvedURL)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 20
+        request.cachePolicy = .returnCacheDataElseLoad
+        WebRequestFingerprint.applyImageHeaders(to: &request)
+
+        let mutableRequest = NSMutableURLRequest(
+            url: resolvedURL,
+            cachePolicy: request.cachePolicy,
+            timeoutInterval: request.timeoutInterval
+        )
+        mutableRequest.httpMethod = request.httpMethod ?? "GET"
+        mutableRequest.httpShouldHandleCookies = true
+        request.allHTTPHeaderFields?.forEach { key, value in
+            mutableRequest.setValue(value, forHTTPHeaderField: key)
+        }
+        return mutableRequest
     }
 
     private func fetchPayload(for imageURL: URL, completion: @escaping PayloadCompletion) {
