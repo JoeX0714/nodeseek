@@ -69,7 +69,8 @@ final class PostTextureListView: UIView {
 
         if let appendIndexPaths = makeAppendIndexPaths(from: self.posts, to: posts) {
             self.posts = posts
-            tableNode.performBatch(animated: true, updates: { [weak self] in
+            // 分页追加发生在滚动底部，关闭 row 插入动画可以避免 Texture 调整 contentOffset 时牵动上方内容。
+            tableNode.performBatch(animated: false, updates: { [weak self] in
                 self?.tableNode.insertRows(at: appendIndexPaths, with: .none)
             })
             return
@@ -136,9 +137,7 @@ final class PostTextureListView: UIView {
 
     private func makeAppendIndexPaths(from oldPosts: [PostSummary], to newPosts: [PostSummary]) -> [IndexPath]? {
         guard newPosts.count > oldPosts.count else { return nil }
-        guard !oldPosts.isEmpty else {
-            return (0..<newPosts.count).map { IndexPath(row: $0, section: 0) }
-        }
+        guard !oldPosts.isEmpty else { return nil }
 
         for index in oldPosts.indices where oldPosts[index].id != newPosts[index].id {
             return nil

@@ -51,13 +51,27 @@ struct PostDetailViewControllerTests {
 
         #expect(tableView.numberOfRows(inSection: 0) == 2)
     }
+
+    @Test func addsRefreshButtonAndCanTriggerReload() throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter)
+
+        viewController.loadViewIfNeeded()
+
+        let items = try #require(viewController.navigationItem.rightBarButtonItems)
+        #expect(items.count == 2)
+        let refreshButton = try #require(items.first { $0.accessibilityLabel == "刷新" })
+        let action = try #require(refreshButton.action)
+        _ = (refreshButton.target as AnyObject).perform(action)
+        #expect(presenter.loadCount == 2)
+    }
 }
 
 private final class SpyPostDetailPresenter: PostDetailPresenterProtocol {
-    private(set) var didLoad = false
+    private(set) var loadCount = 0
 
     func viewDidLoad() {
-        didLoad = true
+        loadCount += 1
     }
 }
 

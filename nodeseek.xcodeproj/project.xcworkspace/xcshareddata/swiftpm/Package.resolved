@@ -1,5 +1,5 @@
 {
-  "originHash" : "183dd3bcd925d22d7e0edb3d18a00b1e3f4b2f23295167052fef1f727dc7e4e9",
+  "originHash" : "6cec65f5b4ae13d6823982ee9733b2248d869f2f5c6719e0d2315f0f533073a2",
   "pins" : [
     {
       "identity" : "kanna",
@@ -20,6 +20,15 @@
       }
     },
     {
+      "identity" : "photobrowser",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/JiongXing/PhotoBrowser.git",
+      "state" : {
+        "revision" : "f70648e0e69c9104e14a6135a337102284730304",
+        "version" : "4.0.3"
+      }
+    },
+    {
       "identity" : "swiftdraw",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/swhitty/SwiftDraw.git",
@@ -35,6 +44,24 @@
       "state" : {
         "revision" : "9620825e5f97dfbd1ce653443e5165d5eb405b9b",
         "version" : "3.0.4"
+      }
+    },
+    {
+      "identity" : "zmarkupparser",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ZhgChgLi/ZMarkupParser.git",
+      "state" : {
+        "revision" : "f25c9838e9e77ae49cc3f434ee26e669cb4043c7",
+        "version" : "1.12.0"
+      }
+    },
+    {
+      "identity" : "znstextattachment",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ZhgChgLi/ZNSTextAttachment",
+      "state" : {
+        "revision" : "8c6c34e82eb31ad373b209cb88c2a2aff76c6cdf",
+        "version" : "1.1.9"
       }
     }
   ],

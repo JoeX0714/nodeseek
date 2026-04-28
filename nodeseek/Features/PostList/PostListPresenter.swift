@@ -156,10 +156,10 @@ extension PostListPresenter: PostListInteractorOutput {
         categoryStates[category] = state
 
         guard category == currentCategory else { return }
+        view?.render(posts: state.posts)
         view?.hideLoading()
         view?.hideRefreshing()
         view?.hideLoadingMore()
-        view?.render(posts: state.posts)
     }
 
     func didLoadMorePosts(_ posts: [PostSummary], page: Int, category: PostListCategory) {
@@ -184,10 +184,11 @@ extension PostListPresenter: PostListInteractorOutput {
         categoryStates[category] = state
 
         guard category == currentCategory else { return }
-        view?.hideLoadingMore()
         if appended {
+            // 先接上新数据，再收起底部 loading，避免 footer 高度变化带动可见列表跳动。
             view?.render(posts: state.posts)
         }
+        view?.hideLoadingMore()
     }
     
     func didFailLoadPosts(error: String, category: PostListCategory) {

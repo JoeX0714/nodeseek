@@ -182,6 +182,64 @@ struct PostListPresenterTests {
         #expect(view.hideRefreshingCount == hideRefreshingBefore + 1)
         #expect(view.lastRenderedPostIDs == ["all-2"])
     }
+
+    @Test func firstPageCompletionRendersPostsBeforeHidingSkeleton() {
+        let view = SpyPostListView()
+        let interactor = SpyPostListInteractor()
+        let router = SpyPostListRouter()
+        let presenter = PostListPresenter(interactor: interactor, router: router)
+        presenter.setView(view)
+        let post = PostSummary(
+            id: "1",
+            title: "标题",
+            url: URL(string: "https://www.nodeseek.com/post-1")!,
+            authorName: "mist",
+            nodeName: "开发",
+            replyCount: 3,
+            lastActivityText: "刚刚"
+        )
+
+        presenter.viewDidLoad()
+        view.events.removeAll()
+        presenter.didLoadPosts([post], category: .all)
+
+        #expect(view.events.first == "render")
+        #expect(view.events.contains("hideLoading"))
+    }
+
+    @Test func loadMoreCompletionRendersPostsBeforeHidingFooterLoading() {
+        let view = SpyPostListView()
+        let interactor = SpyPostListInteractor()
+        let router = SpyPostListRouter()
+        let presenter = PostListPresenter(interactor: interactor, router: router)
+        presenter.setView(view)
+        let first = PostSummary(
+            id: "1",
+            title: "标题1",
+            url: URL(string: "https://www.nodeseek.com/post-1")!,
+            authorName: "mist",
+            nodeName: "开发",
+            replyCount: 3,
+            lastActivityText: "刚刚"
+        )
+        let second = PostSummary(
+            id: "2",
+            title: "标题2",
+            url: URL(string: "https://www.nodeseek.com/post-2")!,
+            authorName: "mist",
+            nodeName: "开发",
+            replyCount: 4,
+            lastActivityText: "1 分钟前"
+        )
+
+        presenter.didLoadPosts([first], category: .all)
+        presenter.didApproachBottom(currentIndex: 0, totalCount: 1)
+        view.events.removeAll()
+        presenter.didLoadMorePosts([second], page: 2, category: .all)
+
+        #expect(view.events.first == "render")
+        #expect(view.events.contains("hideLoadingMore"))
+    }
 }
 
 @MainActor
@@ -198,29 +256,36 @@ private final class SpyPostListView: PostListViewProtocol {
     var lastErrorMessage: String?
     var renderedCategories: [PostListCategory] = []
     var selectedCategory: PostListCategory = .all
+    var events: [String] = []
 
     func showLoading() {
         showLoadingCount += 1
+        events.append("showLoading")
     }
 
     func hideLoading() {
         hideLoadingCount += 1
+        events.append("hideLoading")
     }
 
     func showRefreshing() {
         showRefreshingCount += 1
+        events.append("showRefreshing")
     }
 
     func hideRefreshing() {
         hideRefreshingCount += 1
+        events.append("hideRefreshing")
     }
 
     func showLoadingMore() {
         showLoadingMoreCount += 1
+        events.append("showLoadingMore")
     }
 
     func hideLoadingMore() {
         hideLoadingMoreCount += 1
+        events.append("hideLoadingMore")
     }
 
     func showError(message: String) {
@@ -230,12 +295,14 @@ private final class SpyPostListView: PostListViewProtocol {
     func renderCategories(_ categories: [PostListCategory], selected: PostListCategory) {
         renderedCategories = categories
         selectedCategory = selected
+        events.append("renderCategories")
     }
 
     func render(posts: [PostSummary]) {
         renderCallCount += 1
         lastRenderedPostsCount = posts.count
         lastRenderedPostIDs = posts.map(\.id)
+        events.append("render")
     }
 }
 

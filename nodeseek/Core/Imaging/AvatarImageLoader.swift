@@ -22,6 +22,7 @@ final class AvatarImageLoader {
     typealias Completion = (LoadResult) -> Void
 
     static let shared = AvatarImageLoader()
+    nonisolated static let defaultBaseURL = URL(string: "https://www.nodeseek.com")!
 
     private enum AvatarRender {
         static let size = CGSize(width: 56, height: 56)
@@ -63,6 +64,45 @@ final class AvatarImageLoader {
         imageView.kf.cancelDownloadTask()
     }
 
+    nonisolated static func resolveImageURL(
+        _ rawValue: String?,
+        baseURL: URL = AvatarImageLoader.defaultBaseURL
+    ) -> URL? {
+        guard let rawValue else { return nil }
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false else { return nil }
+
+        if let absolute = URL(string: trimmed), absolute.scheme != nil {
+            return absolute
+        }
+        return URL(string: trimmed, relativeTo: baseURL)?.absoluteURL
+    }
+
+    nonisolated static func resolveImageURL(
+        _ url: URL?,
+        baseURL: URL = AvatarImageLoader.defaultBaseURL
+    ) -> URL? {
+        guard let url else { return nil }
+        if url.scheme != nil {
+            return url
+        }
+        return URL(string: url.relativeString, relativeTo: baseURL)?.absoluteURL
+    }
+
+    func loadImage(
+        into imageView: UIImageView,
+        requestID: String,
+        imageURL: URL?,
+        completion: Completion? = nil
+    ) {
+        loadAvatar(
+            into: imageView,
+            postID: requestID,
+            avatarURL: imageURL,
+            completion: completion
+        )
+    }
+
     func loadAvatar(
         into imageView: UIImageView,
         postID: String,
@@ -72,8 +112,8 @@ final class AvatarImageLoader {
         let token = beginRequest(for: imageView)
         imageView.image = Self.placeholderImage
 
-        guard let avatarURL else {
-            logger.notice("头像URL缺失 id=\(postID, privacy: .public)")
+        guard let avatarURL = Self.resolveImageURL(avatarURL) else {
+            logger.notice("头像URL缺失或非法 id=\(postID, privacy: .public)")
             finishIfCurrent(token, for: imageView)
             return
         }
