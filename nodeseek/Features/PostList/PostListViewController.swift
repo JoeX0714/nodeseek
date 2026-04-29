@@ -193,6 +193,7 @@ class PostListViewController: UIViewController {
 
         installSideMenuController()
         applySortTogglePresentation(expanded: false)
+        applySortToggleAlpha(expanded: false)
     }
     
     // MARK: - Actions
@@ -261,21 +262,25 @@ class PostListViewController: UIViewController {
         sortToggleCollapseWorkItem = nil
         isSortToggleExpanded = expanded
         applySortTogglePresentation(expanded: expanded)
-        sortToggleWidthConstraint?.constant = expanded ? SortToggleLayout.expandedWidth : SortToggleLayout.collapsedWidth
+        sortToggleWidthConstraint?.constant = expanded
+            ? SortToggleLayout.expandedWidth(for: currentSortMode.accessibilityTitle)
+            : SortToggleLayout.collapsedWidth
         sortToggleTrailingConstraint?.constant = expanded ? SortToggleLayout.expandedTrailing : SortToggleLayout.collapsedTrailing
 
         let animations: () -> Void = { [weak self] in
+            self?.applySortToggleAlpha(expanded: expanded)
             self?.view.layoutIfNeeded()
         }
         guard animated else {
             animations()
             return
         }
+        applySortToggleJellyAnimation(expanded: expanded)
         UIView.animate(
-            withDuration: 0.28,
+            withDuration: SortToggleLayout.transitionDuration,
             delay: 0,
-            usingSpringWithDamping: 0.82,
-            initialSpringVelocity: 0.35,
+            usingSpringWithDamping: SortToggleLayout.transitionDamping,
+            initialSpringVelocity: SortToggleLayout.transitionVelocity,
             options: [.allowUserInteraction, .beginFromCurrentState],
             animations: animations
         )
@@ -297,13 +302,40 @@ class PostListViewController: UIViewController {
         configuration.baseForegroundColor = .systemBackground
         configuration.image = image
         configuration.title = expanded ? title : nil
-        configuration.imagePadding = expanded ? 5 : 0
-        configuration.contentInsets = expanded
-            ? NSDirectionalEdgeInsets(top: 8, leading: 13, bottom: 8, trailing: 14)
-            : NSDirectionalEdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12)
+        configuration.imagePadding = expanded ? SortToggleLayout.expandedImagePadding : 0
+        configuration.contentInsets = expanded ? SortToggleLayout.expandedInsets : SortToggleLayout.collapsedInsets
         configuration.titleLineBreakMode = .byTruncatingTail
+        configuration.titleTextAttributesTransformer = expanded ? SortToggleLayout.titleAttributesTransformer : nil
         sortToggleButton.configuration = configuration
         sortToggleButton.accessibilityLabel = currentSortMode.accessibilityTitle
+    }
+
+    private func applySortToggleAlpha(expanded: Bool) {
+        sortToggleButton.alpha = expanded ? SortToggleLayout.expandedAlpha : SortToggleLayout.collapsedAlpha
+    }
+
+    private func applySortToggleJellyAnimation(expanded: Bool) {
+        sortToggleButton.layer.removeAnimation(forKey: SortToggleLayout.jellyAnimationKey)
+
+        let scaleX = CAKeyframeAnimation(keyPath: "transform.scale.x")
+        scaleX.values = expanded
+            ? [1, 1.08, 0.98, 1.02, 1]
+            : [1, 0.94, 1.04, 0.99, 1]
+        scaleX.keyTimes = SortToggleLayout.jellyKeyTimes
+        scaleX.timingFunctions = SortToggleLayout.jellyTimingFunctions
+
+        let scaleY = CAKeyframeAnimation(keyPath: "transform.scale.y")
+        scaleY.values = expanded
+            ? [1, 0.96, 1.03, 0.99, 1]
+            : [1, 1.04, 0.97, 1.01, 1]
+        scaleY.keyTimes = SortToggleLayout.jellyKeyTimes
+        scaleY.timingFunctions = SortToggleLayout.jellyTimingFunctions
+
+        let animationGroup = CAAnimationGroup()
+        animationGroup.animations = [scaleX, scaleY]
+        animationGroup.duration = SortToggleLayout.jellyDuration
+        animationGroup.isRemovedOnCompletion = true
+        sortToggleButton.layer.add(animationGroup, forKey: SortToggleLayout.jellyAnimationKey)
     }
 
     private func installSideMenuController() {
@@ -369,6 +401,9 @@ extension PostListViewController: PostListViewProtocol {
     func renderSortMode(_ sortMode: PostListSortMode) {
         currentSortMode = sortMode
         applySortTogglePresentation(expanded: isSortToggleExpanded)
+        if isSortToggleExpanded {
+            sortToggleWidthConstraint?.constant = SortToggleLayout.expandedWidth(for: sortMode.accessibilityTitle)
+        }
     }
     
     func render(posts: [PostSummary]) {
@@ -378,11 +413,45 @@ extension PostListViewController: PostListViewProtocol {
 
 private enum SortToggleLayout {
     static let collapsedWidth: CGFloat = 58
-    static let expandedWidth: CGFloat = 144
+    static let minimumExpandedWidth: CGFloat = 168
     static let height: CGFloat = 42
     static let cornerRadius: CGFloat = 14
+    static let collapsedAlpha: CGFloat = 0.62
+    static let expandedAlpha: CGFloat = 1
     static let collapsedTrailing: CGFloat = 12
     static let expandedTrailing: CGFloat = 0
+    static let transitionDuration: TimeInterval = 0.34
+    static let transitionDamping: CGFloat = 0.68
+    static let transitionVelocity: CGFloat = 0.6
+    static let jellyAnimationKey = "sortToggleJelly"
+    static let jellyDuration: TimeInterval = 0.42
+    static let jellyKeyTimes: [NSNumber] = [0, 0.28, 0.58, 0.82, 1]
+    static let jellyTimingFunctions = [
+        CAMediaTimingFunction(name: .easeOut),
+        CAMediaTimingFunction(name: .easeInEaseOut),
+        CAMediaTimingFunction(name: .easeInEaseOut),
+        CAMediaTimingFunction(name: .easeOut)
+    ]
+    static let expandedImagePadding: CGFloat = 6
+    static let expandedInsets = NSDirectionalEdgeInsets(top: 8, leading: 14, bottom: 8, trailing: 16)
+    static let collapsedInsets = NSDirectionalEdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12)
+    static let titleFont = UIFont.systemFont(ofSize: 13, weight: .semibold)
+    static let titleAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
+        var outgoing = incoming
+        outgoing.font = titleFont
+        return outgoing
+    }
+
+    static func expandedWidth(for title: String) -> CGFloat {
+        let titleWidth = ceil((title as NSString).size(withAttributes: [.font: titleFont]).width)
+        let imageWidth: CGFloat = 18
+        let measuredWidth = expandedInsets.leading
+            + imageWidth
+            + expandedImagePadding
+            + titleWidth
+            + expandedInsets.trailing
+        return max(minimumExpandedWidth, ceil(measuredWidth))
+    }
 }
 
 private extension PostListSortMode {
