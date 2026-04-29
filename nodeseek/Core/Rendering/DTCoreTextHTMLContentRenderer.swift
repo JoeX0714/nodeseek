@@ -14,7 +14,11 @@ import UIKit
 struct DTCoreTextHTMLContentRenderer {
     private enum Layout {
         static let defaultMaxImageWidth: CGFloat = 320
+        static let bodyLineSpacing: CGFloat = 5
+        static let blockquoteTextIndent: CGFloat = 11
     }
+
+    private static let linkColor = UIColor(red: 15 / 255, green: 128 / 255, blue: 85 / 255, alpha: 1)
 
     private static let imageSourceRegex = try! NSRegularExpression(
         pattern: "(<img\\b[^>]*\\bsrc\\s*=\\s*[\"'])([^\"']+)([\"'])",
@@ -46,16 +50,27 @@ struct DTCoreTextHTMLContentRenderer {
         logDiagnostics(
             "render normalized expandedLength=\(expandedFragment.count) normalizedLength=\(normalizedFragment.count) imageSources=\(normalizedSources.count) urls=\(normalizedSources.prefix(6).joined(separator: " | "))"
         )
-        let html = wrapHTML(fragment: normalizedFragment, baseURL: baseURL)
+
+        let blocks = renderContentBlocks(
+            fragment: normalizedFragment,
+            baseURL: baseURL,
+            maxImageWidth: maxImageWidth
+        )
+        return blocks.isEmpty ? fallbackBlocks(from: normalizedFragment) : blocks
+    }
+
+    private func renderTextBlocks(fragment: String, baseURL: URL, maxImageWidth: CGFloat) -> [RenderedContentBlock] {
+        let html = wrapHTML(fragment: fragment, baseURL: baseURL)
         guard let data = html.data(using: .utf8) else {
             return fallbackBlocks(from: fragment)
         }
 
+        let imageSources = self.imageSources(in: fragment)
         let options: [String: Any] = [
             NSBaseURLDocumentOption: baseURL,
             DTDefaultFontSize: UIFont.preferredFont(forTextStyle: .body).pointSize,
             DTDefaultTextColor: UIColor.label,
-            DTDefaultLinkColor: UIColor.systemBlue,
+            DTDefaultLinkColor: Self.linkColor,
             DTMaxImageSize: NSValue(cgSize: CGSize(width: maxImageWidth, height: DetailImageLayout.maxImageHeight)),
             DTUseiOS6Attributes: true
         ]
@@ -65,19 +80,230 @@ struct DTCoreTextHTMLContentRenderer {
             documentAttributes: nil
         )
         guard let rendered = builder?.generatedAttributedString(), rendered.length > 0 else {
-            return fallbackBlocks(from: normalizedFragment)
+            return fallbackBlocks(from: fragment)
         }
 
         let normalized = normalize(
             attributed: rendered,
             baseURL: baseURL,
-            imageSources: normalizedSources,
+            imageSources: imageSources,
             maxImageWidth: maxImageWidth
         )
         logDiagnostics(
             "render done textLength=\(normalized.length) attachments=\(attachmentDiagnostics(in: normalized))"
         )
-        return normalized.length > 0 ? [.text(normalized)] : fallbackBlocks(from: normalizedFragment)
+        return normalized.length > 0 ? [.text(normalized)] : fallbackBlocks(from: fragment)
+    }
+
+    private func renderContentBlocks(
+        fragment: String,
+        baseURL: URL,
+        maxImageWidth: CGFloat
+    ) -> [RenderedContentBlock] {
+        guard fragment.range(of: "<table", options: [.caseInsensitive]) != nil else {
+            return renderTextBlocks(fragment: fragment, baseURL: baseURL, maxImageWidth: maxImageWidth)
+        }
+
+        guard let document = try? HTML(
+            html: "<div id=\"__nodeseek_content_root__\">\(fragment)</div>",
+            encoding: .utf8
+        ),
+              let root = document.at_css("#__nodeseek_content_root__") else {
+            return renderTextBlocks(fragment: fragment, baseURL: baseURL, maxImageWidth: maxImageWidth)
+        }
+
+        var blocks: [RenderedContentBlock] = []
+        var pendingHTML = ""
+        for child in root.children {
+            appendContentBlocks(
+                from: child,
+                pendingHTML: &pendingHTML,
+                blocks: &blocks,
+                baseURL: baseURL,
+                maxImageWidth: maxImageWidth
+            )
+        }
+        flushPendingHTML(
+            &pendingHTML,
+            into: &blocks,
+            baseURL: baseURL,
+            maxImageWidth: maxImageWidth
+        )
+        return blocks
+    }
+
+    private func appendContentBlocks(
+        from node: XMLElement,
+        pendingHTML: inout String,
+        blocks: inout [RenderedContentBlock],
+        baseURL: URL,
+        maxImageWidth: CGFloat
+    ) {
+        if isTableElement(node) {
+            flushPendingHTML(
+                &pendingHTML,
+                into: &blocks,
+                baseURL: baseURL,
+                maxImageWidth: maxImageWidth
+            )
+            if let table = tableBlock(from: node, baseURL: baseURL) {
+                blocks.append(.table(table))
+            }
+            return
+        }
+
+        if containsTableElement(node) {
+            for child in node.children {
+                appendContentBlocks(
+                    from: child,
+                    pendingHTML: &pendingHTML,
+                    blocks: &blocks,
+                    baseURL: baseURL,
+                    maxImageWidth: maxImageWidth
+                )
+            }
+            return
+        }
+
+        if let html = node.toHTML, html.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+            pendingHTML.append(html)
+        } else if let text = node.text, text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+            pendingHTML.append(escapedHTML(text))
+        }
+    }
+
+    private func flushPendingHTML(
+        _ pendingHTML: inout String,
+        into blocks: inout [RenderedContentBlock],
+        baseURL: URL,
+        maxImageWidth: CGFloat
+    ) {
+        guard pendingHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+            pendingHTML.removeAll(keepingCapacity: true)
+            return
+        }
+        blocks.append(contentsOf: renderTextBlocks(
+            fragment: pendingHTML,
+            baseURL: baseURL,
+            maxImageWidth: maxImageWidth
+        ))
+        pendingHTML.removeAll(keepingCapacity: true)
+    }
+
+    private func tableBlock(from tableNode: XMLElement, baseURL: URL) -> RenderedTableBlock? {
+        let rows = tableNode.css("tr").compactMap { rowNode -> RenderedTableBlock.Row? in
+            let cells = rowNode.xpath("./th|./td").compactMap { cellNode -> RenderedTableBlock.Cell? in
+                guard isTableCellElement(cellNode) else { return nil }
+                let text = normalizedCellText(from: cellNode)
+                let imageURL = imageURL(from: cellNode, baseURL: baseURL)
+                guard text.isEmpty == false || imageURL != nil else { return nil }
+                return RenderedTableBlock.Cell(
+                    text: text,
+                    imageURL: imageURL,
+                    isHeader: tagName(of: cellNode) == "th"
+                )
+            }
+            guard cells.isEmpty == false else { return nil }
+            return RenderedTableBlock.Row(
+                cells: cells,
+                isHeader: cells.contains(where: \.isHeader) || hasAncestor(named: "thead", for: rowNode)
+            )
+        }
+
+        return rows.isEmpty ? nil : RenderedTableBlock(rows: rows)
+    }
+
+    private func normalizedCellText(from node: XMLElement) -> String {
+        let rawText = htmlTextPreservingLineBreaks(from: node)
+        return rawText
+            .replacingOccurrences(of: "[ \\t\\r\\u{00A0}]+", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: " *\\n+ *", with: "\n", options: .regularExpression)
+            .replacingOccurrences(of: "\\n{2,}", with: "\n", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func htmlTextPreservingLineBreaks(from node: XMLElement) -> String {
+        let html = node.innerHTML ?? node.text ?? ""
+        let withoutHiddenContent = html
+            .replacingOccurrences(
+                of: "(?is)<(script|style)\\b[^>]*>.*?</\\1>",
+                with: "",
+                options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: "(?is)<img\\b[^>]*>",
+                with: "",
+                options: .regularExpression
+            )
+        let withLineBreaks = withoutHiddenContent
+            .replacingOccurrences(
+                of: "(?i)<br\\s*/?>",
+                with: "\n",
+                options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: "(?i)</?(p|div|section|article|header|footer|blockquote|pre|ul|ol|li|h[1-6])\\b[^>]*>",
+                with: "\n",
+                options: .regularExpression
+            )
+        let stripped = withLineBreaks.replacingOccurrences(
+            of: "<[^>]+>",
+            with: "",
+            options: .regularExpression
+        )
+        return decodedHTMLEntities(in: stripped)
+    }
+
+    private func decodedHTMLEntities(in text: String) -> String {
+        guard text.contains("&"),
+              let data = text
+            .replacingOccurrences(of: "\n", with: "__NODESEEK_CELL_LINE_BREAK__")
+            .data(using: .utf8) else {
+            return text
+        }
+
+        let decoded = (try? NSAttributedString(
+            data: data,
+            options: [
+                .documentType: NSAttributedString.DocumentType.html,
+                .characterEncoding: String.Encoding.utf8.rawValue
+            ],
+            documentAttributes: nil
+        ).string) ?? text
+        return decoded.replacingOccurrences(of: "__NODESEEK_CELL_LINE_BREAK__", with: "\n")
+    }
+
+    private func imageURL(from node: XMLElement, baseURL: URL) -> URL? {
+        guard let source = node.at_css("img")?["src"] else { return nil }
+        return AvatarImageLoader.resolveImageURL(source, baseURL: baseURL)
+    }
+
+    private func containsTableElement(_ node: XMLElement) -> Bool {
+        isTableElement(node) || node.at_css("table") != nil
+    }
+
+    private func isTableElement(_ node: XMLElement) -> Bool {
+        tagName(of: node) == "table"
+    }
+
+    private func isTableCellElement(_ node: XMLElement) -> Bool {
+        let tag = tagName(of: node)
+        return tag == "td" || tag == "th"
+    }
+
+    private func hasAncestor(named targetName: String, for node: XMLElement) -> Bool {
+        var current = node.parent
+        while let ancestor = current {
+            if tagName(of: ancestor) == targetName {
+                return true
+            }
+            current = ancestor.parent
+        }
+        return false
+    }
+
+    private func tagName(of node: XMLElement) -> String {
+        node.tagName?.lowercased() ?? ""
     }
 
     private func expandNodeSeekMagicTabs(in fragment: String) -> String {
@@ -218,9 +444,56 @@ struct DTCoreTextHTMLContentRenderer {
         <head>
         <base href="\(baseURL.absoluteString)">
         <style>
-        body { font: -apple-system-body; color: #111; }
-        img { max-width: 100%; height: auto; }
-        blockquote { border-left: 3px solid #d0d0d0; margin-left: 0; padding-left: 10px; color: #555; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-size: 17px;
+            line-height: 1.42;
+            color: #111111;
+        }
+        article, section, div { margin: 0; padding: 0; }
+        p { margin: 0 0 12px 0; }
+        h1, h2, h3, h4, h5, h6 {
+            margin: 18px 0 8px 0;
+            line-height: 1.28;
+            font-weight: 700;
+            color: #111111;
+        }
+        h1 { font-size: 24px; }
+        h2 { font-size: 22px; }
+        h3 { font-size: 20px; }
+        h4 { font-size: 19px; }
+        h5 { font-size: 18px; }
+        h6 { font-size: 17px; }
+        strong, b { font-weight: 700; }
+        em, i { font-style: italic; }
+        a { color: #0f8055; text-decoration: none; }
+        ul, ol { margin: 0 0 12px 0; padding-left: 22px; }
+        li { margin: 0 0 6px 0; }
+        img { max-width: 100%; height: auto; margin: 4px 0 12px 0; }
+        blockquote {
+            background-color: #f6f8fa;
+            border-left: 3px solid #d0d7de;
+            margin-top: 8px;
+            margin-right: 0;
+            margin-bottom: 12px;
+            margin-left: 0;
+            padding-top: 12px;
+            padding-right: 10px;
+            padding-bottom: 12px;
+            padding-left: 8px;
+            color: #555555;
+        }
+        pre {
+            font-family: Menlo, Monaco, monospace;
+            font-size: 13px;
+            line-height: 1.35;
+            white-space: pre-wrap;
+            margin: 8px 0 12px 0;
+        }
+        code {
+            font-family: Menlo, Monaco, monospace;
+            font-size: 13px;
+        }
         </style>
         </head>
         <body>\(fragment)</body>
@@ -237,17 +510,112 @@ struct DTCoreTextHTMLContentRenderer {
         let mutable = NSMutableAttributedString(attributedString: attributed)
         guard mutable.length > 0 else { return mutable }
 
-        mutable.addAttributes(
-            [
-                .font: UIFont.preferredFont(forTextStyle: .body),
-                .foregroundColor: UIColor.label
-            ],
-            range: NSRange(location: 0, length: mutable.length)
-        )
+        normalizeBaseTextAttributes(in: mutable)
+        normalizeParagraphStyles(in: mutable)
         normalizeLinks(in: mutable, baseURL: baseURL)
         normalizeVisibleListMarkers(in: mutable)
         normalizeImageAttachments(in: mutable, imageSources: imageSources, maxImageWidth: maxImageWidth)
         return mutable
+    }
+
+    private func normalizeBaseTextAttributes(in attributed: NSMutableAttributedString) {
+        let fullRange = NSRange(location: 0, length: attributed.length)
+        let bodyColor = UIColor.label
+
+        let bodyFont = UIFont.preferredFont(forTextStyle: .body)
+        attributed.enumerateAttribute(.font, in: fullRange) { value, range, _ in
+            guard let font = value as? UIFont else {
+                attributed.addAttribute(.font, value: bodyFont, range: range)
+                return
+            }
+
+            attributed.addAttribute(.font, value: normalizedSystemFont(from: font, fallback: bodyFont), range: range)
+        }
+
+        attributed.enumerateAttribute(.foregroundColor, in: fullRange) { value, range, _ in
+            let color = (value as? UIColor).map(normalizedTextColor(from:)) ?? bodyColor
+            attributed.addAttribute(.foregroundColor, value: color, range: range)
+        }
+    }
+
+    private func normalizeParagraphStyles(in attributed: NSMutableAttributedString) {
+        let fullRange = NSRange(location: 0, length: attributed.length)
+        attributed.enumerateAttribute(.paragraphStyle, in: fullRange) { value, range, _ in
+            let baseStyle = (value as? NSParagraphStyle) ?? .default
+            let style = NSMutableParagraphStyle()
+            style.setParagraphStyle(baseStyle)
+            style.lineSpacing = max(style.lineSpacing, Layout.bodyLineSpacing)
+            style.lineBreakMode = .byWordWrapping
+            if containsBlockquoteTextBlock(in: attributed, range: range) {
+                style.firstLineHeadIndent = Layout.blockquoteTextIndent
+                style.headIndent = Layout.blockquoteTextIndent
+                style.tailIndent = -Layout.blockquoteTextIndent
+            }
+            attributed.addAttribute(.paragraphStyle, value: style, range: range)
+        }
+    }
+
+    private func containsBlockquoteTextBlock(in attributed: NSAttributedString, range: NSRange) -> Bool {
+        guard range.location != NSNotFound, range.length > 0, NSMaxRange(range) <= attributed.length else {
+            return false
+        }
+        let textBlocks = attributed.attribute(
+            NSAttributedString.Key(DTTextBlocksAttribute),
+            at: range.location,
+            effectiveRange: nil
+        ) as? [DTTextBlock]
+        return textBlocks?.contains { $0.backgroundColor != nil } == true
+    }
+
+    private func normalizedSystemFont(from font: UIFont, fallback: UIFont) -> UIFont {
+        let pointSize = font.pointSize > 0 ? font.pointSize : fallback.pointSize
+        let traits = font.fontDescriptor.symbolicTraits
+        let weight: UIFont.Weight = traits.contains(.traitBold) ? .semibold : .regular
+        let baseFont = isMonospaced(font)
+            ? UIFont.monospacedSystemFont(ofSize: pointSize, weight: weight)
+            : UIFont.systemFont(ofSize: pointSize, weight: weight)
+        guard traits.contains(.traitItalic),
+              let descriptor = baseFont.fontDescriptor.withSymbolicTraits(
+                baseFont.fontDescriptor.symbolicTraits.union(.traitItalic)
+              ) else {
+            return baseFont
+        }
+        return UIFont(descriptor: descriptor, size: pointSize)
+    }
+
+    private func isMonospaced(_ font: UIFont) -> Bool {
+        let traits = font.fontDescriptor.symbolicTraits
+        guard traits.contains(.traitMonoSpace) == false else { return true }
+        let name = "\(font.fontName) \(font.familyName)".lowercased()
+        return name.contains("mono") || name.contains("menlo") || name.contains("courier")
+    }
+
+    private func normalizedTextColor(from color: UIColor) -> UIColor {
+        guard let components = rgbComponents(from: color) else { return color }
+        if isNearGray(components, target: 17) {
+            return .label
+        }
+        if isNearGray(components, target: 85) {
+            return .secondaryLabel
+        }
+        return color
+    }
+
+    private func rgbComponents(from color: UIColor) -> (red: CGFloat, green: CGFloat, blue: CGFloat)? {
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        guard color.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else { return nil }
+        return (red, green, blue)
+    }
+
+    private func isNearGray(_ components: (red: CGFloat, green: CGFloat, blue: CGFloat), target: CGFloat) -> Bool {
+        let normalizedTarget = target / 255
+        let tolerance: CGFloat = 0.02
+        return abs(components.red - normalizedTarget) <= tolerance
+            && abs(components.green - normalizedTarget) <= tolerance
+            && abs(components.blue - normalizedTarget) <= tolerance
     }
 
     private func normalizeLinks(in attributed: NSMutableAttributedString, baseURL: URL) {
@@ -267,7 +635,7 @@ struct DTCoreTextHTMLContentRenderer {
             }
             guard let raw, let resolved = URL(string: raw, relativeTo: baseURL)?.absoluteURL else { return }
             attributed.addAttribute(.link, value: resolved, range: range)
-            attributed.addAttribute(.foregroundColor, value: UIColor.systemBlue, range: range)
+            attributed.addAttribute(.foregroundColor, value: Self.linkColor, range: range)
             if dtLinkKey != .link {
                 attributed.removeAttribute(dtLinkKey, range: range)
             }

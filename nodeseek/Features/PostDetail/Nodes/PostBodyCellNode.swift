@@ -12,16 +12,19 @@ import UIKit
 
 final class PostBodyCellNode: ASCellNode {
     private enum Layout {
-        static let contentInset = UIEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
-        static let avatarSize: CGFloat = 40
-        static let avatarCornerRadius: CGFloat = 8
-        static let avatarSpacing: CGFloat = 12
-        static let verticalSpacing: CGFloat = 14
-        static let bodySpacing: CGFloat = 16
+        static let contentInset = UIEdgeInsets(
+            top: 18,
+            left: PostDetailContentLayout.horizontalInset,
+            bottom: 14,
+            right: PostDetailContentLayout.horizontalInset
+        )
+        static let verticalSpacing: CGFloat = 12
+        static let bodySpacing: CGFloat = 18
     }
 
     private let content: PostDetailHeaderContent
     private let onImageTapped: ([URL], Int) -> Void
+    private let onLinkTapped: (URL) -> Void
     private let onTextLayoutInvalidated: () -> Void
     private let avatarLoader = AvatarImageLoader.shared
     private weak var avatarImageView: UIImageView?
@@ -29,38 +32,42 @@ final class PostBodyCellNode: ASCellNode {
 
     private let titleNode = ASTextNode()
     private let subtitleNode = ASTextNode()
-    private let bodyNode: DetailRichTextNode?
+    private let bodyNodes: [ASDisplayNode]
 
     private lazy var avatarNode: ASDisplayNode = {
         let node = ASDisplayNode(viewBlock: { [weak self] in
             let imageView = UIImageView()
             imageView.contentMode = .scaleAspectFill
             imageView.backgroundColor = .systemGray5
-            imageView.layer.cornerRadius = Layout.avatarCornerRadius
+            imageView.layer.cornerRadius = PostDetailContentLayout.avatarCornerRadius
             imageView.layer.masksToBounds = true
             self?.avatarImageView = imageView
             return imageView
         })
-        node.style.preferredSize = CGSize(width: Layout.avatarSize, height: Layout.avatarSize)
+        node.style.preferredSize = CGSize(
+            width: PostDetailContentLayout.avatarSize,
+            height: PostDetailContentLayout.avatarSize
+        )
         return node
     }()
 
     init(
         content: PostDetailHeaderContent,
-        attributedContent: NSAttributedString?,
+        renderedContent: [RenderedContentBlock]?,
         onImageTapped: @escaping ([URL], Int) -> Void,
+        onLinkTapped: @escaping (URL) -> Void = { _ in },
         onTextLayoutInvalidated: @escaping () -> Void
     ) {
         self.content = content
         self.onImageTapped = onImageTapped
+        self.onLinkTapped = onLinkTapped
         self.onTextLayoutInvalidated = onTextLayoutInvalidated
-        self.bodyNode = attributedContent.map {
-            DetailRichTextNode(
-                attributedText: $0,
-                onImageTapped: onImageTapped,
-                onLayoutInvalidated: onTextLayoutInvalidated
-            )
-        }
+        self.bodyNodes = DetailContentBlockNodeFactory.makeNodes(
+            from: renderedContent ?? [],
+            onImageTapped: onImageTapped,
+            onLinkTapped: onLinkTapped,
+            onTextLayoutInvalidated: onTextLayoutInvalidated
+        )
         super.init()
         automaticallyManagesSubnodes = true
         selectionStyle = .none
@@ -89,7 +96,7 @@ final class PostBodyCellNode: ASCellNode {
         subtitleNode.style.flexShrink = 1
 
         let authorStack = ASStackLayoutSpec.horizontal()
-        authorStack.spacing = Layout.avatarSpacing
+        authorStack.spacing = PostDetailContentLayout.avatarSpacing
         authorStack.alignItems = .center
         authorStack.children = [avatarNode, subtitleNode]
 
@@ -97,9 +104,12 @@ final class PostBodyCellNode: ASCellNode {
         stack.spacing = Layout.verticalSpacing
         stack.children = [titleNode, authorStack]
 
-        if let bodyNode {
-            bodyNode.style.spacingBefore = Layout.bodySpacing - Layout.verticalSpacing
-            stack.children?.append(bodyNode)
+        if bodyNodes.isEmpty == false {
+            let contentStack = ASStackLayoutSpec.vertical()
+            contentStack.spacing = Layout.verticalSpacing
+            contentStack.style.spacingBefore = Layout.bodySpacing - Layout.verticalSpacing
+            contentStack.children = bodyNodes
+            stack.children?.append(contentStack)
         }
 
         return ASInsetLayoutSpec(insets: Layout.contentInset, child: stack)
@@ -138,12 +148,29 @@ final class PostBodyCellNode: ASCellNode {
     }
 }
 
+extension ASCellNode {
+    func flashAnchorHighlight() {
+        guard isNodeLoaded else { return }
+        let originalColor = view.backgroundColor ?? UIColor.systemBackground
+        view.backgroundColor = UIColor(red: 15 / 255, green: 128 / 255, blue: 85 / 255, alpha: 0.12)
+        UIView.animate(
+            withDuration: 0.35,
+            delay: 0.8,
+            options: [.curveEaseOut, .allowUserInteraction]
+        ) {
+            self.view.backgroundColor = originalColor
+        }
+    }
+}
+
 final class DetailRichTextNode: ASDisplayNode {
+    nonisolated private static let defaultMeasureWidth: CGFloat = 320
     private static let logger = Logger(subsystem: "com.nodeseek.app", category: "DetailRichTextNode")
 
     private let attributedText: NSMutableAttributedString
     private let attributedTextLock = NSLock()
     private let onImageTapped: ([URL], Int) -> Void
+    private let onLinkTapped: (URL) -> Void
     private let onLayoutInvalidated: () -> Void
     private let forcedMinimumHeight: CGFloat
     private let diagnosticID = String(UUID().uuidString.prefix(8))
@@ -152,11 +179,13 @@ final class DetailRichTextNode: ASDisplayNode {
         attributedText: NSAttributedString,
         forcedMinimumHeight: CGFloat = 0,
         onImageTapped: @escaping ([URL], Int) -> Void,
+        onLinkTapped: @escaping (URL) -> Void = { _ in },
         onLayoutInvalidated: @escaping () -> Void
     ) {
         self.attributedText = NSMutableAttributedString(attributedString: attributedText)
         self.forcedMinimumHeight = forcedMinimumHeight
         self.onImageTapped = onImageTapped
+        self.onLinkTapped = onLinkTapped
         self.onLayoutInvalidated = onLayoutInvalidated
         super.init()
         setViewBlock {
@@ -173,6 +202,7 @@ final class DetailRichTextNode: ASDisplayNode {
         richTextView.configure(
             attributedText,
             onImageTapped: onImageTapped,
+            onLinkTapped: onLinkTapped,
             onLayoutInvalidated: onLayoutInvalidated,
             onAttachmentLayoutUpdated: { [weak self] url, originalSize, displaySize in
                 self?.updateAttachmentLayout(
@@ -229,7 +259,7 @@ final class DetailRichTextNode: ASDisplayNode {
     }
 
     override func calculateSizeThatFits(_ constrainedSize: CGSize) -> CGSize {
-        let width = constrainedSize.width
+        let width = Self.resolvedMeasureWidth(constrainedSize.width)
         attributedTextLock.lock()
         let measuredText = NSAttributedString(attributedString: attributedText)
         attributedTextLock.unlock()
@@ -245,11 +275,34 @@ final class DetailRichTextNode: ASDisplayNode {
         )
         let boundingHeight = ceil(max(boundingRect.height, 1))
         let dtCoreTextHeight = Self.dtCoreTextHeight(for: measuredText, width: width)
-        let height = ceil(max(dtCoreTextHeight ?? boundingHeight, boundingHeight, 1))
+        let height = Self.resolvedMeasuredHeight(
+            dtCoreTextHeight: dtCoreTextHeight,
+            boundingHeight: boundingHeight
+        )
         logDiagnostics(
             "measure width=\(Self.numberString(width)) bounding=\(Self.numberString(boundingHeight)) dt=\(dtCoreTextHeight.map(Self.numberString) ?? "nil") result=\(Self.numberString(height)) attachments=\(Self.attachmentDiagnostics(in: measuredText))"
         )
         return CGSize(width: width, height: ceil(max(height, forcedMinimumHeight)))
+    }
+
+    nonisolated static func resolvedMeasureWidth(_ width: CGFloat) -> CGFloat {
+        guard width.isFinite, width > 0 else {
+            return defaultMeasureWidth
+        }
+        return width
+    }
+
+    nonisolated static func resolvedMeasuredHeight(
+        dtCoreTextHeight: CGFloat?,
+        boundingHeight: CGFloat
+    ) -> CGFloat {
+        if let dtCoreTextHeight,
+           dtCoreTextHeight.isFinite,
+           dtCoreTextHeight > 0 {
+            return ceil(dtCoreTextHeight)
+        }
+
+        return ceil(max(boundingHeight, 1))
     }
 
     nonisolated private static func dtCoreTextHeight(for attributedText: NSAttributedString, width: CGFloat) -> CGFloat? {
