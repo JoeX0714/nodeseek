@@ -200,6 +200,36 @@ struct PostDetailViewControllerTests {
         #expect(multiLineHeight > singleLineHeight)
     }
 
+    @Test func codeBlockNodeKeepsViewportWidthForLongLines() {
+        let codeBlock = RenderedCodeBlock(text: String(repeating: "A", count: 160))
+        let layout = DetailCodeBlockLayout.measure(
+            codeBlock: codeBlock,
+            constrainedSize: CGSize(width: 180, height: CGFloat.greatestFiniteMagnitude)
+        )
+
+        #expect(layout.width == 180)
+        #expect(DetailCodeBlockLayout.naturalCodeWidth(for: codeBlock.text) > layout.width)
+    }
+
+    @Test func codeBlockContentWidthDoesNotForceExtraScrollForShortLines() {
+        let codeBlock = RenderedCodeBlock(text: "let value = 1")
+
+        #expect(DetailCodeBlockLayout.contentWidth(for: codeBlock.text, viewportWidth: 180) == 180)
+    }
+
+    @Test func codeBlockCopyButtonCopiesFullText() throws {
+        let codeBlock = RenderedCodeBlock(text: "line 1\nline 2")
+        let view = DetailCodeBlockView(codeBlock: codeBlock)
+        view.frame = CGRect(x: 0, y: 0, width: 240, height: 120)
+        view.layoutIfNeeded()
+        UIPasteboard.general.string = nil
+
+        let button = try #require(view.firstButton(accessibilityIdentifier: "detail-code-copy-button"))
+        button.sendActions(for: .touchUpInside)
+
+        #expect(UIPasteboard.general.string == codeBlock.text)
+    }
+
     @Test func resolvesNodeSeekPostLinksToNativeDetail() throws {
         let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
         let url = try #require(URL(string: "/post-704174-2#8", relativeTo: baseURL)?.absoluteURL)

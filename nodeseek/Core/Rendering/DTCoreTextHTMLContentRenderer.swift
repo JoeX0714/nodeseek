@@ -100,7 +100,9 @@ struct DTCoreTextHTMLContentRenderer {
         baseURL: URL,
         maxImageWidth: CGFloat
     ) -> [RenderedContentBlock] {
-        guard fragment.range(of: "<table", options: [.caseInsensitive]) != nil else {
+        let needsStructuredParsing = fragment.range(of: "<table", options: [.caseInsensitive]) != nil
+            || fragment.range(of: "<pre", options: [.caseInsensitive]) != nil
+        guard needsStructuredParsing else {
             return renderTextBlocks(fragment: fragment, baseURL: baseURL, maxImageWidth: maxImageWidth)
         }
 
@@ -152,7 +154,20 @@ struct DTCoreTextHTMLContentRenderer {
             return
         }
 
-        if containsTableElement(node) {
+        if isPreElement(node) {
+            flushPendingHTML(
+                &pendingHTML,
+                into: &blocks,
+                baseURL: baseURL,
+                maxImageWidth: maxImageWidth
+            )
+            if let codeBlock = codeBlock(from: node) {
+                blocks.append(.codeBlock(codeBlock))
+            }
+            return
+        }
+
+        if containsStructuredElement(node) {
             for child in node.children {
                 appendContentBlocks(
                     from: child,
@@ -213,6 +228,49 @@ struct DTCoreTextHTMLContentRenderer {
         return rows.isEmpty ? nil : RenderedTableBlock(rows: rows)
     }
 
+    private func codeBlock(from preNode: XMLElement) -> RenderedCodeBlock? {
+        let rawText: String?
+        if let codeNode = preNode.at_css("code") {
+            rawText = codeNode.text
+        } else {
+            rawText = fallbackPreText(from: preNode)
+        }
+
+        guard let text = rawText.map({ normalizedCodeText($0) }),
+              text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+            return nil
+        }
+        return RenderedCodeBlock(text: text)
+    }
+
+    private func fallbackPreText(from preNode: XMLElement) -> String {
+        let html = preNode.innerHTML ?? preNode.text ?? ""
+        let withoutChrome = html
+            .replacingOccurrences(
+                of: "(?is)<(script|style|button|svg)\\b[^>]*>.*?</\\1>",
+                with: "",
+                options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: "(?i)<br\\s*/?>",
+                with: "\n",
+                options: .regularExpression
+            )
+        let stripped = withoutChrome.replacingOccurrences(
+            of: "<[^>]+>",
+            with: "",
+            options: .regularExpression
+        )
+        return decodedHTMLEntities(in: stripped)
+    }
+
+    private func normalizedCodeText(_ text: String) -> String {
+        decodedHTMLEntities(in: text)
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .trimmingCharacters(in: .newlines)
+    }
+
     private func normalizedCellText(from node: XMLElement) -> String {
         let rawText = htmlTextPreservingLineBreaks(from: node)
         return rawText
@@ -255,7 +313,10 @@ struct DTCoreTextHTMLContentRenderer {
     }
 
     private func decodedHTMLEntities(in text: String) -> String {
-        guard text.contains("&"),
+        guard text.range(
+            of: #"&(?:[A-Za-z][A-Za-z0-9]+|#[0-9]+|#x[0-9A-Fa-f]+);"#,
+            options: .regularExpression
+        ) != nil,
               let data = text
             .replacingOccurrences(of: "\n", with: "__NODESEEK_CELL_LINE_BREAK__")
             .data(using: .utf8) else {
@@ -282,8 +343,20 @@ struct DTCoreTextHTMLContentRenderer {
         isTableElement(node) || node.at_css("table") != nil
     }
 
+    private func containsStructuredElement(_ node: XMLElement) -> Bool {
+        containsTableElement(node) || containsPreElement(node)
+    }
+
     private func isTableElement(_ node: XMLElement) -> Bool {
         tagName(of: node) == "table"
+    }
+
+    private func containsPreElement(_ node: XMLElement) -> Bool {
+        isPreElement(node) || node.at_css("pre") != nil
+    }
+
+    private func isPreElement(_ node: XMLElement) -> Bool {
+        tagName(of: node) == "pre"
     }
 
     private func isTableCellElement(_ node: XMLElement) -> Bool {

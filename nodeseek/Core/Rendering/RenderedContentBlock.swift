@@ -28,9 +28,14 @@ struct RenderedTableBlock: Equatable {
     let rows: [Row]
 }
 
+struct RenderedCodeBlock: Equatable {
+    let text: String
+}
+
 enum RenderedContentBlock {
     case text(NSAttributedString)
     case table(RenderedTableBlock)
+    case codeBlock(RenderedCodeBlock)
     case imagePlaceholder(URL?)
     case unsupported(reason: String)
 }

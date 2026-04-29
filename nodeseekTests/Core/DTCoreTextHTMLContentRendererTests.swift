@@ -710,6 +710,55 @@ struct DTCoreTextHTMLContentRendererTests {
         #expect(fittingSize.height > UIFont.preferredFont(forTextStyle: .body).lineHeight * 2)
     }
 
+    @Test func extractsCopyWrappedPreCodeAsCodeBlock() throws {
+        let renderer = DTCoreTextHTMLContentRenderer()
+        let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
+        let blocks = renderer.render(
+            fragment: """
+            <pre class="code-copy-wrapper"><code data-has-copy-button="1">2个级别分别是优化线路和非优化线路
+            IPv4&amp;IPv6-三网9929/CMIN2
+            T1系列是普通线路机器</code><button class="code-copy-btn always" type="button">
+              <svg class="lucide lucide-copy"><rect width="14" height="14"></rect></svg>
+            </button></pre>
+            """,
+            baseURL: baseURL,
+            maxImageWidth: 320
+        )
+
+        let codeBlock = try #require(blocks.compactMap { block -> RenderedCodeBlock? in
+            guard case .codeBlock(let codeBlock) = block else { return nil }
+            return codeBlock
+        }.first)
+
+        #expect(codeBlock.text.contains("2个级别分别是优化线路和非优化线路"))
+        #expect(codeBlock.text.contains("IPv4&IPv6-三网9929/CMIN2"))
+        #expect(codeBlock.text.contains("T1系列是普通线路机器"))
+        #expect(codeBlock.text.contains("button") == false)
+        #expect(codeBlock.text.contains("svg") == false)
+        #expect(codeBlock.text.contains("lucide") == false)
+    }
+
+    @Test func keepsCodeBlockOrderBetweenTextBlocks() throws {
+        let renderer = DTCoreTextHTMLContentRenderer()
+        let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
+        let blocks = renderer.render(
+            fragment: "<p>before</p><pre><code>let value = 1</code></pre><p>after</p>",
+            baseURL: baseURL,
+            maxImageWidth: 320
+        )
+
+        #expect(blocks.count == 3)
+        guard case .text(let before) = blocks[0],
+              case .codeBlock(let codeBlock) = blocks[1],
+              case .text(let after) = blocks[2] else {
+            Issue.record("Expected text/codeBlock/text block order")
+            return
+        }
+        #expect(before.string.contains("before"))
+        #expect(codeBlock.text == "let value = 1")
+        #expect(after.string.contains("after"))
+    }
+
     @Test func rendersHTMLListsWithVisibleMarkers() throws {
         let renderer = DTCoreTextHTMLContentRenderer()
         let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
