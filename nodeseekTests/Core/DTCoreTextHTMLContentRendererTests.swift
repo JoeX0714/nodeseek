@@ -738,6 +738,57 @@ struct DTCoreTextHTMLContentRendererTests {
         #expect(codeBlock.text.contains("lucide") == false)
     }
 
+    @Test func extractsChineseCopyWrappedPreCodeAsCodeBlock() throws {
+        let renderer = DTCoreTextHTMLContentRenderer()
+        let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
+        let blocks = renderer.render(
+            fragment: """
+            <pre class="code-copy-wrapper"><code data-has-copy-button="1">各位大佬好！作为一枚 VPS 玩家，你是否经常遇到这些令人抓狂的“心塞时刻”：
+            刚买的极品原生 IP 小鸡，没用多久 Google 定位就莫名其妙漂移到了 HK 甚至直接“送中”了？
+            查一下 IPQS 和 Scamalytics，风险分红得发紫，Netflix 掉解锁、ChatGPT 狂弹验证码？
+            遇到个“好邻居”瞎搞乱发包，连累你这台本分的小鸡 IP 信用直接破产？
+            </code><button class="code-copy-btn always" type="button">
+              <svg class="lucide lucide-copy"><rect width="14" height="14"></rect></svg>
+            </button></pre>
+            """,
+            baseURL: baseURL,
+            maxImageWidth: 320
+        )
+
+        let codeBlock = try #require(blocks.compactMap { block -> RenderedCodeBlock? in
+            guard case .codeBlock(let codeBlock) = block else { return nil }
+            return codeBlock
+        }.first)
+
+        #expect(codeBlock.text.contains("各位大佬好！作为一枚 VPS 玩家"))
+        #expect(codeBlock.text.contains("Google 定位"))
+        #expect(codeBlock.text.contains("ChatGPT 狂弹验证码"))
+        #expect(codeBlock.text.contains("button") == false)
+        #expect(codeBlock.text.contains("svg") == false)
+    }
+
+    @Test func extractsHighlightedPreCodeAsPlainCodeBlock() throws {
+        let renderer = DTCoreTextHTMLContentRenderer()
+        let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
+        let blocks = renderer.render(
+            fragment: """
+            <pre class="code-copy-wrapper"><code class="language-Bash" data-has-copy-button="1">curl -fsSL https://raw.githubusercontent.com/hotyue/IP-Sentinel/main/core/install.sh -o /tmp/ins_agent.sh &amp;&amp; <span class="hljs-built_in">sudo</span> bash /tmp/ins_agent.sh
+            </code><button class="code-copy-btn always" type="button">
+              <svg class="lucide lucide-copy"><rect width="14" height="14"></rect></svg>
+            </button></pre>
+            """,
+            baseURL: baseURL,
+            maxImageWidth: 320
+        )
+
+        let codeBlock = try #require(blocks.compactMap { block -> RenderedCodeBlock? in
+            guard case .codeBlock(let codeBlock) = block else { return nil }
+            return codeBlock
+        }.first)
+
+        #expect(codeBlock.text == "curl -fsSL https://raw.githubusercontent.com/hotyue/IP-Sentinel/main/core/install.sh -o /tmp/ins_agent.sh && sudo bash /tmp/ins_agent.sh")
+    }
+
     @Test func keepsCodeBlockOrderBetweenTextBlocks() throws {
         let renderer = DTCoreTextHTMLContentRenderer()
         let baseURL = try #require(URL(string: "https://www.nodeseek.com"))

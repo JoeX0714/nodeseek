@@ -231,7 +231,7 @@ struct DTCoreTextHTMLContentRenderer {
     private func codeBlock(from preNode: XMLElement) -> RenderedCodeBlock? {
         let rawText: String?
         if let codeNode = preNode.at_css("code") {
-            rawText = codeNode.text
+            rawText = codeText(from: codeNode)
         } else {
             rawText = fallbackPreText(from: preNode)
         }
@@ -243,8 +243,19 @@ struct DTCoreTextHTMLContentRenderer {
         return RenderedCodeBlock(text: text)
     }
 
+    private func codeText(from codeNode: XMLElement) -> String {
+        if let html = codeNode.innerHTML, html.isEmpty == false {
+            return plainCodeText(fromHTML: html)
+        }
+        return codeNode.text ?? ""
+    }
+
     private func fallbackPreText(from preNode: XMLElement) -> String {
         let html = preNode.innerHTML ?? preNode.text ?? ""
+        return plainCodeText(fromHTML: html)
+    }
+
+    private func plainCodeText(fromHTML html: String) -> String {
         let withoutChrome = html
             .replacingOccurrences(
                 of: "(?is)<(script|style|button|svg)\\b[^>]*>.*?</\\1>",
