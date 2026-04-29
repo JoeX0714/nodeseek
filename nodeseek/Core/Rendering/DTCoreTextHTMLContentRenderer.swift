@@ -359,35 +359,51 @@ struct DTCoreTextHTMLContentRenderer {
 
     private func standaloneImageBlocks(from node: XMLElement, baseURL: URL) -> [RenderedImageBlock]? {
         guard isStandaloneImageContainer(node) else { return nil }
-        let imageBlocks = node.css("img").compactMap { imageNode -> RenderedImageBlock? in
-            guard let source = imageNode["src"],
-                  let url = AvatarImageLoader.resolveImageURL(source, baseURL: baseURL) else {
-                return nil
-            }
-            guard isStickerImageURL(url) == false else { return nil }
-            let altText = imageNode["alt"]?.trimmingCharacters(in: .whitespacesAndNewlines)
-            return RenderedImageBlock(
-                url: url,
-                altText: altText?.isEmpty == false ? altText : nil
-            )
+        var imageBlocks: [RenderedImageBlock] = []
+        for imageNode in node.css("img") {
+            guard let imageBlock = imageBlock(from: imageNode, baseURL: baseURL) else { return nil }
+            imageBlocks.append(imageBlock)
         }
-        let imageCount = node.css("img").count
-        return imageBlocks.count == imageCount && imageBlocks.isEmpty == false ? imageBlocks : nil
+        return imageBlocks.isEmpty ? nil : imageBlocks
+    }
+
+    private func imageBlock(from imageNode: XMLElement, baseURL: URL) -> RenderedImageBlock? {
+        guard let source = imageNode["src"],
+              let url = AvatarImageLoader.resolveImageURL(source, baseURL: baseURL),
+              isStickerImageURL(url) == false else {
+            return nil
+        }
+        let altText = imageNode["alt"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return RenderedImageBlock(
+            url: url,
+            altText: altText?.isEmpty == false ? altText : nil
+        )
     }
 
     private func isStandaloneImageContainer(_ node: XMLElement) -> Bool {
-        let tag = tagName(of: node)
-        guard tag == "p" || tag == "div" || tag == "section" || tag == "article" else { return false }
+        guard isStandaloneImageContainerTag(tagName(of: node)) else { return false }
         guard node.at_css("img") != nil else { return false }
-        let html = node.innerHTML ?? node.text ?? ""
-        let withoutIgnorable = html
-            .replacingOccurrences(of: "(?is)<(script|style)\\b[^>]*>.*?</\\1>", with: "", options: .regularExpression)
-            .replacingOccurrences(of: "(?is)<img\\b[^>]*>", with: "", options: .regularExpression)
-            .replacingOccurrences(of: "(?i)<br\\s*/?>", with: "", options: .regularExpression)
-            .replacingOccurrences(of: "&nbsp;", with: " ", options: [.caseInsensitive])
-            .replacingOccurrences(of: "&#160;", with: " ", options: [.caseInsensitive])
-        let stripped = withoutIgnorable.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-        return decodedHTMLEntities(in: stripped).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return containsOnlyStandaloneImageContent(node)
+    }
+
+    private func isStandaloneImageContainerTag(_ tag: String) -> Bool {
+        tag == "p" || tag == "div" || tag == "section" || tag == "article"
+    }
+
+    private func containsOnlyStandaloneImageContent(_ node: XMLElement) -> Bool {
+        switch tagName(of: node) {
+        case "img", "br", "script", "style":
+            return true
+        default:
+            break
+        }
+
+        guard node.children.isEmpty == false else {
+            let text = decodedHTMLEntities(in: node.text ?? "")
+            return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+
+        return node.children.allSatisfy(containsOnlyStandaloneImageContent)
     }
 
     private func imageURL(from node: XMLElement, baseURL: URL) -> URL? {
