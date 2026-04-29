@@ -31,7 +31,7 @@ class AccountRouter: AccountRouterProtocol {
         
         return view
     }
-    
+
     func navigateToLogin(onClose: @escaping @MainActor () -> Void) {
         let loginViewController = LoginWebViewController(onClose: onClose)
         if let navigationController = viewController?.navigationController {

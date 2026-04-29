@@ -9,6 +9,16 @@ import UIKit
 
 @MainActor
 struct AccountViewControllerTests {
+    @Test func loginButtonHiddenBeforeAccountStateLoads() throws {
+        let presenter = SpyAccountPresenter()
+        let viewController = AccountViewController(presenter: presenter)
+
+        viewController.loadViewIfNeeded()
+
+        let button = try #require(viewController.view.firstButton(accessibilityIdentifier: "account-login-button"))
+        #expect(button.isHidden)
+    }
+
     @Test func showsLoginButtonAndSendsTapToPresenter() throws {
         let presenter = SpyAccountPresenter()
         let viewController = AccountViewController(presenter: presenter)
@@ -22,6 +32,17 @@ struct AccountViewControllerTests {
         button.sendActions(for: .touchUpInside)
 
         #expect(presenter.didTapLoginCount == 1)
+    }
+
+    @Test func renderLoggedInHidesLoginButton() throws {
+        let presenter = SpyAccountPresenter()
+        let viewController = AccountViewController(presenter: presenter)
+
+        viewController.loadViewIfNeeded()
+        viewController.render(displayName: "mistj", isLoggedIn: true)
+
+        let button = try #require(viewController.view.firstButton(accessibilityIdentifier: "account-login-button"))
+        #expect(button.isHidden)
     }
 }
 

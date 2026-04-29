@@ -28,7 +28,7 @@ class AccountViewController: UIViewController {
         indicator.translatesAutoresizingMaskIntoConstraints = false
         return indicator
     }()
-    
+
     private let loginButton: UIButton = {
         let button = UIButton(type: .system)
         var configuration = UIButton.Configuration.filled()
@@ -38,10 +38,11 @@ class AccountViewController: UIViewController {
         configuration.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 18, bottom: 12, trailing: 18)
         button.configuration = configuration
         button.accessibilityIdentifier = "account-login-button"
+        button.isHidden = true
         button.translatesAutoresizingMaskIntoConstraints = false
         return button
     }()
-    
+
     // MARK: - Initialization
     init(presenter: AccountPresenterProtocol) {
         self.presenter = presenter
@@ -72,15 +73,15 @@ class AccountViewController: UIViewController {
             statusLabel.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 24),
             statusLabel.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -24),
             statusLabel.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: -28),
-            
+
             loginButton.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 24),
             loginButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            
+
             loadingIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             loadingIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor)
         ])
     }
-    
+
     @objc private func loginButtonTapped() {
         presenter.didTapLogin()
     }
@@ -90,6 +91,7 @@ class AccountViewController: UIViewController {
 extension AccountViewController: AccountViewProtocol {
     
     func showLoading() {
+        loginButton.isHidden = true
         loadingIndicator.startAnimating()
     }
     
