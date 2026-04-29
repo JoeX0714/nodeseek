@@ -41,6 +41,10 @@ enum PostDetailLinkResolver {
             return .safari(resolvedURL)
         }
 
+        if let jumpURL = decodedExternalJumpURL(from: resolvedURL) {
+            return .safari(jumpURL)
+        }
+
         if let anchorID = normalizedAnchorID(from: resolvedURL),
            resolvedURL.path.isEmpty || resolvedURL.path == "/" {
             return .currentPageAnchor(anchorID)
@@ -73,6 +77,24 @@ enum PostDetailLinkResolver {
             return nil
         }
         return fragment.hasPrefix("#") ? String(fragment.dropFirst()) : fragment
+    }
+
+    private static func decodedExternalJumpURL(from url: URL) -> URL? {
+        guard url.path == "/jump",
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let rawTarget = components.queryItems?.first(where: { $0.name == "to" })?.value?
+                  .trimmingCharacters(in: .whitespacesAndNewlines),
+              rawTarget.isEmpty == false,
+              let targetURL = URL(string: rawTarget),
+              isHTTPURL(targetURL) else {
+            return nil
+        }
+        return targetURL
+    }
+
+    private static func isHTTPURL(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased() else { return false }
+        return scheme == "http" || scheme == "https"
     }
 
     private static func isNodeSeekHost(_ url: URL) -> Bool {
@@ -572,7 +594,7 @@ extension PostDetailViewController: PostDetailViewProtocol {
     }
 }
 
-private final class CookieSharedWebViewController: UIViewController, WKNavigationDelegate {
+private final class CookieSharedWebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
     private let url: URL
     private let webView: WKWebView
     private let cookieBridge: CookieBridge
@@ -595,6 +617,11 @@ private final class CookieSharedWebViewController: UIViewController, WKNavigatio
         fatalError("init(coder:) has not been implemented")
     }
 
+    deinit {
+        webView.navigationDelegate = nil
+        webView.uiDelegate = nil
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
@@ -602,6 +629,7 @@ private final class CookieSharedWebViewController: UIViewController, WKNavigatio
         configureNavigationItems()
 
         webView.navigationDelegate = self
+        webView.uiDelegate = self
         webView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(webView)
 
@@ -667,8 +695,35 @@ private final class CookieSharedWebViewController: UIViewController, WKNavigatio
         UIApplication.shared.open(currentPageURL(), options: [:], completionHandler: nil)
     }
 
+    private func openInSafariViewController(_ url: URL) {
+        present(SFSafariViewController(url: url), animated: true)
+    }
+
+    private func handleExternalNavigationIfNeeded(_ url: URL) -> Bool {
+        guard case .safari(let safariURL) = PostDetailLinkResolver.destination(for: url, baseURL: self.url) else {
+            return false
+        }
+        openInSafariViewController(safariURL)
+        return true
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         loadingIndicator.stopAnimating()
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+    ) {
+        if navigationAction.navigationType == .linkActivated,
+           let url = navigationAction.request.url,
+           handleExternalNavigationIfNeeded(url) {
+            decisionHandler(.cancel)
+            return
+        }
+
+        decisionHandler(.allow)
     }
 
     func webView(
@@ -685,6 +740,91 @@ private final class CookieSharedWebViewController: UIViewController, WKNavigatio
         withError error: Error
     ) {
         loadingIndicator.stopAnimating()
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        createWebViewWith configuration: WKWebViewConfiguration,
+        for navigationAction: WKNavigationAction,
+        windowFeatures: WKWindowFeatures
+    ) -> WKWebView? {
+        guard navigationAction.targetFrame == nil else { return nil }
+        guard let targetURL = navigationAction.request.url else { return nil }
+
+        if handleExternalNavigationIfNeeded(targetURL) {
+            return nil
+        }
+
+        webView.load(navigationAction.request)
+        return nil
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptAlertPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping () -> Void
+    ) {
+        guard view.window != nil else {
+            completionHandler()
+            return
+        }
+
+        let alert = UIAlertController(title: webDialogTitle(from: frame), message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "确定", style: .default) { _ in
+            completionHandler()
+        })
+        present(alert, animated: true)
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptConfirmPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping (Bool) -> Void
+    ) {
+        guard view.window != nil else {
+            completionHandler(false)
+            return
+        }
+
+        let alert = UIAlertController(title: webDialogTitle(from: frame), message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel) { _ in
+            completionHandler(false)
+        })
+        alert.addAction(UIAlertAction(title: "确定", style: .default) { _ in
+            completionHandler(true)
+        })
+        present(alert, animated: true)
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptTextInputPanelWithPrompt prompt: String,
+        defaultText: String?,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping (String?) -> Void
+    ) {
+        guard view.window != nil else {
+            completionHandler(nil)
+            return
+        }
+
+        let alert = UIAlertController(title: webDialogTitle(from: frame), message: prompt, preferredStyle: .alert)
+        alert.addTextField { textField in
+            textField.text = defaultText
+        }
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel) { _ in
+            completionHandler(nil)
+        })
+        alert.addAction(UIAlertAction(title: "确定", style: .default) { [weak alert] _ in
+            completionHandler(alert?.textFields?.first?.text)
+        })
+        present(alert, animated: true)
+    }
+
+    private func webDialogTitle(from frame: WKFrameInfo) -> String {
+        frame.request.url?.host ?? "网页"
     }
 }
 

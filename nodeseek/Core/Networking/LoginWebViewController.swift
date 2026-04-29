@@ -14,7 +14,7 @@ protocol LoginCookieSynchronizing: AnyObject {
 
 extension CookieBridge: LoginCookieSynchronizing {}
 
-final class LoginWebViewController: UIViewController, WKNavigationDelegate {
+final class LoginWebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
     private static let loginURL = URL(string: "https://www.nodeseek.com/signIn.html")!
 
     private let cookieSynchronizer: LoginCookieSynchronizing
@@ -77,6 +77,8 @@ final class LoginWebViewController: UIViewController, WKNavigationDelegate {
 
     deinit {
         cancelLoginLoad()
+        webView.navigationDelegate = nil
+        webView.uiDelegate = nil
     }
 
     override func viewDidLoad() {
@@ -103,6 +105,7 @@ final class LoginWebViewController: UIViewController, WKNavigationDelegate {
 
     private func configureWebView() {
         webView.navigationDelegate = self
+        webView.uiDelegate = self
         webView.customUserAgent = WebRequestFingerprint.userAgent
         webView.translatesAutoresizingMaskIntoConstraints = false
         loadingIndicator.hidesWhenStopped = true
@@ -160,6 +163,7 @@ final class LoginWebViewController: UIViewController, WKNavigationDelegate {
         cancelLoginLoad()
         webView.stopLoading()
         webView.navigationDelegate = nil
+        webView.uiDelegate = nil
 
         Task { @MainActor [weak self] in
             guard let self else { return }
@@ -197,5 +201,84 @@ final class LoginWebViewController: UIViewController, WKNavigationDelegate {
         withError error: Error
     ) {
         loadingIndicator.stopAnimating()
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        createWebViewWith configuration: WKWebViewConfiguration,
+        for navigationAction: WKNavigationAction,
+        windowFeatures: WKWindowFeatures
+    ) -> WKWebView? {
+        guard navigationAction.targetFrame == nil else { return nil }
+        webView.load(navigationAction.request)
+        return nil
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptAlertPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping () -> Void
+    ) {
+        guard view.window != nil else {
+            completionHandler()
+            return
+        }
+
+        let alert = UIAlertController(title: webDialogTitle(from: frame), message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "确定", style: .default) { _ in
+            completionHandler()
+        })
+        present(alert, animated: true)
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptConfirmPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping (Bool) -> Void
+    ) {
+        guard view.window != nil else {
+            completionHandler(false)
+            return
+        }
+
+        let alert = UIAlertController(title: webDialogTitle(from: frame), message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel) { _ in
+            completionHandler(false)
+        })
+        alert.addAction(UIAlertAction(title: "确定", style: .default) { _ in
+            completionHandler(true)
+        })
+        present(alert, animated: true)
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptTextInputPanelWithPrompt prompt: String,
+        defaultText: String?,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping (String?) -> Void
+    ) {
+        guard view.window != nil else {
+            completionHandler(nil)
+            return
+        }
+
+        let alert = UIAlertController(title: webDialogTitle(from: frame), message: prompt, preferredStyle: .alert)
+        alert.addTextField { textField in
+            textField.text = defaultText
+        }
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel) { _ in
+            completionHandler(nil)
+        })
+        alert.addAction(UIAlertAction(title: "确定", style: .default) { [weak alert] _ in
+            completionHandler(alert?.textFields?.first?.text)
+        })
+        present(alert, animated: true)
+    }
+
+    private func webDialogTitle(from frame: WKFrameInfo) -> String {
+        frame.request.url?.host ?? "网页"
     }
 }
