@@ -205,6 +205,34 @@ struct DTCoreTextHTMLContentRendererTests {
         #expect(textBlocks?.contains { $0.backgroundColor != nil } == true)
     }
 
+    @Test func rendersBlockquoteWithCompactHorizontalAndRoomyVerticalPadding() throws {
+        let renderer = DTCoreTextHTMLContentRenderer()
+        let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
+        let blocks = renderer.render(
+            fragment: "<blockquote><p>引用内容</p></blockquote>",
+            baseURL: baseURL,
+            maxImageWidth: 320
+        )
+        let attributed = try #require(
+            blocks.compactMap { block -> NSAttributedString? in
+                guard case .text(let text) = block else { return nil }
+                return text
+            }.first
+        )
+
+        let range = (attributed.string as NSString).range(of: "引用内容")
+        #expect(range.location != NSNotFound)
+        let textBlocks = attributed.attribute(
+            NSAttributedString.Key(DTTextBlocksAttribute),
+            at: range.location,
+            effectiveRange: nil
+        ) as? [DTTextBlock]
+        let quoteBlock = try #require(textBlocks?.first { $0.backgroundColor != nil })
+        #expect(quoteBlock.padding.top >= 10)
+        #expect(quoteBlock.padding.bottom >= 10)
+        #expect(quoteBlock.padding.left <= 8)
+    }
+
     @Test func rendersSemanticHTMLWithDistinctTypography() throws {
         let renderer = DTCoreTextHTMLContentRenderer()
         let baseURL = try #require(URL(string: "https://www.nodeseek.com"))

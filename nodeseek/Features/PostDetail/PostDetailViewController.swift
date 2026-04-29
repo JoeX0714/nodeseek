@@ -14,6 +14,7 @@ import WebKit
 import JXPhotoBrowser
 
 enum PostDetailLinkDestination {
+    case currentPageAnchor(String)
     case nativePost(postID: String, page: Int, url: URL)
     case web(URL)
     case safari(URL)
@@ -25,13 +26,23 @@ enum PostDetailLinkResolver {
         options: []
     )
 
-    static func destination(for url: URL, baseURL: URL) -> PostDetailLinkDestination? {
+    static func destination(
+        for url: URL,
+        baseURL: URL,
+        currentPostID: String? = nil,
+        currentPage: Int = 1
+    ) -> PostDetailLinkDestination? {
         guard let resolvedURL = URL(string: url.relativeString, relativeTo: baseURL)?.absoluteURL else {
             return nil
         }
 
         guard isNodeSeekHost(resolvedURL) else {
             return .safari(resolvedURL)
+        }
+
+        if let anchorID = normalizedAnchorID(from: resolvedURL),
+           resolvedURL.path.isEmpty || resolvedURL.path == "/" {
+            return .currentPageAnchor(anchorID)
         }
 
         let path = resolvedURL.path
@@ -42,10 +53,25 @@ enum PostDetailLinkResolver {
            let pageRange = Range(match.range(at: 2), in: path) {
             let postID = String(path[postIDRange])
             let page = Int(path[pageRange]) ?? 1
-            return .nativePost(postID: postID, page: max(page, 1), url: resolvedURL)
+            let normalizedPage = max(page, 1)
+            if let anchorID = normalizedAnchorID(from: resolvedURL),
+               postID == currentPostID,
+               normalizedPage == max(currentPage, 1) {
+                return .currentPageAnchor(anchorID)
+            }
+            // TODO: 支持当前帖子跨页锚点在目标页加载完成后自动定位。
+            return .nativePost(postID: postID, page: normalizedPage, url: resolvedURL)
         }
 
         return .web(resolvedURL)
+    }
+
+    private static func normalizedAnchorID(from url: URL) -> String? {
+        guard let fragment = url.fragment?.removingPercentEncoding?.trimmingCharacters(in: .whitespacesAndNewlines),
+              fragment.isEmpty == false else {
+            return nil
+        }
+        return fragment.hasPrefix("#") ? String(fragment.dropFirst()) : fragment
     }
 
     private static func isNodeSeekHost(_ url: URL) -> Bool {
@@ -68,6 +94,7 @@ class PostDetailViewController: UIViewController {
 
     private let presenter: PostDetailPresenterProtocol
     private let baseURL = URL(string: "https://www.nodeseek.com")!
+    private let currentPage: Int
     private var currentHeaderContent: PostDetailHeaderContent?
     private var headerRenderedContent: [RenderedContentBlock]?
     private var comments: [Comment] = []
@@ -100,10 +127,12 @@ class PostDetailViewController: UIViewController {
     init(
         presenter: PostDetailPresenterProtocol,
         initialHeader: PostDetailHeaderContent? = nil,
-        sourcePostURL: URL? = nil
+        sourcePostURL: URL? = nil,
+        currentPage: Int = 1
     ) {
         self.presenter = presenter
         self.sourcePostURL = sourcePostURL
+        self.currentPage = max(currentPage, 1)
         super.init(nibName: nil, bundle: nil)
 
         if let initialHeader {
@@ -325,9 +354,16 @@ class PostDetailViewController: UIViewController {
     }
 
     private func handleContentLinkTap(_ url: URL) {
-        guard let destination = PostDetailLinkResolver.destination(for: url, baseURL: baseURL) else { return }
+        guard let destination = PostDetailLinkResolver.destination(
+            for: url,
+            baseURL: baseURL,
+            currentPostID: currentHeaderContent?.postID,
+            currentPage: currentPage
+        ) else { return }
 
         switch destination {
+        case .currentPageAnchor(let anchorID):
+            scrollToCurrentPageAnchor(anchorID)
         case .nativePost(let postID, let page, let url):
             let post = PostSummary(
                 id: postID,
@@ -345,6 +381,35 @@ class PostDetailViewController: UIViewController {
             showDetailDestination(webViewController)
         case .safari(let url):
             present(SFSafariViewController(url: url), animated: true)
+        }
+    }
+
+    private func scrollToCurrentPageAnchor(_ anchorID: String) {
+        guard displayMode == .content else { return }
+
+        let headerRowCount = currentHeaderContent == nil ? 0 : 1
+        let indexPath: IndexPath
+        if anchorID == "1", currentHeaderContent != nil {
+            indexPath = IndexPath(row: 0, section: 0)
+        } else if let commentIndex = comments.firstIndex(where: { comment in
+            comment.anchorID == anchorID || comment.floorText == "#\(anchorID)"
+        }) {
+            indexPath = IndexPath(row: headerRowCount + commentIndex, section: 0)
+        } else {
+            return
+        }
+
+        tableNode.scrollToRow(at: indexPath, at: .middle, animated: true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            guard let self else { return }
+            switch self.tableNode.nodeForRow(at: indexPath) {
+            case let node as PostBodyCellNode:
+                node.flashAnchorHighlight()
+            case let node as CommentCellNode:
+                node.flashAnchorHighlight()
+            default:
+                break
+            }
         }
     }
 

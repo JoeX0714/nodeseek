@@ -148,6 +148,21 @@ final class PostBodyCellNode: ASCellNode {
     }
 }
 
+extension ASCellNode {
+    func flashAnchorHighlight() {
+        guard isNodeLoaded else { return }
+        let originalColor = view.backgroundColor ?? UIColor.systemBackground
+        view.backgroundColor = UIColor(red: 15 / 255, green: 128 / 255, blue: 85 / 255, alpha: 0.12)
+        UIView.animate(
+            withDuration: 0.35,
+            delay: 0.8,
+            options: [.curveEaseOut, .allowUserInteraction]
+        ) {
+            self.view.backgroundColor = originalColor
+        }
+    }
+}
+
 final class DetailRichTextNode: ASDisplayNode {
     nonisolated private static let defaultMeasureWidth: CGFloat = 320
     private static let logger = Logger(subsystem: "com.nodeseek.app", category: "DetailRichTextNode")

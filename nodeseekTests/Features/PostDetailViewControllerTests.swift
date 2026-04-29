@@ -215,6 +215,54 @@ struct PostDetailViewControllerTests {
         #expect(resolvedURL.absoluteString == "https://www.nodeseek.com/post-704174-2#8")
     }
 
+    @Test func resolvesCurrentPageHashLinksToCurrentPageAnchor() throws {
+        let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
+        let url = try #require(URL(string: "#4", relativeTo: baseURL)?.absoluteURL)
+
+        let destination = try #require(PostDetailLinkResolver.destination(
+            for: url,
+            baseURL: baseURL,
+            currentPostID: "704174",
+            currentPage: 1
+        ))
+
+        guard case .currentPageAnchor(let anchorID) = destination else {
+            Issue.record("Expected current page anchor destination")
+            return
+        }
+        #expect(anchorID == "4")
+    }
+
+    @Test func resolvesCurrentPostSamePageFragmentLinksToCurrentPageAnchor() throws {
+        let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
+        let url = try #require(URL(string: "/post-704174-1#4", relativeTo: baseURL)?.absoluteURL)
+
+        let destination = try #require(PostDetailLinkResolver.destination(
+            for: url,
+            baseURL: baseURL,
+            currentPostID: "704174",
+            currentPage: 1
+        ))
+
+        guard case .currentPageAnchor(let anchorID) = destination else {
+            Issue.record("Expected current page anchor destination")
+            return
+        }
+        #expect(anchorID == "4")
+    }
+
+    @Test func parsesCommentAnchorIDFromDetailFixture() throws {
+        let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
+        let html = try FixtureLoader.html(named: "post-703863-1")
+
+        let detail = try KannaNodeSeekParser(baseURL: baseURL).parsePostDetail(
+            html: html,
+            url: URL(string: "https://www.nodeseek.com/post-703863-1")!
+        )
+
+        #expect(detail.comments.first?.anchorID == "4")
+    }
+
     @Test func resolvesOtherNodeSeekLinksToWebView() throws {
         let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
         let url = try #require(URL(string: "/member?t=linda", relativeTo: baseURL)?.absoluteURL)

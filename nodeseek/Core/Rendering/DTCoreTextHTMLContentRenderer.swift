@@ -473,7 +473,7 @@ struct DTCoreTextHTMLContentRenderer {
             background-color: #f6f8fa;
             border-left: 3px solid #d0d7de;
             margin: 8px 0 12px 0;
-            padding: 8px 10px 8px 12px;
+            padding: 10px 10px 10px 8px;
             color: #555555;
         }
         pre {
