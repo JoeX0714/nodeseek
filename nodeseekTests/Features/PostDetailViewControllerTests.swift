@@ -91,6 +91,21 @@ struct PostDetailViewControllerTests {
         #expect(presenter.loadCount == 2)
     }
 
+    @Test func loginRequiredStateShowsLoginButtonAndSendsTapToPresenter() throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter)
+
+        viewController.loadViewIfNeeded()
+        viewController.renderLoginRequired(message: "本帖需要注册用户才能查看😭")
+
+        let button = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-login-button"))
+        #expect(button.configuration?.title == "登录查看")
+
+        button.sendActions(for: .touchUpInside)
+
+        #expect(presenter.didTapLoginCount == 1)
+    }
+
     @Test func detailTextureCellsCanBeConstructedOffMainThread() async throws {
         let header = PostDetailHeaderContent(
             postID: "703863",
@@ -206,9 +221,14 @@ struct PostDetailViewControllerTests {
 
 private final class SpyPostDetailPresenter: PostDetailPresenterProtocol {
     private(set) var loadCount = 0
+    private(set) var didTapLoginCount = 0
 
     func viewDidLoad() {
         loadCount += 1
+    }
+
+    func didTapLogin() {
+        didTapLoginCount += 1
     }
 }
 
@@ -220,6 +240,20 @@ private extension UIView {
 
         for subview in subviews {
             if let matched = subview.firstSubview(of: type) {
+                return matched
+            }
+        }
+
+        return nil
+    }
+
+    func firstButton(accessibilityIdentifier: String) -> UIButton? {
+        if let button = self as? UIButton, button.accessibilityIdentifier == accessibilityIdentifier {
+            return button
+        }
+
+        for subview in subviews {
+            if let matched = subview.firstButton(accessibilityIdentifier: accessibilityIdentifier) {
                 return matched
             }
         }
