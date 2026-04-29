@@ -12,12 +12,14 @@ import UIKit
 
 final class PostBodyCellNode: ASCellNode {
     private enum Layout {
-        static let contentInset = UIEdgeInsets(top: 20, left: 20, bottom: 20, right: 20)
-        static let avatarSize: CGFloat = 40
-        static let avatarCornerRadius: CGFloat = 8
-        static let avatarSpacing: CGFloat = 12
-        static let verticalSpacing: CGFloat = 14
-        static let bodySpacing: CGFloat = 16
+        static let contentInset = UIEdgeInsets(
+            top: 18,
+            left: PostDetailContentLayout.horizontalInset,
+            bottom: 14,
+            right: PostDetailContentLayout.horizontalInset
+        )
+        static let verticalSpacing: CGFloat = 12
+        static let bodySpacing: CGFloat = 18
     }
 
     private let content: PostDetailHeaderContent
@@ -36,12 +38,15 @@ final class PostBodyCellNode: ASCellNode {
             let imageView = UIImageView()
             imageView.contentMode = .scaleAspectFill
             imageView.backgroundColor = .systemGray5
-            imageView.layer.cornerRadius = Layout.avatarCornerRadius
+            imageView.layer.cornerRadius = PostDetailContentLayout.avatarCornerRadius
             imageView.layer.masksToBounds = true
             self?.avatarImageView = imageView
             return imageView
         })
-        node.style.preferredSize = CGSize(width: Layout.avatarSize, height: Layout.avatarSize)
+        node.style.preferredSize = CGSize(
+            width: PostDetailContentLayout.avatarSize,
+            height: PostDetailContentLayout.avatarSize
+        )
         return node
     }()
 
@@ -89,7 +94,7 @@ final class PostBodyCellNode: ASCellNode {
         subtitleNode.style.flexShrink = 1
 
         let authorStack = ASStackLayoutSpec.horizontal()
-        authorStack.spacing = Layout.avatarSpacing
+        authorStack.spacing = PostDetailContentLayout.avatarSpacing
         authorStack.alignItems = .center
         authorStack.children = [avatarNode, subtitleNode]
 

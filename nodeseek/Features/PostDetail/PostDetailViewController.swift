@@ -22,11 +22,7 @@ class PostDetailViewController: UIViewController {
     }
 
     private enum Layout {
-        static let horizontalInset: CGFloat = 20
-        static let commentHorizontalInset: CGFloat = 12
-        static let commentCardInset: CGFloat = 12
-        static let avatarSize: CGFloat = 40
-        static let avatarSpacing: CGFloat = 12
+        static let horizontalInset: CGFloat = PostDetailContentLayout.horizontalInset
     }
 
     private let presenter: PostDetailPresenterProtocol
@@ -248,10 +244,9 @@ class PostDetailViewController: UIViewController {
     private var availableCommentContentWidth: CGFloat {
         let width = tableNode.view.bounds.width > 0 ? tableNode.view.bounds.width : view.bounds.width
         let contentWidth = (width > 0 ? width : 320)
-            - Layout.commentHorizontalInset * 2
-            - Layout.commentCardInset * 2
-            - Layout.avatarSize
-            - Layout.avatarSpacing
+            - PostDetailContentLayout.horizontalInset * 2
+            - PostDetailContentLayout.avatarSize
+            - PostDetailContentLayout.avatarSpacing
         return max(contentWidth, 1)
     }
 

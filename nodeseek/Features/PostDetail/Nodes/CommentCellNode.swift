@@ -8,15 +8,19 @@
 import AsyncDisplayKit
 import UIKit
 
+enum PostDetailContentLayout {
+    static let horizontalInset: CGFloat = 16
+    static let commentTopInset: CGFloat = 14
+    static let commentBottomInset: CGFloat = 14
+    static let avatarSize: CGFloat = 42
+    static let avatarCornerRadius: CGFloat = 9
+    static let avatarSpacing: CGFloat = 12
+}
+
 final class CommentCellNode: ASCellNode {
     private enum Layout {
-        static let horizontalInset: CGFloat = 12
-        static let verticalInset: CGFloat = 6
-        static let cardInset: CGFloat = 12
-        static let avatarSize: CGFloat = 40
-        static let avatarCornerRadius: CGFloat = 8
-        static let avatarSpacing: CGFloat = 12
-        static let bodySpacing: CGFloat = 8
+        static let headerSpacing: CGFloat = 5
+        static let bodySpacing: CGFloat = 10
     }
 
     private let comment: Comment
@@ -26,26 +30,26 @@ final class CommentCellNode: ASCellNode {
     private weak var avatarImageView: UIImageView?
     private var hasRequestedAvatar = false
 
-    private let metaNode = ASTextNode()
+    private let authorNode = ASTextNode()
+    private let timeNode = ASTextNode()
+    private let floorNode = ASTextNode()
+    private let separatorNode = ASDisplayNode()
     private let bodyNode: DetailRichTextNode?
-    private let cardNode: ASDisplayNode = {
-        let node = ASDisplayNode()
-        node.backgroundColor = .secondarySystemBackground
-        node.cornerRadius = 8
-        return node
-    }()
 
     private lazy var avatarNode: ASDisplayNode = {
         let node = ASDisplayNode(viewBlock: { [weak self] in
             let imageView = UIImageView()
             imageView.contentMode = .scaleAspectFill
             imageView.backgroundColor = .systemGray5
-            imageView.layer.cornerRadius = Layout.avatarCornerRadius
+            imageView.layer.cornerRadius = PostDetailContentLayout.avatarCornerRadius
             imageView.layer.masksToBounds = true
             self?.avatarImageView = imageView
             return imageView
         })
-        node.style.preferredSize = CGSize(width: Layout.avatarSize, height: Layout.avatarSize)
+        node.style.preferredSize = CGSize(
+            width: PostDetailContentLayout.avatarSize,
+            height: PostDetailContentLayout.avatarSize
+        )
         return node
     }()
 
@@ -69,6 +73,7 @@ final class CommentCellNode: ASCellNode {
         automaticallyManagesSubnodes = true
         selectionStyle = .none
         backgroundColor = .systemBackground
+        separatorNode.backgroundColor = .separator
         configureText()
     }
 
@@ -89,9 +94,24 @@ final class CommentCellNode: ASCellNode {
     }
 
     override func layoutSpecThatFits(_ constrainedSize: ASSizeRange) -> ASLayoutSpec {
-        metaNode.style.flexShrink = 1
+        authorNode.style.flexShrink = 1
+        timeNode.style.flexShrink = 1
+        floorNode.style.flexShrink = 0
+        separatorNode.style.height = ASDimension(unit: .points, value: 1 / UIScreen.main.scale)
 
-        var textChildren: [ASLayoutElement] = [metaNode]
+        let identityStack = ASStackLayoutSpec.horizontal()
+        identityStack.spacing = Layout.headerSpacing
+        identityStack.alignItems = .center
+        identityStack.children = [authorNode, timeNode]
+        identityStack.style.flexGrow = 1
+        identityStack.style.flexShrink = 1
+
+        let headerStack = ASStackLayoutSpec.horizontal()
+        headerStack.alignItems = .start
+        headerStack.justifyContent = .spaceBetween
+        headerStack.children = [identityStack, floorNode]
+
+        var textChildren: [ASLayoutElement] = [headerStack]
         if let bodyNode {
             bodyNode.style.spacingBefore = Layout.bodySpacing
             textChildren.append(bodyNode)
@@ -103,42 +123,52 @@ final class CommentCellNode: ASCellNode {
         textStack.style.flexShrink = 1
 
         let contentStack = ASStackLayoutSpec.horizontal()
-        contentStack.spacing = Layout.avatarSpacing
+        contentStack.spacing = PostDetailContentLayout.avatarSpacing
         contentStack.alignItems = .start
         contentStack.children = [avatarNode, textStack]
 
-        let cardContent = ASInsetLayoutSpec(
+        let rowContent = ASInsetLayoutSpec(
             insets: UIEdgeInsets(
-                top: Layout.cardInset,
-                left: Layout.cardInset,
-                bottom: Layout.cardInset,
-                right: Layout.cardInset
+                top: PostDetailContentLayout.commentTopInset,
+                left: PostDetailContentLayout.horizontalInset,
+                bottom: PostDetailContentLayout.commentBottomInset,
+                right: PostDetailContentLayout.horizontalInset
             ),
             child: contentStack
         )
-        let background = ASBackgroundLayoutSpec(child: cardContent, background: cardNode)
-        return ASInsetLayoutSpec(
-            insets: UIEdgeInsets(
-                top: Layout.verticalInset,
-                left: Layout.horizontalInset,
-                bottom: Layout.verticalInset,
-                right: Layout.horizontalInset
-            ),
-            child: background
-        )
+
+        let stack = ASStackLayoutSpec.vertical()
+        stack.children = [rowContent, separatorNode]
+        return stack
     }
 
     private func configureText() {
-        metaNode.maximumNumberOfLines = 0
-        metaNode.attributedText = NSAttributedString(
-            string: [
-                comment.floorText,
-                comment.authorName,
-                comment.createdAtText
-            ].compactMap(\.self).joined(separator: " · "),
+        authorNode.maximumNumberOfLines = 1
+        authorNode.truncationMode = .byTruncatingTail
+        authorNode.attributedText = NSAttributedString(
+            string: comment.authorName,
             attributes: [
-                .font: UIFont.preferredFont(forTextStyle: .footnote),
+                .font: UIFont.preferredFont(forTextStyle: .headline),
+                .foregroundColor: UIColor.label
+            ]
+        )
+
+        timeNode.maximumNumberOfLines = 1
+        timeNode.truncationMode = .byTruncatingTail
+        timeNode.attributedText = NSAttributedString(
+            string: comment.createdAtText ?? "",
+            attributes: [
+                .font: UIFont.preferredFont(forTextStyle: .subheadline),
                 .foregroundColor: UIColor.secondaryLabel
+            ]
+        )
+
+        floorNode.maximumNumberOfLines = 1
+        floorNode.attributedText = NSAttributedString(
+            string: comment.floorText ?? "",
+            attributes: [
+                .font: UIFont.preferredFont(forTextStyle: .subheadline),
+                .foregroundColor: UIColor.tertiaryLabel
             ]
         )
     }
