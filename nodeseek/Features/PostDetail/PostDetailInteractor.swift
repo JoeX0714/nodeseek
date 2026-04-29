@@ -14,7 +14,7 @@ class PostDetailInteractor: PostDetailInteractorInput {
     weak var presenter: PostDetailInteractorOutput?
     private let post: PostSummary?
     private let service: NodeSeekService
-    private let page: Int
+    private let initialPage: Int
     private let sessionStore: NodeSeekSessionStore
     private let logger = Logger(subsystem: "com.nodeseek.app", category: "PostDetailInteractor")
     
@@ -27,21 +27,26 @@ class PostDetailInteractor: PostDetailInteractorInput {
     ) {
         self.post = post
         self.service = service
-        self.page = max(1, page)
+        self.initialPage = max(1, page)
         self.sessionStore = sessionStore
     }
     
     // MARK: - Methods
     func loadPostDetail() {
+        loadPostDetail(page: initialPage)
+    }
+
+    func loadPostDetail(page: Int) {
         guard let post else {
             presenter?.didFailLoadPostDetail(error: "缺少帖子信息，无法加载详情。")
             return
         }
 
+        let normalizedPage = max(1, page)
         Task {
-            logger.info("开始加载帖子详情，postID=\(post.id, privacy: .public), page=\(self.page)")
+            logger.info("开始加载帖子详情，postID=\(post.id, privacy: .public), page=\(normalizedPage)")
             do {
-                guard let detail = try await loadDetail(postID: post.id) else {
+                guard let detail = try await loadDetail(postID: post.id, page: normalizedPage) else {
                     return
                 }
                 logger.info("帖子详情加载成功，postID=\(detail.id, privacy: .public), 评论数量: \(detail.comments.count)")
@@ -57,9 +62,9 @@ class PostDetailInteractor: PostDetailInteractorInput {
         }
     }
 
-    private func loadDetail(postID: String) async throws -> PostDetail? {
-        logger.info("详情请求开始，postID=\(postID, privacy: .public), page=\(self.page)")
-        let result = try await service.loadPostDetail(postID: postID, page: self.page)
+    private func loadDetail(postID: String, page: Int) async throws -> PostDetail? {
+        logger.info("详情请求开始，postID=\(postID, privacy: .public), page=\(page)")
+        let result = try await service.loadPostDetail(postID: postID, page: page)
         switch result {
         case .value(let detail):
             await sessionStore.recordSuccess()

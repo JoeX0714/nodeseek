@@ -47,6 +47,23 @@ struct PostSummary: Equatable, Sendable {
     }
 }
 
+struct PostDetailPageItem: Equatable, Sendable {
+    let page: Int
+    let url: URL?
+    let isCurrent: Bool
+}
+
+struct PostDetailPagination: Equatable, Sendable {
+    let currentPage: Int
+    let items: [PostDetailPageItem]
+    let previousPage: Int?
+    let nextPage: Int?
+
+    var hasMultiplePages: Bool {
+        items.count > 1 || previousPage != nil || nextPage != nil
+    }
+}
+
 struct PostDetail: Equatable, Sendable {
     let id: String
     let title: String
@@ -56,6 +73,32 @@ struct PostDetail: Equatable, Sendable {
     let contentHTML: String
     let comments: [Comment]
     let replyForm: ReplyForm?
+    let page: Int
+    let pagination: PostDetailPagination?
+
+    init(
+        id: String,
+        title: String,
+        authorName: String,
+        avatarURL: URL?,
+        metadataText: String?,
+        contentHTML: String,
+        comments: [Comment],
+        replyForm: ReplyForm?,
+        page: Int = 1,
+        pagination: PostDetailPagination? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.authorName = authorName
+        self.avatarURL = avatarURL
+        self.metadataText = metadataText
+        self.contentHTML = contentHTML
+        self.comments = comments
+        self.replyForm = replyForm
+        self.page = max(1, page)
+        self.pagination = pagination
+    }
 }
 
 struct Comment: Equatable, Sendable {

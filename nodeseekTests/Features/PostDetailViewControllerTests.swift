@@ -35,7 +35,7 @@ struct PostDetailViewControllerTests {
 
         let tableView = try #require(viewController.view.firstSubview(of: UITableView.self))
         #expect(tableView.tableHeaderView == nil)
-        #expect(tableView.numberOfRows(inSection: 0) == 5)
+        #expect(viewController.testRowCount(inSection: 0) == 5)
 
         viewController.render(detail: PostDetail(
             id: "703863",
@@ -51,7 +51,7 @@ struct PostDetailViewControllerTests {
             replyForm: nil
         ))
 
-        #expect(tableView.numberOfRows(inSection: 0) == 3)
+        #expect(viewController.testRowCount(inSection: 0) == 4)
     }
 
     @Test func showsSkeletonRowsWhileInitialDetailIsLoading() throws {
@@ -61,8 +61,8 @@ struct PostDetailViewControllerTests {
         viewController.loadViewIfNeeded()
         viewController.showLoading()
 
-        let tableView = try #require(viewController.view.firstSubview(of: UITableView.self))
-        #expect(tableView.numberOfRows(inSection: 0) == 5)
+        _ = try #require(viewController.view.firstSubview(of: UITableView.self))
+        #expect(viewController.testRowCount(inSection: 0) == 5)
 
         viewController.render(detail: PostDetail(
             id: "703863",
@@ -74,7 +74,364 @@ struct PostDetailViewControllerTests {
             comments: [],
             replyForm: nil
         ))
-        #expect(tableView.numberOfRows(inSection: 0) == 1)
+        #expect(viewController.testRowCount(inSection: 0) == 1)
+    }
+
+    @Test func detailWithPaginationShowsPageScrubberOverlayWithoutPagerRows() throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter)
+
+        viewController.loadViewIfNeeded()
+        viewController.render(detail: PostDetail(
+            id: "703863",
+            title: "详情标题",
+            authorName: "ipv4",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "<p>正文</p>",
+            comments: [
+                Comment(id: "1", authorName: "a", avatarURL: nil, floorText: "#1", createdAtText: "1min ago", contentHTML: "<p>评论一</p>"),
+                Comment(id: "2", authorName: "b", avatarURL: nil, floorText: "#2", createdAtText: "2min ago", contentHTML: "<p>评论二</p>")
+            ],
+            replyForm: nil,
+            page: 1,
+            pagination: PostDetailPagination(
+                currentPage: 1,
+                items: [
+                    PostDetailPageItem(page: 1, url: URL(string: "https://www.nodeseek.com/post-703863-1"), isCurrent: true),
+                    PostDetailPageItem(page: 2, url: URL(string: "https://www.nodeseek.com/post-703863-2"), isCurrent: false)
+                ],
+                previousPage: nil,
+                nextPage: 2
+            )
+        ))
+
+        _ = try #require(viewController.view.firstSubview(of: UITableView.self))
+        #expect(viewController.testRowCount(inSection: 0) == 4)
+        let scrubber = try #require(viewController.view.firstSubview(of: PageScrubberView.self))
+        #expect(scrubber.isHidden == false)
+    }
+
+    @Test func pageScrubberDragToBottomSelectsLastPage() throws {
+        var selectedPages: [Int] = []
+        let view = PageScrubberView()
+        view.onPageSelected = { selectedPages.append($0) }
+        view.configure(currentPage: 1, totalPages: 100, isLoading: false)
+        view.frame = CGRect(x: 0, y: 0, width: 58, height: 220)
+
+        view.beginScrubbingForTesting(at: 110)
+        view.updateScrubbingForTesting(to: 215)
+        view.endScrubbingForTesting(at: 215)
+
+        #expect(selectedPages == [100])
+    }
+
+    @Test func pageScrubberShowsCurrentTotalText() throws {
+        let view = PageScrubberView()
+        view.configure(currentPage: 2, totalPages: 5, isLoading: false)
+
+        let toggle = try #require(view.firstButton(accessibilityIdentifier: "page-scrubber-toggle-button"))
+        #expect(toggle.configuration?.title == "2/5")
+    }
+
+    @Test func pageScrubberUsesCompactAlphaAndExpandsOpacityWhileDragging() throws {
+        let view = PageScrubberView()
+        view.configure(currentPage: 2, totalPages: 5, isLoading: false)
+        view.frame = CGRect(x: 0, y: 0, width: 58, height: 220)
+
+        #expect(view.alpha == 0.62)
+
+        view.beginScrubbingForTesting(at: 110)
+
+        #expect(view.alpha == 1)
+    }
+
+    @Test func pageScrubberUsesAdaptiveSingleLineWidthForLongPageText() throws {
+        let view = PageScrubberView()
+        view.configure(currentPage: 100, totalPages: 100, isLoading: false)
+        view.layoutIfNeeded()
+
+        let toggle = try #require(view.firstButton(accessibilityIdentifier: "page-scrubber-toggle-button"))
+        #expect(toggle.titleLabel?.numberOfLines == 1)
+        #expect(view.testWidthConstant() > 58)
+    }
+
+    @Test func pageScrubberShowsSpinnerWhileLoading() throws {
+        let view = PageScrubberView()
+        view.configure(currentPage: 2, totalPages: 5, isLoading: true)
+
+        let indicator = try #require(view.firstSubview(of: UIActivityIndicatorView.self))
+        #expect(indicator.isAnimating)
+    }
+
+    @Test func pageScrubberSmallDragSelectsNearbyPage() throws {
+        var selectedPages: [Int] = []
+        let view = PageScrubberView()
+        view.onPageSelected = { selectedPages.append($0) }
+        view.configure(currentPage: 50, totalPages: 100, isLoading: false)
+        view.frame = CGRect(x: 0, y: 0, width: 58, height: 220)
+
+        view.beginScrubbingForTesting(at: 110)
+        view.updateScrubbingForTesting(to: 118)
+        view.endScrubbingForTesting(at: 118)
+
+        #expect(selectedPages == [51])
+    }
+
+    @Test func pageScrubberDoesNotSelectWhileLoading() throws {
+        var selectedPages: [Int] = []
+        let view = PageScrubberView()
+        view.onPageSelected = { selectedPages.append($0) }
+        view.configure(currentPage: 1, totalPages: 100, isLoading: true)
+        view.frame = CGRect(x: 0, y: 0, width: 58, height: 220)
+
+        view.beginScrubbingForTesting(at: 110)
+        view.updateScrubbingForTesting(to: 215)
+        view.endScrubbingForTesting(at: 215)
+
+        #expect(selectedPages.isEmpty)
+    }
+
+    @Test func pageScrubberEdgeTapOutsideVisibleBarOnlyShowsHUD() throws {
+        var selectedPages: [Int] = []
+        let view = PageScrubberView()
+        view.onPageSelected = { selectedPages.append($0) }
+        view.configure(currentPage: 50, totalPages: 100, isLoading: false)
+        view.frame = CGRect(x: 0, y: 0, width: 58, height: 640)
+        view.layoutIfNeeded()
+
+        view.beginScrubbingForTesting(at: 24)
+        view.endScrubbingForTesting(at: 24)
+
+        #expect(selectedPages.isEmpty)
+        #expect(view.alpha == 1)
+    }
+
+    @Test func selectingPageThroughDetailScrubberCallsPresenter() throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter)
+
+        viewController.loadViewIfNeeded()
+        viewController.render(detail: PostDetail(
+            id: "703863",
+            title: "详情标题",
+            authorName: "ipv4",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "<p>正文</p>",
+            comments: [
+                Comment(id: "1", authorName: "a", avatarURL: nil, floorText: "#1", createdAtText: "1min ago", contentHTML: "<p>评论一</p>")
+            ],
+            replyForm: nil,
+            page: 1,
+            pagination: PostDetailPagination(
+                currentPage: 1,
+                items: [
+                    PostDetailPageItem(page: 1, url: URL(string: "https://www.nodeseek.com/post-703863-1"), isCurrent: true),
+                    PostDetailPageItem(page: 2, url: URL(string: "https://www.nodeseek.com/post-703863-2"), isCurrent: false)
+                ],
+                previousPage: nil,
+                nextPage: 2
+            )
+        ))
+
+        let scrubber = try #require(viewController.view.firstSubview(of: PageScrubberView.self))
+        scrubber.frame = CGRect(x: 0, y: 0, width: 58, height: 220)
+        scrubber.beginScrubbingForTesting(at: 110)
+        scrubber.updateScrubbingForTesting(to: 215)
+        scrubber.endScrubbingForTesting(at: 215)
+
+        #expect(presenter.selectedPages == [2])
+    }
+
+    @Test func renderingOtherPageScrollsFirstCommentToTop() throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter)
+
+        viewController.loadViewIfNeeded()
+        viewController.render(detail: PostDetail(
+            id: "703863",
+            title: "详情标题",
+            authorName: "ipv4",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "<p>原帖正文</p>",
+            comments: [
+                Comment(id: "1", authorName: "a", avatarURL: nil, floorText: "#1", createdAtText: "1min ago", contentHTML: "<p>评论一</p>")
+            ],
+            replyForm: nil,
+            page: 1,
+            pagination: PostDetailPagination(
+                currentPage: 1,
+                items: [
+                    PostDetailPageItem(page: 1, url: URL(string: "https://www.nodeseek.com/post-703863-1"), isCurrent: true),
+                    PostDetailPageItem(page: 2, url: URL(string: "https://www.nodeseek.com/post-703863-2"), isCurrent: false)
+                ],
+                previousPage: nil,
+                nextPage: 2
+            )
+        ))
+
+        viewController.render(detail: PostDetail(
+            id: "703863",
+            title: "详情标题",
+            authorName: "ipv4",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "",
+            comments: [
+                Comment(id: "11", authorName: "b", avatarURL: nil, floorText: "#11", createdAtText: "刚刚", contentHTML: "<p>第二页评论</p>")
+            ],
+            replyForm: nil,
+            page: 2,
+            pagination: PostDetailPagination(
+                currentPage: 2,
+                items: [
+                    PostDetailPageItem(page: 1, url: URL(string: "https://www.nodeseek.com/post-703863-1"), isCurrent: false),
+                    PostDetailPageItem(page: 2, url: URL(string: "https://www.nodeseek.com/post-703863-2"), isCurrent: true)
+                ],
+                previousPage: 1,
+                nextPage: nil
+            )
+        ))
+
+        #expect(viewController.testPendingScrollRow() == 2)
+    }
+
+    @Test func pageLoadingKeepsHeaderAndShowsCommentSkeletonRows() throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter)
+
+        viewController.loadViewIfNeeded()
+        viewController.render(detail: PostDetail(
+            id: "703863",
+            title: "详情标题",
+            authorName: "ipv4",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "<p>原帖正文</p>",
+            comments: [
+                Comment(id: "1", authorName: "a", avatarURL: nil, floorText: "#1", createdAtText: "1min ago", contentHTML: "<p>评论一</p>"),
+                Comment(id: "2", authorName: "b", avatarURL: nil, floorText: "#2", createdAtText: "2min ago", contentHTML: "<p>评论二</p>")
+            ],
+            replyForm: nil,
+            page: 1,
+            pagination: PostDetailPagination(
+                currentPage: 1,
+                items: [
+                    PostDetailPageItem(page: 1, url: URL(string: "https://www.nodeseek.com/post-703863-1"), isCurrent: true),
+                    PostDetailPageItem(page: 2, url: URL(string: "https://www.nodeseek.com/post-703863-2"), isCurrent: false)
+                ],
+                previousPage: nil,
+                nextPage: 2
+            )
+        ))
+
+        viewController.showPageLoading()
+
+        #expect(viewController.testRowCount(inSection: 0) == 6)
+        #expect(viewController.testHeaderContent()?.contentHTML == "<p>原帖正文</p>")
+    }
+
+    @Test func renderingOtherPagePreservesExistingHeaderContent() throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter)
+
+        viewController.loadViewIfNeeded()
+        viewController.render(detail: PostDetail(
+            id: "703863",
+            title: "详情标题",
+            authorName: "ipv4",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "<p>原帖正文</p>",
+            comments: [
+                Comment(id: "1", authorName: "a", avatarURL: nil, floorText: "#1", createdAtText: "1min ago", contentHTML: "<p>评论一</p>")
+            ],
+            replyForm: nil,
+            page: 1,
+            pagination: PostDetailPagination(
+                currentPage: 1,
+                items: [
+                    PostDetailPageItem(page: 1, url: URL(string: "https://www.nodeseek.com/post-703863-1"), isCurrent: true),
+                    PostDetailPageItem(page: 2, url: URL(string: "https://www.nodeseek.com/post-703863-2"), isCurrent: false)
+                ],
+                previousPage: nil,
+                nextPage: 2
+            )
+        ))
+
+        viewController.render(detail: PostDetail(
+            id: "703863",
+            title: "详情标题",
+            authorName: "ipv4",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "<p>第2页第一个回复</p>",
+            comments: [
+                Comment(id: "11", authorName: "c", avatarURL: nil, floorText: "#11", createdAtText: "刚刚", contentHTML: "<p>第二页评论</p>")
+            ],
+            replyForm: nil,
+            page: 2,
+            pagination: PostDetailPagination(
+                currentPage: 2,
+                items: [
+                    PostDetailPageItem(page: 1, url: URL(string: "https://www.nodeseek.com/post-703863-1"), isCurrent: false),
+                    PostDetailPageItem(page: 2, url: URL(string: "https://www.nodeseek.com/post-703863-2"), isCurrent: true)
+                ],
+                previousPage: 1,
+                nextPage: nil
+            )
+        ))
+
+        #expect(viewController.testRowCount(inSection: 0) == 3)
+        #expect(viewController.testHeaderContent()?.contentHTML == "<p>原帖正文</p>")
+    }
+
+    @Test func renderingOtherPageKeepsPaginationWhenParserMissesPager() throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter)
+
+        viewController.loadViewIfNeeded()
+        viewController.render(detail: PostDetail(
+            id: "703863",
+            title: "详情标题",
+            authorName: "ipv4",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "<p>原帖正文</p>",
+            comments: [
+                Comment(id: "1", authorName: "a", avatarURL: nil, floorText: "#1", createdAtText: "1min ago", contentHTML: "<p>评论一</p>")
+            ],
+            replyForm: nil,
+            page: 1,
+            pagination: PostDetailPagination(
+                currentPage: 1,
+                items: [
+                    PostDetailPageItem(page: 1, url: URL(string: "https://www.nodeseek.com/post-703863-1"), isCurrent: true),
+                    PostDetailPageItem(page: 2, url: URL(string: "https://www.nodeseek.com/post-703863-2"), isCurrent: false)
+                ],
+                previousPage: nil,
+                nextPage: 2
+            )
+        ))
+
+        viewController.render(detail: PostDetail(
+            id: "703863",
+            title: "详情标题",
+            authorName: "ipv4",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "<p>第2页第一个回复</p>",
+            comments: [
+                Comment(id: "11", authorName: "c", avatarURL: nil, floorText: "#11", createdAtText: "刚刚", contentHTML: "<p>第二页评论</p>")
+            ],
+            replyForm: nil,
+            page: 2,
+            pagination: nil
+        ))
+
+        #expect(viewController.testRowCount(inSection: 0) == 3)
     }
 
     @Test func addsRefreshButtonAndCanTriggerReload() throws {
@@ -520,6 +877,7 @@ struct PostDetailLoginViewControllerTests {
 private final class SpyPostDetailPresenter: PostDetailPresenterProtocol {
     private(set) var loadCount = 0
     private(set) var didTapLoginCount = 0
+    private(set) var selectedPages: [Int] = []
 
     func viewDidLoad() {
         loadCount += 1
@@ -527,6 +885,10 @@ private final class SpyPostDetailPresenter: PostDetailPresenterProtocol {
 
     func didTapLogin() {
         didTapLoginCount += 1
+    }
+
+    func didSelectPage(_ page: Int) {
+        selectedPages.append(page)
     }
 }
 
@@ -557,5 +919,33 @@ private extension UIView {
         }
 
         return nil
+    }
+}
+
+private extension PageScrubberView {
+    func testWidthConstant() -> CGFloat {
+        constraints.first { $0.firstAttribute == .width }?.constant ?? 0
+    }
+}
+
+private extension PostDetailViewController {
+    func testRowCount(inSection section: Int) -> Int {
+        tableNode(ASTableNode(style: .plain), numberOfRowsInSection: section)
+    }
+
+    func testHeaderContent() -> PostDetailHeaderContent? {
+        let value = Mirror(reflecting: self).children.first { $0.label == "currentHeaderContent" }?.value
+        if let header = value as? PostDetailHeaderContent {
+            return header
+        }
+
+        guard let value else { return nil }
+        let mirror = Mirror(reflecting: value)
+        guard mirror.displayStyle == .optional else { return nil }
+        return mirror.children.first?.value as? PostDetailHeaderContent
+    }
+
+    func testPendingScrollRow() -> Int? {
+        Mirror(reflecting: self).children.first { $0.label == "pendingScrollToRow" }?.value as? Int
     }
 }
