@@ -13,6 +13,7 @@ final class NodeSeekSplashAnimator: NSObject {
 
     private let backgroundLayer = CALayer()
     private let nLayer = CAShapeLayer()
+    private let nFinalStrokeLayer = CAShapeLayer()
     private let sLayer = CAShapeLayer()
     private let dotLayer = CAShapeLayer()
     private let lightSweepLayer = CAGradientLayer()
@@ -21,7 +22,7 @@ final class NodeSeekSplashAnimator: NSObject {
 
     init(
         reduceMotion: Bool = UIAccessibility.isReduceMotionEnabled,
-        animationDuration: CFTimeInterval = 1.25
+        animationDuration: CFTimeInterval = 1.35
     ) {
         self.reduceMotion = reduceMotion
         self.animationDuration = animationDuration
@@ -34,6 +35,7 @@ final class NodeSeekSplashAnimator: NSObject {
         layoutLayers(in: view.bounds)
         view.layer.addSublayer(backgroundLayer)
         view.layer.addSublayer(nLayer)
+        view.layer.addSublayer(nFinalStrokeLayer)
         view.layer.addSublayer(sLayer)
         view.layer.addSublayer(dotLayer)
         view.layer.addSublayer(lightSweepLayer)
@@ -46,6 +48,7 @@ final class NodeSeekSplashAnimator: NSObject {
         guard !reduceMotion else {
             finalLogoLayer.opacity = 1
             nLayer.opacity = 0
+            nFinalStrokeLayer.opacity = 0
             sLayer.opacity = 0
             dotLayer.opacity = 0
             lightSweepLayer.opacity = 0
@@ -68,6 +71,7 @@ private extension NodeSeekSplashAnimator {
     func configureLayerNames() {
         backgroundLayer.name = "splash.background"
         nLayer.name = "splash.n"
+        nFinalStrokeLayer.name = "splash.nFinalStroke"
         sLayer.name = "splash.s"
         dotLayer.name = "splash.dot"
         lightSweepLayer.name = "splash.lightSweep"
@@ -80,12 +84,19 @@ private extension NodeSeekSplashAnimator {
 
         let logoFrame = aspectFitFrame(for: NodeSeekSplashVector.canvasSize, in: bounds)
         configureShapeLayer(nLayer, frame: logoFrame, path: NodeSeekSplashVector.wordmarkPath(), color: NodeSeekSplashVector.wordmarkColor)
+        configureShapeLayer(nFinalStrokeLayer, frame: logoFrame, path: NodeSeekSplashVector.wordmarkPath(), color: NodeSeekSplashVector.wordmarkColor)
         configureShapeLayer(sLayer, frame: logoFrame, path: NodeSeekSplashVector.wordmarkPath(), color: NodeSeekSplashVector.wordmarkColor)
         configureDotLayer(in: logoFrame)
 
         nLayer.mask = strokeRevealMask(
             name: "splash.n.strokeMask",
-            path: NodeSeekSplashVector.nStrokeRevealPath(),
+            path: NodeSeekSplashVector.nBodyStrokeRevealPath(),
+            lineWidth: 128,
+            in: logoFrame
+        )
+        nFinalStrokeLayer.mask = strokeRevealMask(
+            name: "splash.nFinalStroke.strokeMask",
+            path: NodeSeekSplashVector.nFinalStrokeRevealPath(),
             lineWidth: 128,
             in: logoFrame
         )
@@ -189,10 +200,12 @@ private extension NodeSeekSplashAnimator {
         lightSweepLayer.opacity = 1
         finalLogoLayer.opacity = 0
 
-        animateStrokeReveal(mask: nLayer.mask, beginTime: 0.00, duration: 0.52)
-        animateStrokeReveal(mask: sLayer.mask, beginTime: 0.38, duration: 0.47)
+        let nDuration: CFTimeInterval = 0.58
+        animateStrokeReveal(mask: nLayer.mask, beginTime: 0.00, duration: nDuration)
+        animateStrokeReveal(mask: nFinalStrokeLayer.mask, beginTime: 0.00, duration: nDuration)
+        animateStrokeReveal(mask: sLayer.mask, beginTime: nDuration, duration: 0.47)
         animateLightSweep(beginTime: 0.28)
-        animateDotPop(beginTime: 0.82)
+        animateDotPop(beginTime: 1.02)
 
         DispatchQueue.main.asyncAfter(deadline: .now() + animationDuration) { [weak self] in
             guard let self else { return }
@@ -204,6 +217,7 @@ private extension NodeSeekSplashAnimator {
 
     func pinModelLayersToFinalFrame() {
         nLayer.opacity = 1
+        nFinalStrokeLayer.opacity = 1
         sLayer.opacity = 1
         dotLayer.opacity = 1
         lightSweepLayer.opacity = 0

@@ -94,11 +94,17 @@ enum NodeSeekSplashVector {
         return path
     }
 
-    static func nStrokeRevealPath() -> CGPath {
+    static func nBodyStrokeRevealPath() -> CGPath {
         let path = CGMutablePath()
         path.move(to: CGPoint(x: 224, y: 720))
         path.addLine(to: CGPoint(x: 224, y: 274))
         path.addLine(to: CGPoint(x: 496, y: 720))
+        return path
+    }
+
+    static func nFinalStrokeRevealPath() -> CGPath {
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: 462, y: 720))
         path.addLine(to: CGPoint(x: 462, y: 274))
         return path
     }
