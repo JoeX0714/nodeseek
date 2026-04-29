@@ -104,3 +104,18 @@ struct UserSummary: Equatable, Sendable {
     let displayName: String
     let isLoggedIn: Bool
 }
+
+enum AuthorDisplayPolicy {
+    static func displayName(from rawName: String) -> String? {
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, name != "未知用户" else {
+            return nil
+        }
+
+        return name
+    }
+
+    static func isDisplayable(_ rawName: String) -> Bool {
+        displayName(from: rawName) != nil
+    }
+}

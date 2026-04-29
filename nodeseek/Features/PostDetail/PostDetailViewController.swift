@@ -963,7 +963,15 @@ private final class PostDetailHeaderView: UIView {
 
     func configure(_ content: PostDetailHeaderContent, attributedContent: NSAttributedString?) {
         titleLabel.text = content.title
-        subtitleLabel.text = [content.authorName, content.metadataText].compactMap(\.self).joined(separator: " · ")
+        subtitleLabel.text = [
+            AuthorDisplayPolicy.displayName(from: content.authorName),
+            content.metadataText?.trimmingCharacters(in: .whitespacesAndNewlines)
+        ]
+            .compactMap { value in
+                guard let value, !value.isEmpty else { return nil }
+                return value
+            }
+            .joined(separator: " · ")
         contentView.configure(
             attributedContent,
             onImageTapped: onImageTapped,
@@ -971,7 +979,14 @@ private final class PostDetailHeaderView: UIView {
         )
         contentView.isHidden = attributedContent == nil
         contentTopConstraint?.constant = attributedContent == nil ? 0 : 16
-        avatarLoader.loadAvatar(into: avatarImageView, postID: content.postID, avatarURL: content.avatarURL)
+        let shouldShowAvatar = AuthorDisplayPolicy.isDisplayable(content.authorName)
+        avatarImageView.isHidden = !shouldShowAvatar
+        if shouldShowAvatar {
+            avatarLoader.loadAvatar(into: avatarImageView, postID: content.postID, avatarURL: content.avatarURL)
+        } else {
+            avatarLoader.cancel(on: avatarImageView)
+            avatarImageView.image = nil
+        }
     }
 
     private func setupUI() {
@@ -1076,6 +1091,7 @@ private final class PostDetailCommentCell: UITableViewCell {
         super.prepareForReuse()
         avatarLoader.cancel(on: avatarImageView)
         avatarImageView.image = nil
+        avatarImageView.isHidden = false
         metaLabel.text = nil
         bodyView.configure(nil, onImageTapped: nil, onLayoutInvalidated: nil)
         onImageTapped = nil
@@ -1085,15 +1101,26 @@ private final class PostDetailCommentCell: UITableViewCell {
     func configure(comment: Comment, attributedBody: NSAttributedString?) {
         metaLabel.text = [
             comment.floorText,
-            comment.authorName,
+            AuthorDisplayPolicy.displayName(from: comment.authorName),
             comment.createdAtText
-        ].compactMap(\.self).joined(separator: " · ")
+        ].compactMap { value in
+            value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
         bodyView.configure(
             attributedBody,
             onImageTapped: onImageTapped,
             onLayoutInvalidated: onTextLayoutInvalidated
         )
-        avatarLoader.loadAvatar(into: avatarImageView, postID: comment.id, avatarURL: comment.avatarURL)
+        let shouldShowAvatar = AuthorDisplayPolicy.isDisplayable(comment.authorName)
+        avatarImageView.isHidden = !shouldShowAvatar
+        if shouldShowAvatar {
+            avatarLoader.loadAvatar(into: avatarImageView, postID: comment.id, avatarURL: comment.avatarURL)
+        } else {
+            avatarLoader.cancel(on: avatarImageView)
+            avatarImageView.image = nil
+        }
     }
 
     private func setupUI() {

@@ -102,7 +102,7 @@ struct KannaNodeSeekParser: NodeSeekParser {
             xpaths: [XPathRules.postAvatar, XPathRules.fallbackAvatar],
             attribute: "src"
         ).flatMap { URL(string: $0, relativeTo: baseURL)?.absoluteURL }
-        let authorName = firstText(in: item, xpaths: [XPathRules.postAuthor, XPathRules.fallbackAuthor]) ?? "未知用户"
+        let authorName = firstText(in: item, xpaths: [XPathRules.postAuthor, XPathRules.fallbackAuthor]) ?? ""
         let nodeName = firstText(in: item, xpaths: [XPathRules.postNode, XPathRules.fallbackNode])
         let viewNode = item.at_xpath(XPathRules.viewCount)
         let viewText = viewNode?["title"] ?? viewNode?.text ?? ""
@@ -164,7 +164,7 @@ struct KannaNodeSeekParser: NodeSeekParser {
             throw NodeSeekParserError.postDetailNotFound
         }
 
-        let authorName = firstText(in: bodyItem, xpaths: [XPathRules.contentAuthor]) ?? "未知用户"
+        let authorName = firstText(in: bodyItem, xpaths: [XPathRules.contentAuthor]) ?? ""
         let avatarURL = firstAttribute(
             in: bodyItem,
             xpaths: [XPathRules.postAvatar, XPathRules.fallbackAvatar],
