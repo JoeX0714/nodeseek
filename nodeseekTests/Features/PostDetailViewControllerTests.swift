@@ -91,68 +91,6 @@ struct PostDetailViewControllerTests {
         #expect(presenter.loadCount == 2)
     }
 
-    @Test func loginRequiredStateShowsLoginButtonAndSendsTapToPresenter() throws {
-        let presenter = SpyPostDetailPresenter()
-        let viewController = PostDetailViewController(presenter: presenter)
-
-        viewController.loadViewIfNeeded()
-        viewController.renderLoginRequired(message: "本帖需要注册用户才能查看😭")
-
-        let button = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-login-button"))
-        #expect(button.configuration?.title == "登录查看")
-        #expect(button.isHidden == false)
-
-        button.sendActions(for: .touchUpInside)
-
-        #expect(presenter.didTapLoginCount == 1)
-    }
-
-    @Test func loginButtonIsHiddenBeforeLoginRequiredRender() throws {
-        let presenter = SpyPostDetailPresenter()
-        let viewController = PostDetailViewController(presenter: presenter)
-
-        viewController.loadViewIfNeeded()
-
-        let button = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-login-button"))
-        #expect(button.isHidden)
-    }
-
-    @Test func renderDetailHidesLoginButton() throws {
-        let presenter = SpyPostDetailPresenter()
-        let viewController = PostDetailViewController(presenter: presenter)
-
-        viewController.loadViewIfNeeded()
-        viewController.renderLoginRequired(message: "本帖需要注册用户才能查看😭")
-        viewController.render(detail: PostDetail(
-            id: "703863",
-            title: "详情标题",
-            authorName: "ipv4",
-            avatarURL: nil,
-            metadataText: "刚刚",
-            contentHTML: "<p>正文</p>",
-            comments: [],
-            replyForm: nil
-        ))
-
-        let button = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-login-button"))
-        #expect(button.isHidden)
-    }
-
-    @Test func showLoadingHidesVisibleLoginButton() throws {
-        let presenter = SpyPostDetailPresenter()
-        let viewController = PostDetailViewController(presenter: presenter)
-
-        viewController.loadViewIfNeeded()
-        viewController.renderLoginRequired(message: "本帖需要注册用户才能查看😭")
-
-        let button = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-login-button"))
-        #expect(button.isHidden == false)
-
-        viewController.showLoading()
-
-        #expect(button.isHidden)
-    }
-
     @Test func detailTextureCellsCanBeConstructedOffMainThread() async throws {
         let header = PostDetailHeaderContent(
             postID: "703863",
@@ -263,6 +201,71 @@ struct PostDetailViewControllerTests {
         let expectedHeight = ceil(layoutFrame.frame.maxY)
 
         #expect(layout.size.height >= expectedHeight)
+    }
+}
+
+@MainActor
+struct PostDetailLoginViewControllerTests {
+    @Test func loginRequiredStateShowsLoginButtonAndSendsTapToPresenter() throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter)
+
+        viewController.loadViewIfNeeded()
+        viewController.renderLoginRequired(message: "本帖需要注册用户才能查看😭")
+
+        let button = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-login-button"))
+        #expect(button.configuration?.title == "登录查看")
+        #expect(button.isHidden == false)
+
+        button.sendActions(for: .touchUpInside)
+
+        #expect(presenter.didTapLoginCount == 1)
+    }
+
+    @Test func loginButtonIsHiddenBeforeLoginRequiredRender() throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter)
+
+        viewController.loadViewIfNeeded()
+
+        let button = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-login-button"))
+        #expect(button.isHidden)
+    }
+
+    @Test func renderDetailHidesLoginButton() throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter)
+
+        viewController.loadViewIfNeeded()
+        viewController.renderLoginRequired(message: "本帖需要注册用户才能查看😭")
+        viewController.render(detail: PostDetail(
+            id: "703863",
+            title: "详情标题",
+            authorName: "ipv4",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "<p>正文</p>",
+            comments: [],
+            replyForm: nil
+        ))
+
+        let button = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-login-button"))
+        #expect(button.isHidden)
+    }
+
+    @Test func showLoadingHidesVisibleLoginButton() throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter)
+
+        viewController.loadViewIfNeeded()
+        viewController.renderLoginRequired(message: "本帖需要注册用户才能查看😭")
+
+        let button = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-login-button"))
+        #expect(button.isHidden == false)
+
+        viewController.showLoading()
+
+        #expect(button.isHidden)
     }
 }
 
