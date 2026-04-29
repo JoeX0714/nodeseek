@@ -373,6 +373,10 @@ extension PostListViewController: PostListViewProtocol {
         currentSortMode = sortMode
         applySortTogglePresentation(expanded: isSortToggleExpanded)
     }
+
+    func renderAccount(_ account: AccountResponse) {
+        sideMenuViewController.renderAccount(account)
+    }
     
     func render(posts: [PostSummary]) {
         pageContainerView.setPosts(posts, for: selectedCategory)

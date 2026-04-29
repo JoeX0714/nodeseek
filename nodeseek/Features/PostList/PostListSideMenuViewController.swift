@@ -11,6 +11,12 @@ final class PostListSideMenuViewController: UIViewController {
     private var sideMenuLeadingConstraint: NSLayoutConstraint?
     private var isSideMenuVisible = false
     var onLoginTapped: (() -> Void)?
+    private let avatarLoader = AvatarImageLoader.shared
+
+    private static let defaultAvatarImage: UIImage? = {
+        let configuration = UIImage.SymbolConfiguration(pointSize: 48, weight: .regular)
+        return UIImage(systemName: "person.crop.circle.fill", withConfiguration: configuration)
+    }()
 
     private let backdropView: UIView = {
         let view = UIView()
@@ -36,8 +42,7 @@ final class PostListSideMenuViewController: UIViewController {
 
     private let avatarImageView: UIImageView = {
         let imageView = UIImageView()
-        let configuration = UIImage.SymbolConfiguration(pointSize: 48, weight: .regular)
-        imageView.image = UIImage(systemName: "person.crop.circle.fill", withConfiguration: configuration)
+        imageView.image = PostListSideMenuViewController.defaultAvatarImage
         imageView.tintColor = .tertiaryLabel
         imageView.backgroundColor = .secondarySystemBackground
         imageView.contentMode = .scaleAspectFill
@@ -48,6 +53,30 @@ final class PostListSideMenuViewController: UIViewController {
         imageView.accessibilityLabel = "用户头像"
         imageView.translatesAutoresizingMaskIntoConstraints = false
         return imageView
+    }()
+
+    private let nameLabel: UILabel = {
+        let label = UILabel()
+        label.text = "未登录"
+        label.font = .preferredFont(forTextStyle: .headline)
+        label.textColor = .label
+        label.numberOfLines = 1
+        label.lineBreakMode = .byTruncatingTail
+        label.accessibilityIdentifier = "post-list-side-menu-name-label"
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }()
+
+    private let statsLabel: UILabel = {
+        let label = UILabel()
+        label.text = "登录后同步账号信息"
+        label.font = .preferredFont(forTextStyle: .footnote)
+        label.textColor = .secondaryLabel
+        label.numberOfLines = 2
+        label.lineBreakMode = .byTruncatingTail
+        label.accessibilityIdentifier = "post-list-side-menu-stats-label"
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
     }()
 
     private let settingsButton: UIButton = {
@@ -102,6 +131,26 @@ final class PostListSideMenuViewController: UIViewController {
         setVisible(false, animated: animated)
     }
 
+    func renderAccount(_ account: AccountResponse) {
+        nameLabel.text = account.isLoggedIn ? account.displayName : "未登录"
+        statsLabel.text = account.isLoggedIn
+            ? account.stats.prefix(3).joined(separator: " · ")
+            : "登录后同步账号信息"
+        loginButton.isHidden = account.isLoggedIn
+
+        if account.isLoggedIn {
+            avatarLoader.loadAvatar(
+                into: avatarImageView,
+                postID: account.profileURL?.lastPathComponent ?? account.displayName,
+                avatarURL: account.avatarURL
+            )
+        } else {
+            avatarLoader.cancel(on: avatarImageView)
+            avatarImageView.image = Self.defaultAvatarImage
+            avatarImageView.tintColor = .tertiaryLabel
+        }
+    }
+
     private func setupUI() {
         view.backgroundColor = .clear
         view.isHidden = true
@@ -113,6 +162,8 @@ final class PostListSideMenuViewController: UIViewController {
         view.addSubview(backdropView)
         view.addSubview(sideMenuView)
         sideMenuView.addSubview(avatarImageView)
+        sideMenuView.addSubview(nameLabel)
+        sideMenuView.addSubview(statsLabel)
         sideMenuView.addSubview(loginButton)
         sideMenuView.addSubview(settingsButton)
 
@@ -137,6 +188,14 @@ final class PostListSideMenuViewController: UIViewController {
             avatarImageView.topAnchor.constraint(equalTo: sideMenuView.safeAreaLayoutGuide.topAnchor, constant: 28),
             avatarImageView.widthAnchor.constraint(equalToConstant: SideMenuLayout.avatarSize),
             avatarImageView.heightAnchor.constraint(equalToConstant: SideMenuLayout.avatarSize),
+
+            nameLabel.leadingAnchor.constraint(equalTo: avatarImageView.trailingAnchor, constant: 14),
+            nameLabel.trailingAnchor.constraint(equalTo: sideMenuView.trailingAnchor, constant: -SideMenuLayout.horizontalInset),
+            nameLabel.topAnchor.constraint(equalTo: avatarImageView.topAnchor, constant: 8),
+
+            statsLabel.leadingAnchor.constraint(equalTo: nameLabel.leadingAnchor),
+            statsLabel.trailingAnchor.constraint(equalTo: nameLabel.trailingAnchor),
+            statsLabel.topAnchor.constraint(equalTo: nameLabel.bottomAnchor, constant: 6),
 
             loginButton.leadingAnchor.constraint(equalTo: sideMenuView.leadingAnchor, constant: SideMenuLayout.horizontalInset),
             loginButton.trailingAnchor.constraint(equalTo: sideMenuView.trailingAnchor, constant: -SideMenuLayout.horizontalInset),

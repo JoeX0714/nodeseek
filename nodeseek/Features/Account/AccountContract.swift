@@ -13,7 +13,7 @@ protocol AccountViewProtocol: AnyObject {
     func showLoading()
     func hideLoading()
     func showError(message: String)
-    func render(displayName: String, isLoggedIn: Bool)
+    func render(_ account: AccountResponse)
 }
 
 // MARK: - Presenter Protocol (View -> Presenter)

@@ -47,7 +47,7 @@ extension AccountPresenter: AccountInteractorOutput {
     
     func didLoadAccount(_ response: AccountResponse) {
         view?.hideLoading()
-        view?.render(displayName: response.displayName, isLoggedIn: response.isLoggedIn)
+        view?.render(response)
     }
     
     func didFailLoadAccount(error: String) {

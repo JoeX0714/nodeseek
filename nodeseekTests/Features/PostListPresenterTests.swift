@@ -315,6 +315,28 @@ struct PostListPresenterTests {
         #expect(view.lastRenderedPostIDs.isEmpty)
         #expect(interactor.loadPostsCategories == [.all, .all])
         #expect(interactor.loadPostsSortModes == [.replyTime, .replyTime])
+        #expect(interactor.loadAccountCount == 2)
+    }
+
+    @Test func loadingAccountRendersSideMenuAccount() {
+        let view = SpyPostListView()
+        let interactor = SpyPostListInteractor()
+        let router = SpyPostListRouter()
+        let presenter = PostListPresenter(interactor: interactor, router: router)
+        presenter.setView(view)
+
+        presenter.viewDidLoad()
+        presenter.didLoadAccount(AccountResponse(
+            displayName: "缭雾",
+            isLoggedIn: true,
+            avatarURL: URL(string: "https://www.nodeseek.com/avatar/31037.png"),
+            profileURL: URL(string: "https://www.nodeseek.com/space/31037"),
+            stats: ["等级 Lv 1", "鸡腿 306"]
+        ))
+
+        #expect(interactor.loadAccountCount == 1)
+        #expect(view.renderedAccount?.displayName == "缭雾")
+        #expect(view.renderedAccount?.stats == ["等级 Lv 1", "鸡腿 306"])
     }
 }
 
@@ -333,6 +355,7 @@ private final class SpyPostListView: PostListViewProtocol {
     var renderedCategories: [PostListCategory] = []
     var selectedCategory: PostListCategory = .all
     var renderedSortMode: PostListSortMode?
+    var renderedAccount: AccountResponse?
     var events: [String] = []
 
     func showLoading() {
@@ -386,6 +409,11 @@ private final class SpyPostListView: PostListViewProtocol {
         lastRenderedPostIDs = posts.map(\.id)
         events.append("render")
     }
+
+    func renderAccount(_ account: AccountResponse) {
+        renderedAccount = account
+        events.append("renderAccount")
+    }
 }
 
 @MainActor
@@ -396,6 +424,7 @@ private final class SpyPostListInteractor: PostListInteractorInput {
     var loadMorePages: [Int] = []
     var loadMoreCategories: [PostListCategory] = []
     var loadMoreSortModes: [PostListSortMode] = []
+    var loadAccountCount = 0
 
     func loadPosts(category: PostListCategory, sortMode: PostListSortMode) {
         loadPostsCallCount += 1
@@ -407,6 +436,10 @@ private final class SpyPostListInteractor: PostListInteractorInput {
         loadMorePages.append(page)
         loadMoreCategories.append(category)
         loadMoreSortModes.append(sortMode)
+    }
+
+    func loadAccount() {
+        loadAccountCount += 1
     }
 }
 

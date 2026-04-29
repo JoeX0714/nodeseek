@@ -90,6 +90,8 @@ struct PostListViewControllerTests {
         let sideMenu = try #require(viewController.view.firstView(accessibilityIdentifier: "post-list-side-menu"))
         let backdrop = try #require(viewController.view.firstView(accessibilityIdentifier: "post-list-side-menu-backdrop"))
         let avatar = try #require(viewController.view.firstImageView(accessibilityIdentifier: "post-list-side-menu-avatar"))
+        let nameLabel = try #require(viewController.view.firstLabel(accessibilityIdentifier: "post-list-side-menu-name-label"))
+        let statsLabel = try #require(viewController.view.firstLabel(accessibilityIdentifier: "post-list-side-menu-stats-label"))
         let loginButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-list-side-menu-login-button"))
         let settingsButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-list-side-menu-settings-button"))
         let sideMenuHost = viewController.children.first {
@@ -100,6 +102,8 @@ struct PostListViewControllerTests {
         #expect(sideMenu.frame.maxX <= 0.5)
         #expect(backdrop.isHidden == true)
         #expect(avatar.image != nil)
+        #expect(nameLabel.text == "未登录")
+        #expect(statsLabel.text == "登录后同步账号信息")
         #expect(loginButton.configuration?.title == "登录")
         #expect(loginButton.configuration?.image != nil)
         #expect(settingsButton.configuration?.title == "设置")
@@ -125,6 +129,31 @@ struct PostListViewControllerTests {
         #expect(presenter.didTapLoginCount == 1)
         #expect(sideMenu.frame.maxX <= 0.5)
         #expect(backdrop.isHidden == true)
+    }
+
+    @Test func renderAccountUpdatesSideMenuIdentityAndHidesLoginButton() throws {
+        let presenter = SpyPostListPresenter()
+        let viewController = PostListViewController(presenter: presenter)
+        viewController.loadViewIfNeeded()
+        viewController.view.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+        viewController.view.layoutIfNeeded()
+
+        viewController.renderAccount(AccountResponse(
+            displayName: "缭雾",
+            isLoggedIn: true,
+            avatarURL: URL(string: "https://www.nodeseek.com/avatar/31037.png"),
+            profileURL: URL(string: "https://www.nodeseek.com/space/31037"),
+            stats: ["等级 Lv 1", "鸡腿 306"]
+        ))
+        viewController.view.layoutIfNeeded()
+
+        let nameLabel = try #require(viewController.view.firstLabel(accessibilityIdentifier: "post-list-side-menu-name-label"))
+        let statsLabel = try #require(viewController.view.firstLabel(accessibilityIdentifier: "post-list-side-menu-stats-label"))
+        let loginButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-list-side-menu-login-button"))
+
+        #expect(nameLabel.text == "缭雾")
+        #expect(statsLabel.text == "等级 Lv 1 · 鸡腿 306")
+        #expect(loginButton.isHidden)
     }
 }
 
@@ -204,6 +233,20 @@ private extension UIView {
 
         for subview in subviews {
             if let matched = subview.firstImageView(accessibilityIdentifier: accessibilityIdentifier) {
+                return matched
+            }
+        }
+
+        return nil
+    }
+
+    func firstLabel(accessibilityIdentifier: String) -> UILabel? {
+        if let label = self as? UILabel, label.accessibilityIdentifier == accessibilityIdentifier {
+            return label
+        }
+
+        for subview in subviews {
+            if let matched = subview.firstLabel(accessibilityIdentifier: accessibilityIdentifier) {
                 return matched
             }
         }

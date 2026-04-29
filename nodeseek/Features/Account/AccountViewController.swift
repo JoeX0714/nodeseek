@@ -11,13 +11,41 @@ class AccountViewController: UIViewController {
     
     // MARK: - Properties
     private let presenter: AccountPresenterProtocol
+    private let avatarLoader = AvatarImageLoader.shared
     
     // MARK: - UI Components
+    private let avatarImageView: UIImageView = {
+        let imageView = UIImageView()
+        let configuration = UIImage.SymbolConfiguration(pointSize: 54, weight: .regular)
+        imageView.image = UIImage(systemName: "person.crop.circle.fill", withConfiguration: configuration)
+        imageView.tintColor = .tertiaryLabel
+        imageView.backgroundColor = .secondarySystemBackground
+        imageView.contentMode = .scaleAspectFill
+        imageView.clipsToBounds = true
+        imageView.layer.cornerRadius = 36
+        imageView.isHidden = true
+        imageView.accessibilityIdentifier = "account-avatar-image"
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        return imageView
+    }()
+
     private let statusLabel: UILabel = {
         let label = UILabel()
         label.font = .preferredFont(forTextStyle: .body)
         label.textAlignment = .center
         label.numberOfLines = 0
+        label.accessibilityIdentifier = "account-status-label"
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }()
+
+    private let statsLabel: UILabel = {
+        let label = UILabel()
+        label.font = .preferredFont(forTextStyle: .footnote)
+        label.textColor = .secondaryLabel
+        label.textAlignment = .center
+        label.numberOfLines = 0
+        label.accessibilityIdentifier = "account-stats-label"
         label.translatesAutoresizingMaskIntoConstraints = false
         return label
     }()
@@ -65,16 +93,27 @@ class AccountViewController: UIViewController {
         title = "账号"
         view.backgroundColor = .systemBackground
         loginButton.addTarget(self, action: #selector(loginButtonTapped), for: .touchUpInside)
+        view.addSubview(avatarImageView)
         view.addSubview(statusLabel)
+        view.addSubview(statsLabel)
         view.addSubview(loadingIndicator)
         view.addSubview(loginButton)
         
         NSLayoutConstraint.activate([
+            avatarImageView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            avatarImageView.bottomAnchor.constraint(equalTo: statusLabel.topAnchor, constant: -18),
+            avatarImageView.widthAnchor.constraint(equalToConstant: 72),
+            avatarImageView.heightAnchor.constraint(equalToConstant: 72),
+
             statusLabel.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 24),
             statusLabel.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -24),
             statusLabel.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: -28),
 
-            loginButton.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 24),
+            statsLabel.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 24),
+            statsLabel.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -24),
+            statsLabel.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 8),
+
+            loginButton.topAnchor.constraint(equalTo: statsLabel.bottomAnchor, constant: 24),
             loginButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
 
             loadingIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
@@ -105,9 +144,21 @@ extension AccountViewController: AccountViewProtocol {
         present(alert, animated: true)
     }
     
-    func render(displayName: String, isLoggedIn: Bool) {
-        let state = isLoggedIn ? "已登录" : "未登录"
-        statusLabel.text = "\(displayName) · \(state)"
-        loginButton.isHidden = isLoggedIn
+    func render(_ account: AccountResponse) {
+        let state = account.isLoggedIn ? "已登录" : "未登录"
+        statusLabel.text = "\(account.displayName) · \(state)"
+        statsLabel.text = account.stats.joined(separator: " · ")
+        avatarImageView.isHidden = !account.isLoggedIn
+        loginButton.isHidden = account.isLoggedIn
+
+        if account.isLoggedIn {
+            avatarLoader.loadAvatar(
+                into: avatarImageView,
+                postID: account.profileURL?.lastPathComponent ?? account.displayName,
+                avatarURL: account.avatarURL
+            )
+        } else {
+            avatarLoader.cancel(on: avatarImageView)
+        }
     }
 }

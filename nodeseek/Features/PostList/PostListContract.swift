@@ -18,6 +18,7 @@ protocol PostListViewProtocol: AnyObject {
     func showError(message: String)
     func renderCategories(_ categories: [PostListCategory], selected: PostListCategory)
     func renderSortMode(_ sortMode: PostListSortMode)
+    func renderAccount(_ account: AccountResponse)
     func render(posts: [PostSummary])
 }
 
@@ -34,12 +35,15 @@ protocol PostListPresenterProtocol: AnyObject {
 
 // MARK: - Interactor Input (Presenter -> Interactor)
 protocol PostListInteractorInput: AnyObject {
+    func loadAccount()
     func loadPosts(category: PostListCategory, sortMode: PostListSortMode)
     func loadMorePosts(page: Int, category: PostListCategory, sortMode: PostListSortMode)
 }
 
 // MARK: - Interactor Output (Interactor -> Presenter)
 protocol PostListInteractorOutput: AnyObject {
+    func didLoadAccount(_ account: AccountResponse)
+    func didFailLoadAccount(error: String)
     func didLoadPosts(_ posts: [PostSummary], category: PostListCategory, sortMode: PostListSortMode)
     func didLoadMorePosts(_ posts: [PostSummary], page: Int, category: PostListCategory, sortMode: PostListSortMode)
     func didFailLoadPosts(error: String, category: PostListCategory, sortMode: PostListSortMode)
