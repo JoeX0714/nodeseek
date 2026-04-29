@@ -83,6 +83,29 @@ struct DTCoreTextHTMLContentRendererTests {
         #expect(table.rows[1].cells[1].imageURL?.absoluteString == "https://github.com/xykt/NetQuality/raw/main/res/v6_cn.png")
     }
 
+    @Test func preservesExplicitLineBreaksInsideTableCells() throws {
+        let renderer = DTCoreTextHTMLContentRenderer()
+        let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
+        let blocks = renderer.render(
+            fragment: """
+            <table>
+            <tbody>
+            <tr><td>第一行<br>第二行<p>第三行</p></td></tr>
+            </tbody>
+            </table>
+            """,
+            baseURL: baseURL,
+            maxImageWidth: 320
+        )
+
+        let table = try #require(blocks.compactMap { block -> RenderedTableBlock? in
+            guard case .table(let table) = block else { return nil }
+            return table
+        }.first)
+
+        #expect(table.rows[0].cells[0].text == "第一行\n第二行\n第三行")
+    }
+
     @Test func rendersLinkAsAbsoluteURL() throws {
         let renderer = DTCoreTextHTMLContentRenderer()
         let baseURL = try #require(URL(string: "https://www.nodeseek.com"))

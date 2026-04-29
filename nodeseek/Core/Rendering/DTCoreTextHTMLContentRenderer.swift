@@ -210,10 +210,63 @@ struct DTCoreTextHTMLContentRenderer {
     }
 
     private func normalizedCellText(from node: XMLElement) -> String {
-        let rawText = node.text ?? ""
+        let rawText = htmlTextPreservingLineBreaks(from: node)
         return rawText
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: "[ \\t\\r\\u{00A0}]+", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: " *\\n+ *", with: "\n", options: .regularExpression)
+            .replacingOccurrences(of: "\\n{2,}", with: "\n", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func htmlTextPreservingLineBreaks(from node: XMLElement) -> String {
+        let html = node.innerHTML ?? node.text ?? ""
+        let withoutHiddenContent = html
+            .replacingOccurrences(
+                of: "(?is)<(script|style)\\b[^>]*>.*?</\\1>",
+                with: "",
+                options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: "(?is)<img\\b[^>]*>",
+                with: "",
+                options: .regularExpression
+            )
+        let withLineBreaks = withoutHiddenContent
+            .replacingOccurrences(
+                of: "(?i)<br\\s*/?>",
+                with: "\n",
+                options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: "(?i)</?(p|div|section|article|header|footer|blockquote|pre|ul|ol|li|h[1-6])\\b[^>]*>",
+                with: "\n",
+                options: .regularExpression
+            )
+        let stripped = withLineBreaks.replacingOccurrences(
+            of: "<[^>]+>",
+            with: "",
+            options: .regularExpression
+        )
+        return decodedHTMLEntities(in: stripped)
+    }
+
+    private func decodedHTMLEntities(in text: String) -> String {
+        guard text.contains("&"),
+              let data = text
+            .replacingOccurrences(of: "\n", with: "__NODESEEK_CELL_LINE_BREAK__")
+            .data(using: .utf8) else {
+            return text
+        }
+
+        let decoded = (try? NSAttributedString(
+            data: data,
+            options: [
+                .documentType: NSAttributedString.DocumentType.html,
+                .characterEncoding: String.Encoding.utf8.rawValue
+            ],
+            documentAttributes: nil
+        ).string) ?? text
+        return decoded.replacingOccurrences(of: "__NODESEEK_CELL_LINE_BREAK__", with: "\n")
     }
 
     private func imageURL(from node: XMLElement, baseURL: URL) -> URL? {

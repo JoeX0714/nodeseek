@@ -332,19 +332,33 @@ enum DetailTableLayout {
     static func rowHeights(for table: RenderedTableBlock, columnWidths: [CGFloat]) -> [CGFloat] {
         table.rows.map { row in
             let estimatedHeight = row.cells.enumerated().map { columnIndex, cell in
+                let textHeight = estimatedTextHeight(
+                    for: cell.text,
+                    columnWidth: columnWidths[safe: columnIndex] ?? Layout.minColumnWidth
+                )
                 if cell.imageURL != nil {
-                    return imageHeight + Layout.verticalPadding
+                    let textSpacing: CGFloat = cell.text.isEmpty ? 0 : 6
+                    return imageHeight + textSpacing + textHeight + Layout.verticalPadding
                 }
 
-                let columnWidth = columnWidths[safe: columnIndex] ?? Layout.minColumnWidth
-                let usableWidth = max(columnWidth - Layout.horizontalPadding, 1)
-                let charactersPerLine = max(Int(usableWidth / Layout.estimatedCharacterWidth), 1)
-                let lineCount = max(Int(ceil(Double(cell.text.count) / Double(charactersPerLine))), 1)
-                return CGFloat(lineCount) * Layout.estimatedLineHeight + Layout.verticalPadding
+                return textHeight + Layout.verticalPadding
             }.max() ?? defaultRowHeight
 
             return ceil(max(estimatedHeight, row.isHeader ? 42 : defaultRowHeight))
         }
+    }
+
+    private static func estimatedTextHeight(for text: String, columnWidth: CGFloat) -> CGFloat {
+        guard text.isEmpty == false else { return 0 }
+
+        let usableWidth = max(columnWidth - Layout.horizontalPadding, 1)
+        let charactersPerLine = max(Int(usableWidth / Layout.estimatedCharacterWidth), 1)
+        let explicitLines = text.split(separator: "\n", omittingEmptySubsequences: false)
+        let lineCount = explicitLines.reduce(0) { partialResult, line in
+            let wrappedLineCount = max(Int(ceil(Double(line.count) / Double(charactersPerLine))), 1)
+            return partialResult + wrappedLineCount
+        }
+        return CGFloat(max(lineCount, 1)) * Layout.estimatedLineHeight
     }
 
     private static func resolvedWidth(_ width: CGFloat) -> CGFloat {

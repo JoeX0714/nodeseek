@@ -176,6 +176,30 @@ struct PostDetailViewControllerTests {
         #expect(layout.height >= DetailTableLayout.imageHeight + 42)
     }
 
+    @Test func tableNodeExpandsHeightForExplicitTextLines() {
+        let singleLineTable = RenderedTableBlock(rows: [
+            .init(cells: [
+                .init(text: "第一行 第二行 第三行", isHeader: false)
+            ], isHeader: false)
+        ])
+        let multiLineTable = RenderedTableBlock(rows: [
+            .init(cells: [
+                .init(text: "第一行\n第二行\n第三行", isHeader: false)
+            ], isHeader: false)
+        ])
+
+        let singleLineHeight = DetailTableLayout.measure(
+            table: singleLineTable,
+            constrainedSize: CGSize(width: 320, height: CGFloat.greatestFiniteMagnitude)
+        ).height
+        let multiLineHeight = DetailTableLayout.measure(
+            table: multiLineTable,
+            constrainedSize: CGSize(width: 320, height: CGFloat.greatestFiniteMagnitude)
+        ).height
+
+        #expect(multiLineHeight > singleLineHeight)
+    }
+
     @Test func richTextNodeKeepsMeasuredHeightStableAfterNormalImageLoads() throws {
         let imageURL = try #require(URL(string: "https://i.111666.best/image/network.webp"))
         let blocks = DTCoreTextHTMLContentRenderer().render(
