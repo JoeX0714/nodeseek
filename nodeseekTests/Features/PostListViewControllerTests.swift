@@ -28,6 +28,8 @@ struct PostListViewControllerTests {
         #expect(button.bounds.height >= 42)
         #expect(button.bounds.width >= 56)
         #expect(button.bounds.width <= 60)
+        #expect(button.alpha < 1)
+        #expect(button.alpha >= 0.5)
         #expect(button.frame.maxX > viewController.view.bounds.maxX)
         #expect(button.frame.maxY < viewController.view.bounds.maxY - 50)
         #expect(button.titleLabel?.font.pointSize ?? 0 >= 13)
@@ -43,11 +45,16 @@ struct PostListViewControllerTests {
 
         #expect(presenter.toggleSortCount == 1)
         #expect(button.title(for: .normal) == "按回复时间排序")
-        #expect(button.bounds.width >= 140)
+        #expect(button.alpha == 1)
+        #expect(button.bounds.width >= 168)
+        #expect(button.configuration?.titleTextAttributesTransformer != nil)
+        #expect(button.intrinsicContentSize.width <= button.bounds.width)
         #expect(abs(button.frame.maxX - viewController.view.bounds.maxX) < 0.5)
 
         viewController.renderSortMode(.postTime)
         #expect(button.title(for: .normal) == "按发帖时间排序")
+        #expect(button.bounds.width >= 168)
+        #expect(button.intrinsicContentSize.width <= button.bounds.width)
     }
 
     @Test func topNavigationUsesDenseReadingTabStyle() throws {
