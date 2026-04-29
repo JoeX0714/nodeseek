@@ -353,7 +353,7 @@ struct PostDetailViewControllerTests {
     @Test func richTextNodeKeepsMeasuredHeightStableAfterNormalImageLoads() throws {
         let imageURL = try #require(URL(string: "https://i.111666.best/image/network.webp"))
         let blocks = DTCoreTextHTMLContentRenderer().render(
-            fragment: "<p><img src=\"\(imageURL.absoluteString)\" alt=\"image\"></p><p>正文</p>",
+            fragment: "<p>配图<img src=\"\(imageURL.absoluteString)\" alt=\"image\">正文</p>",
             baseURL: URL(string: "https://www.nodeseek.com")!,
             maxImageWidth: 320
         )
@@ -381,6 +381,21 @@ struct PostDetailViewControllerTests {
 
         #expect(didUpdate)
         #expect(updatedHeight == initialHeight)
+    }
+
+    @Test func imageBlockUsesStablePlaceholderHeightForNormalImages() {
+        let initialLayout = DetailImageBlockLayout.measure(
+            originalSize: .zero,
+            constrainedSize: CGSize(width: 320, height: CGFloat.greatestFiniteMagnitude)
+        )
+        let loadedLayout = DetailImageBlockLayout.measure(
+            originalSize: CGSize(width: 1200, height: 800),
+            constrainedSize: CGSize(width: 320, height: CGFloat.greatestFiniteMagnitude)
+        )
+
+        #expect(initialLayout.width == 320)
+        #expect(initialLayout.height == 160)
+        #expect(loadedLayout == initialLayout)
     }
 
     @Test func richTextNodeUsesDTCoreTextHeightForFixture() throws {

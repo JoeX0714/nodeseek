@@ -102,6 +102,7 @@ struct DTCoreTextHTMLContentRenderer {
     ) -> [RenderedContentBlock] {
         let needsStructuredParsing = fragment.range(of: "<table", options: [.caseInsensitive]) != nil
             || fragment.range(of: "<pre", options: [.caseInsensitive]) != nil
+            || fragment.range(of: "<img", options: [.caseInsensitive]) != nil
         guard needsStructuredParsing else {
             return renderTextBlocks(fragment: fragment, baseURL: baseURL, maxImageWidth: maxImageWidth)
         }
@@ -164,6 +165,17 @@ struct DTCoreTextHTMLContentRenderer {
             if let codeBlock = codeBlock(from: node) {
                 blocks.append(.codeBlock(codeBlock))
             }
+            return
+        }
+
+        if let imageBlocks = standaloneImageBlocks(from: node, baseURL: baseURL) {
+            flushPendingHTML(
+                &pendingHTML,
+                into: &blocks,
+                baseURL: baseURL,
+                maxImageWidth: maxImageWidth
+            )
+            blocks.append(contentsOf: imageBlocks.map(RenderedContentBlock.image))
             return
         }
 
@@ -345,6 +357,39 @@ struct DTCoreTextHTMLContentRenderer {
         return decoded.replacingOccurrences(of: "__NODESEEK_CELL_LINE_BREAK__", with: "\n")
     }
 
+    private func standaloneImageBlocks(from node: XMLElement, baseURL: URL) -> [RenderedImageBlock]? {
+        guard isStandaloneImageContainer(node) else { return nil }
+        let imageBlocks = node.css("img").compactMap { imageNode -> RenderedImageBlock? in
+            guard let source = imageNode["src"],
+                  let url = AvatarImageLoader.resolveImageURL(source, baseURL: baseURL) else {
+                return nil
+            }
+            guard isStickerImageURL(url) == false else { return nil }
+            let altText = imageNode["alt"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return RenderedImageBlock(
+                url: url,
+                altText: altText?.isEmpty == false ? altText : nil
+            )
+        }
+        let imageCount = node.css("img").count
+        return imageBlocks.count == imageCount && imageBlocks.isEmpty == false ? imageBlocks : nil
+    }
+
+    private func isStandaloneImageContainer(_ node: XMLElement) -> Bool {
+        let tag = tagName(of: node)
+        guard tag == "p" || tag == "div" || tag == "section" || tag == "article" else { return false }
+        guard node.at_css("img") != nil else { return false }
+        let html = node.innerHTML ?? node.text ?? ""
+        let withoutIgnorable = html
+            .replacingOccurrences(of: "(?is)<(script|style)\\b[^>]*>.*?</\\1>", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "(?is)<img\\b[^>]*>", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "(?i)<br\\s*/?>", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "&nbsp;", with: " ", options: [.caseInsensitive])
+            .replacingOccurrences(of: "&#160;", with: " ", options: [.caseInsensitive])
+        let stripped = withoutIgnorable.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+        return decodedHTMLEntities(in: stripped).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private func imageURL(from node: XMLElement, baseURL: URL) -> URL? {
         guard let source = node.at_css("img")?["src"] else { return nil }
         return AvatarImageLoader.resolveImageURL(source, baseURL: baseURL)
@@ -355,7 +400,7 @@ struct DTCoreTextHTMLContentRenderer {
     }
 
     private func containsStructuredElement(_ node: XMLElement) -> Bool {
-        containsTableElement(node) || containsPreElement(node)
+        containsTableElement(node) || containsPreElement(node) || containsStandaloneImageContainer(node)
     }
 
     private func isTableElement(_ node: XMLElement) -> Bool {
@@ -368,6 +413,10 @@ struct DTCoreTextHTMLContentRenderer {
 
     private func isPreElement(_ node: XMLElement) -> Bool {
         tagName(of: node) == "pre"
+    }
+
+    private func containsStandaloneImageContainer(_ node: XMLElement) -> Bool {
+        isStandaloneImageContainer(node) || node.css("p, div, section, article").contains(where: isStandaloneImageContainer)
     }
 
     private func isTableCellElement(_ node: XMLElement) -> Bool {

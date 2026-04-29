@@ -682,6 +682,35 @@ struct DTCoreTextHTMLContentRendererTests {
         #expect(attachmentDisplaySizes.allSatisfy { $0.width > 0 && $0.height > 0 })
     }
 
+    @Test func splitsStandaloneImageParagraphIntoImageBlocks() throws {
+        let renderer = DTCoreTextHTMLContentRenderer()
+        let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
+        let blocks = renderer.render(
+            fragment: """
+            <article class="post-content"><p><img src="https://img.imgdd.com/859a2738-af24-4c00-85c3-149ea7ea3fd8.jpg" alt="1000512053.jpg" class=""><br>
+            <img src="https://img.imgdd.com/988d4da2-a819-4e98-a294-25e7365b47dd.jpg" alt="1000512054.jpg" class=""></p>
+            <p><span class="emoji">😓</span>说好的睁一只眼闭一只眼呢 越活越回去了</p>
+            </article>
+            """,
+            baseURL: baseURL,
+            maxImageWidth: 320
+        )
+
+        #expect(blocks.count == 3)
+        guard case .image(let firstImage) = blocks[0],
+              case .image(let secondImage) = blocks[1],
+              case .text(let text) = blocks[2] else {
+            Issue.record("Expected image/image/text block order")
+            return
+        }
+
+        #expect(firstImage.url.absoluteString == "https://img.imgdd.com/859a2738-af24-4c00-85c3-149ea7ea3fd8.jpg")
+        #expect(firstImage.altText == "1000512053.jpg")
+        #expect(secondImage.url.absoluteString == "https://img.imgdd.com/988d4da2-a819-4e98-a294-25e7365b47dd.jpg")
+        #expect(secondImage.altText == "1000512054.jpg")
+        #expect(text.string.contains("😓说好的睁一只眼闭一只眼呢"))
+    }
+
     @MainActor
     @Test func wrapsLongPreformattedLinesToAvailableWidth() throws {
         let renderer = DTCoreTextHTMLContentRenderer()
