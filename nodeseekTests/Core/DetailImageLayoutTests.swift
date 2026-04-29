@@ -74,4 +74,36 @@ struct DetailImageLayoutTests {
         #expect(presentation.mode == .aspectFit)
         #expect(presentation.targetPointSide == 320)
     }
+
+    @Test func fixedNormalImageAllowsInlineAnimation() {
+        #expect(DetailImageLayout.allowsInlineAnimation(
+            for: CGSize(width: 1200, height: 800),
+            maxWidth: 320,
+            isSticker: false
+        ))
+    }
+
+    @Test func containedImageDoesNotAllowInlineAnimation() {
+        #expect(DetailImageLayout.allowsInlineAnimation(
+            for: CGSize(width: 800, height: 2000),
+            maxWidth: 320,
+            isSticker: false
+        ) == false)
+    }
+
+    @Test func stickerAllowsInlineAnimation() {
+        #expect(DetailImageLayout.allowsInlineAnimation(
+            for: CGSize(width: 65, height: 65),
+            maxWidth: 320,
+            isSticker: true
+        ))
+    }
+
+    @Test func stickerAllowsInlineAnimationBeforeOriginalSizeIsKnown() {
+        #expect(DetailImageLayout.allowsInlineAnimation(
+            for: .zero,
+            maxWidth: 320,
+            isSticker: true
+        ))
+    }
 }
