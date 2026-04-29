@@ -8,6 +8,7 @@
 import UIKit
 import AsyncDisplayKit
 import DTCoreText
+import Kingfisher
 import OSLog
 import SafariServices
 import WebKit
@@ -1096,6 +1097,10 @@ final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextCon
                 originalSize: attachment.originalSize
             ) * displayScale,
             displayScale: displayScale,
+            allowsInlineAnimation: allowsInlineAnimation(
+                for: contentURL,
+                originalSize: attachment.originalSize
+            ),
             onImageLoaded: { [weak self] loadedURL, imageSize in
                 self?.handleLoadedImage(loadedURL, imageSize: imageSize)
             },
@@ -1268,6 +1273,16 @@ final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextCon
         ).targetPointSide
     }
 
+    private func allowsInlineAnimation(for url: URL, originalSize: CGSize) -> Bool {
+        let isSticker = isStickerImageURL(url)
+        guard isSticker || (originalSize.width > 0 && originalSize.height > 0) else { return false }
+        return DetailImageLayout.allowsInlineAnimation(
+            for: originalSize,
+            maxWidth: maxImageWidth(for: url),
+            isSticker: isSticker
+        )
+    }
+
     private func contentMode(for url: URL, originalSize: CGSize) -> UIView.ContentMode {
         let mode = DetailImageLayout.presentation(
             for: originalSize,
@@ -1372,12 +1387,13 @@ private final class DetailLinkOverlayButton: UIButton {
     }
 }
 
-final class DetailInlineImageView: UIImageView {
+final class DetailInlineImageView: AnimatedImageView {
     private static let logger = Logger(subsystem: "com.nodeseek.app", category: "DetailInlineImageView")
 
     private let imageURL: URL
     private let targetPixelWidth: CGFloat
     private let displayScale: CGFloat
+    private let allowsInlineAnimation: Bool
     private let onImageLoaded: (URL, CGSize) -> Void
     private let onImageTapped: (URL) -> Void
     private var loadToken: UUID?
@@ -1388,15 +1404,21 @@ final class DetailInlineImageView: UIImageView {
         imageURL: URL,
         targetPixelWidth: CGFloat,
         displayScale: CGFloat,
+        allowsInlineAnimation: Bool,
         onImageLoaded: @escaping (URL, CGSize) -> Void,
         onImageTapped: @escaping (URL) -> Void
     ) {
         self.imageURL = imageURL
         self.targetPixelWidth = targetPixelWidth
         self.displayScale = displayScale
+        self.allowsInlineAnimation = allowsInlineAnimation
         self.onImageLoaded = onImageLoaded
         self.onImageTapped = onImageTapped
         super.init(frame: frame)
+        autoPlayAnimatedImage = true
+        framePreloadCount = 6
+        needsPrescaling = true
+        purgeFramesOnBackground = true
         isUserInteractionEnabled = true
         addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(handleTap)))
     }
@@ -1411,6 +1433,8 @@ final class DetailInlineImageView: UIImageView {
         guard superview != nil else {
             logDiagnostics("removed url=\(imageURL.absoluteString) frame=\(Self.string(from: frame))")
             loadToken = nil
+            kf.cancelDownloadTask()
+            purgeFrames()
             return
         }
         guard loadToken == nil else { return }
@@ -1420,6 +1444,12 @@ final class DetailInlineImageView: UIImageView {
         logDiagnostics(
             "startLoad url=\(imageURL.absoluteString) frame=\(Self.string(from: frame)) targetPixelWidth=\(Self.numberString(targetPixelWidth)) displayScale=\(Self.numberString(displayScale))"
         )
+
+        if shouldUseAnimatedInlineLoader {
+            loadAnimatedImage(token: token)
+            return
+        }
+
         DetailImageLoader.shared.loadImageForInline(
             imageURL,
             maxPixelWidth: targetPixelWidth,
@@ -1436,6 +1466,42 @@ final class DetailInlineImageView: UIImageView {
                 } else {
                     self.logDiagnostics("loaded nil url=\(self.imageURL.absoluteString)")
                 }
+            }
+        }
+    }
+
+    private var shouldUseAnimatedInlineLoader: Bool {
+        allowsInlineAnimation && imageURL.pathExtension.lowercased() == "gif"
+    }
+
+    private func loadAnimatedImage(token: UUID) {
+        guard let resolvedURL = AvatarImageLoader.resolveImageURL(imageURL) else {
+            logDiagnostics("animatedLoad invalidURL url=\(imageURL.absoluteString)")
+            return
+        }
+
+        logDiagnostics("animatedLoad start url=\(resolvedURL.absoluteString)")
+        kf.setImage(
+            with: resolvedURL,
+            options: [
+                .requestModifier(AnyModifier { request in
+                    var modifiedRequest = request
+                    WebRequestFingerprint.applyImageHeaders(to: &modifiedRequest)
+                    return modifiedRequest
+                })
+            ]
+        ) { [weak self] result in
+            guard let self, self.loadToken == token else { return }
+            switch result {
+            case .success(let value):
+                self.logDiagnostics(
+                    "animatedLoad loaded url=\(resolvedURL.absoluteString) imageSize=\(Self.string(from: value.image.size)) frame=\(Self.string(from: self.frame))"
+                )
+                self.onImageLoaded(self.imageURL, value.image.size)
+            case .failure(let error):
+                self.logDiagnostics(
+                    "animatedLoad failed url=\(resolvedURL.absoluteString) error=\(error.localizedDescription)"
+                )
             }
         }
     }

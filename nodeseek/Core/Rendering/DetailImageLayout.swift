@@ -103,4 +103,20 @@ enum DetailImageLayout {
             mode: .aspectFit
         )
     }
+
+    static func allowsInlineAnimation(
+        for originalSize: CGSize,
+        maxWidth: CGFloat,
+        isSticker: Bool
+    ) -> Bool {
+        if isSticker {
+            return true
+        }
+
+        return presentation(
+            for: originalSize,
+            maxWidth: maxWidth,
+            isSticker: false
+        ).mode == .thumbnailCrop
+    }
 }
