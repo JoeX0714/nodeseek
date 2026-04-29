@@ -33,6 +33,13 @@ class AccountPresenter: AccountPresenterProtocol {
         view?.showLoading()
         interactor.loadAccount()
     }
+    
+    func didTapLogin() {
+        router.navigateToLogin { [weak self] in
+            self?.view?.showLoading()
+            self?.interactor.loadAccount()
+        }
+    }
 }
 
 // MARK: - Interactor Output

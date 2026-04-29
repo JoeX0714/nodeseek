@@ -19,6 +19,7 @@ protocol AccountViewProtocol: AnyObject {
 // MARK: - Presenter Protocol (View -> Presenter)
 protocol AccountPresenterProtocol: AnyObject {
     func viewDidLoad()
+    func didTapLogin()
 }
 
 // MARK: - Interactor Input (Presenter -> Interactor)
@@ -34,4 +35,5 @@ protocol AccountInteractorOutput: AnyObject {
 
 // MARK: - Router Protocol (Presenter -> Router)
 protocol AccountRouterProtocol: AnyObject {
+    func navigateToLogin(onClose: @escaping @MainActor () -> Void)
 }
