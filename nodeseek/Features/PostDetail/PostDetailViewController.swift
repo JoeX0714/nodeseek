@@ -41,6 +41,10 @@ enum PostDetailLinkResolver {
             return .safari(resolvedURL)
         }
 
+        if let jumpURL = decodedExternalJumpURL(from: resolvedURL) {
+            return .safari(jumpURL)
+        }
+
         if let anchorID = normalizedAnchorID(from: resolvedURL),
            resolvedURL.path.isEmpty || resolvedURL.path == "/" {
             return .currentPageAnchor(anchorID)
@@ -73,6 +77,24 @@ enum PostDetailLinkResolver {
             return nil
         }
         return fragment.hasPrefix("#") ? String(fragment.dropFirst()) : fragment
+    }
+
+    private static func decodedExternalJumpURL(from url: URL) -> URL? {
+        guard url.path == "/jump",
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let rawTarget = components.queryItems?.first(where: { $0.name == "to" })?.value?
+                  .trimmingCharacters(in: .whitespacesAndNewlines),
+              rawTarget.isEmpty == false,
+              let targetURL = URL(string: rawTarget),
+              isHTTPURL(targetURL) else {
+            return nil
+        }
+        return targetURL
+    }
+
+    private static func isHTTPURL(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased() else { return false }
+        return scheme == "http" || scheme == "https"
     }
 
     private static func isNodeSeekHost(_ url: URL) -> Bool {
@@ -572,7 +594,7 @@ extension PostDetailViewController: PostDetailViewProtocol {
     }
 }
 
-private final class CookieSharedWebViewController: UIViewController, WKNavigationDelegate {
+private final class CookieSharedWebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
     private let url: URL
     private let webView: WKWebView
     private let cookieBridge: CookieBridge
@@ -595,6 +617,11 @@ private final class CookieSharedWebViewController: UIViewController, WKNavigatio
         fatalError("init(coder:) has not been implemented")
     }
 
+    deinit {
+        webView.navigationDelegate = nil
+        webView.uiDelegate = nil
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
@@ -602,6 +629,7 @@ private final class CookieSharedWebViewController: UIViewController, WKNavigatio
         configureNavigationItems()
 
         webView.navigationDelegate = self
+        webView.uiDelegate = self
         webView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(webView)
 
@@ -667,8 +695,35 @@ private final class CookieSharedWebViewController: UIViewController, WKNavigatio
         UIApplication.shared.open(currentPageURL(), options: [:], completionHandler: nil)
     }
 
+    private func openInSafariViewController(_ url: URL) {
+        present(SFSafariViewController(url: url), animated: true)
+    }
+
+    private func handleExternalNavigationIfNeeded(_ url: URL) -> Bool {
+        guard case .safari(let safariURL) = PostDetailLinkResolver.destination(for: url, baseURL: self.url) else {
+            return false
+        }
+        openInSafariViewController(safariURL)
+        return true
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         loadingIndicator.stopAnimating()
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
+    ) {
+        if navigationAction.navigationType == .linkActivated,
+           let url = navigationAction.request.url,
+           handleExternalNavigationIfNeeded(url) {
+            decisionHandler(.cancel)
+            return
+        }
+
+        decisionHandler(.allow)
     }
 
     func webView(
@@ -685,6 +740,91 @@ private final class CookieSharedWebViewController: UIViewController, WKNavigatio
         withError error: Error
     ) {
         loadingIndicator.stopAnimating()
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        createWebViewWith configuration: WKWebViewConfiguration,
+        for navigationAction: WKNavigationAction,
+        windowFeatures: WKWindowFeatures
+    ) -> WKWebView? {
+        guard navigationAction.targetFrame == nil else { return nil }
+        guard let targetURL = navigationAction.request.url else { return nil }
+
+        if handleExternalNavigationIfNeeded(targetURL) {
+            return nil
+        }
+
+        webView.load(navigationAction.request)
+        return nil
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptAlertPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping () -> Void
+    ) {
+        guard view.window != nil else {
+            completionHandler()
+            return
+        }
+
+        let alert = UIAlertController(title: webDialogTitle(from: frame), message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "确定", style: .default) { _ in
+            completionHandler()
+        })
+        present(alert, animated: true)
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptConfirmPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping (Bool) -> Void
+    ) {
+        guard view.window != nil else {
+            completionHandler(false)
+            return
+        }
+
+        let alert = UIAlertController(title: webDialogTitle(from: frame), message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel) { _ in
+            completionHandler(false)
+        })
+        alert.addAction(UIAlertAction(title: "确定", style: .default) { _ in
+            completionHandler(true)
+        })
+        present(alert, animated: true)
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptTextInputPanelWithPrompt prompt: String,
+        defaultText: String?,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping (String?) -> Void
+    ) {
+        guard view.window != nil else {
+            completionHandler(nil)
+            return
+        }
+
+        let alert = UIAlertController(title: webDialogTitle(from: frame), message: prompt, preferredStyle: .alert)
+        alert.addTextField { textField in
+            textField.text = defaultText
+        }
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel) { _ in
+            completionHandler(nil)
+        })
+        alert.addAction(UIAlertAction(title: "确定", style: .default) { [weak alert] _ in
+            completionHandler(alert?.textFields?.first?.text)
+        })
+        present(alert, animated: true)
+    }
+
+    private func webDialogTitle(from frame: WKFrameInfo) -> String {
+        frame.request.url?.host ?? "网页"
     }
 }
 
@@ -823,7 +963,15 @@ private final class PostDetailHeaderView: UIView {
 
     func configure(_ content: PostDetailHeaderContent, attributedContent: NSAttributedString?) {
         titleLabel.text = content.title
-        subtitleLabel.text = [content.authorName, content.metadataText].compactMap(\.self).joined(separator: " · ")
+        subtitleLabel.text = [
+            AuthorDisplayPolicy.displayName(from: content.authorName),
+            content.metadataText?.trimmingCharacters(in: .whitespacesAndNewlines)
+        ]
+            .compactMap { value in
+                guard let value, !value.isEmpty else { return nil }
+                return value
+            }
+            .joined(separator: " · ")
         contentView.configure(
             attributedContent,
             onImageTapped: onImageTapped,
@@ -831,7 +979,14 @@ private final class PostDetailHeaderView: UIView {
         )
         contentView.isHidden = attributedContent == nil
         contentTopConstraint?.constant = attributedContent == nil ? 0 : 16
-        avatarLoader.loadAvatar(into: avatarImageView, postID: content.postID, avatarURL: content.avatarURL)
+        let shouldShowAvatar = AuthorDisplayPolicy.isDisplayable(content.authorName)
+        avatarImageView.isHidden = !shouldShowAvatar
+        if shouldShowAvatar {
+            avatarLoader.loadAvatar(into: avatarImageView, postID: content.postID, avatarURL: content.avatarURL)
+        } else {
+            avatarLoader.cancel(on: avatarImageView)
+            avatarImageView.image = nil
+        }
     }
 
     private func setupUI() {
@@ -936,6 +1091,7 @@ private final class PostDetailCommentCell: UITableViewCell {
         super.prepareForReuse()
         avatarLoader.cancel(on: avatarImageView)
         avatarImageView.image = nil
+        avatarImageView.isHidden = false
         metaLabel.text = nil
         bodyView.configure(nil, onImageTapped: nil, onLayoutInvalidated: nil)
         onImageTapped = nil
@@ -945,15 +1101,26 @@ private final class PostDetailCommentCell: UITableViewCell {
     func configure(comment: Comment, attributedBody: NSAttributedString?) {
         metaLabel.text = [
             comment.floorText,
-            comment.authorName,
+            AuthorDisplayPolicy.displayName(from: comment.authorName),
             comment.createdAtText
-        ].compactMap(\.self).joined(separator: " · ")
+        ].compactMap { value in
+            value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
         bodyView.configure(
             attributedBody,
             onImageTapped: onImageTapped,
             onLayoutInvalidated: onTextLayoutInvalidated
         )
-        avatarLoader.loadAvatar(into: avatarImageView, postID: comment.id, avatarURL: comment.avatarURL)
+        let shouldShowAvatar = AuthorDisplayPolicy.isDisplayable(comment.authorName)
+        avatarImageView.isHidden = !shouldShowAvatar
+        if shouldShowAvatar {
+            avatarLoader.loadAvatar(into: avatarImageView, postID: comment.id, avatarURL: comment.avatarURL)
+        } else {
+            avatarLoader.cancel(on: avatarImageView)
+            avatarImageView.image = nil
+        }
     }
 
     private func setupUI() {

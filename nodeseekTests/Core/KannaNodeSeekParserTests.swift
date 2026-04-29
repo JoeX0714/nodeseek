@@ -100,6 +100,33 @@ struct KannaNodeSeekParserTests {
         #expect(post.avatarURL == nil)
     }
 
+    @Test func parsesMissingPostListAuthorAsEmpty() throws {
+        let html = """
+        <ul class="post-list">
+            <li class="post-list-item">
+                <div class="post-list-content">
+                    <div role="heading" aria-level="3" class="post-title">
+                        <a href="/post-789-1">缺少作者的帖子</a>
+                    </div>
+                    <div class="post-info">
+                        <span class="info-item info-views"><span title="45 views">45</span></span>
+                        <span title="3 comments" class="info-item info-comments-count"><span title="4 comments">3</span></span>
+                        <a href="/post-789-1#3" class="info-item info-last-comment-time">
+                            <time title="2026-04-29 13:46:24">32s ago</time>
+                        </a>
+                    </div>
+                </div>
+            </li>
+        </ul>
+        """
+        let parser = KannaNodeSeekParser(baseURL: URL(string: "https://www.nodeseek.com")!)
+
+        let post = try #require(try parser.parsePostList(html: html).first)
+
+        #expect(post.authorName.isEmpty)
+        #expect(post.avatarURL == nil)
+    }
+
     @Test func parsesPinnedPostListItemFromTitleIcon() throws {
         let html = """
         <ul class="post-list">

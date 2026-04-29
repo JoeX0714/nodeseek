@@ -22,11 +22,12 @@ final class CommentCellNode: ASCellNode {
         static let headerSpacing: CGFloat = 5
         static let bodySpacing: CGFloat = 10
 
-        static func textColumnWidth(for maxWidth: CGFloat) -> CGFloat? {
+        static func textColumnWidth(for maxWidth: CGFloat, includingAvatar: Bool) -> CGFloat? {
             guard maxWidth.isFinite, maxWidth > 0 else { return nil }
-            let chromeWidth = PostDetailContentLayout.horizontalInset * 2
-                + PostDetailContentLayout.avatarSize
-                + PostDetailContentLayout.avatarSpacing
+            let avatarWidth = includingAvatar
+                ? PostDetailContentLayout.avatarSize + PostDetailContentLayout.avatarSpacing
+                : 0
+            let chromeWidth = PostDetailContentLayout.horizontalInset * 2 + avatarWidth
             return max(maxWidth - chromeWidth, 1)
         }
     }
@@ -38,6 +39,9 @@ final class CommentCellNode: ASCellNode {
     private let avatarLoader = AvatarImageLoader.shared
     private weak var avatarImageView: UIImageView?
     private var hasRequestedAvatar = false
+    private var hasDisplayableAuthor: Bool {
+        AuthorDisplayPolicy.isDisplayable(comment.authorName)
+    }
 
     private let authorNode = ASTextNode()
     private let timeNode = ASTextNode()
@@ -112,16 +116,30 @@ final class CommentCellNode: ASCellNode {
         let identityStack = ASStackLayoutSpec.horizontal()
         identityStack.spacing = Layout.headerSpacing
         identityStack.alignItems = .center
-        identityStack.children = [authorNode, timeNode]
+        var identityChildren: [ASLayoutElement] = []
+        if hasDisplayableAuthor {
+            identityChildren.append(authorNode)
+        }
+        if comment.createdAtText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+            identityChildren.append(timeNode)
+        }
+        identityStack.children = identityChildren
         identityStack.style.flexGrow = 1
         identityStack.style.flexShrink = 1
 
         let headerStack = ASStackLayoutSpec.horizontal()
         headerStack.alignItems = .start
         headerStack.justifyContent = .spaceBetween
-        headerStack.children = [identityStack, floorNode]
+        var headerChildren: [ASLayoutElement] = []
+        if identityChildren.isEmpty == false {
+            headerChildren.append(identityStack)
+        }
+        if comment.floorText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+            headerChildren.append(floorNode)
+        }
+        headerStack.children = headerChildren
 
-        var textChildren: [ASLayoutElement] = [headerStack]
+        var textChildren: [ASLayoutElement] = headerChildren.isEmpty ? [] : [headerStack]
         for bodyNode in bodyNodes {
             textChildren.append(bodyNode)
         }
@@ -131,14 +149,17 @@ final class CommentCellNode: ASCellNode {
         textStack.children = textChildren
         textStack.style.flexGrow = 1
         textStack.style.flexShrink = 1
-        if let textColumnWidth = Layout.textColumnWidth(for: constrainedSize.max.width) {
+        if let textColumnWidth = Layout.textColumnWidth(
+            for: constrainedSize.max.width,
+            includingAvatar: hasDisplayableAuthor
+        ) {
             textStack.style.width = ASDimension(unit: .points, value: textColumnWidth)
         }
 
         let contentStack = ASStackLayoutSpec.horizontal()
         contentStack.spacing = PostDetailContentLayout.avatarSpacing
         contentStack.alignItems = .start
-        contentStack.children = [avatarNode, textStack]
+        contentStack.children = hasDisplayableAuthor ? [avatarNode, textStack] : [textStack]
 
         let rowContent = ASInsetLayoutSpec(
             insets: UIEdgeInsets(
@@ -159,7 +180,7 @@ final class CommentCellNode: ASCellNode {
         authorNode.maximumNumberOfLines = 1
         authorNode.truncationMode = .byTruncatingTail
         authorNode.attributedText = NSAttributedString(
-            string: comment.authorName,
+            string: AuthorDisplayPolicy.displayName(from: comment.authorName) ?? "",
             attributes: [
                 .font: UIFont.preferredFont(forTextStyle: .headline),
                 .foregroundColor: UIColor.label
@@ -169,7 +190,7 @@ final class CommentCellNode: ASCellNode {
         timeNode.maximumNumberOfLines = 1
         timeNode.truncationMode = .byTruncatingTail
         timeNode.attributedText = NSAttributedString(
-            string: comment.createdAtText ?? "",
+            string: comment.createdAtText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
             attributes: [
                 .font: UIFont.preferredFont(forTextStyle: .subheadline),
                 .foregroundColor: UIColor.secondaryLabel
@@ -178,7 +199,7 @@ final class CommentCellNode: ASCellNode {
 
         floorNode.maximumNumberOfLines = 1
         floorNode.attributedText = NSAttributedString(
-            string: comment.floorText ?? "",
+            string: comment.floorText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
             attributes: [
                 .font: UIFont.preferredFont(forTextStyle: .subheadline),
                 .foregroundColor: UIColor.tertiaryLabel
@@ -187,6 +208,7 @@ final class CommentCellNode: ASCellNode {
     }
 
     private func requestAvatarIfNeeded() {
+        guard hasDisplayableAuthor else { return }
         guard !hasRequestedAvatar else { return }
         guard let avatarImageView else { return }
         hasRequestedAvatar = true

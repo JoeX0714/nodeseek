@@ -337,6 +337,19 @@ struct PostDetailViewControllerTests {
         #expect(resolvedURL.absoluteString == "https://example.com/path")
     }
 
+    @Test func resolvesNodeSeekJumpExternalLinksToSafari() throws {
+        let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
+        let url = try #require(URL(string: "/jump?to=https%3A%2F%2Fshop.023168.xyz%2F", relativeTo: baseURL)?.absoluteURL)
+
+        let destination = try #require(PostDetailLinkResolver.destination(for: url, baseURL: baseURL))
+
+        guard case .safari(let resolvedURL) = destination else {
+            Issue.record("Expected decoded jump destination to open in Safari")
+            return
+        }
+        #expect(resolvedURL.absoluteString == "https://shop.023168.xyz/")
+    }
+
     @Test func richTextNodeKeepsMeasuredHeightStableAfterNormalImageLoads() throws {
         let imageURL = try #require(URL(string: "https://i.111666.best/image/network.webp"))
         let blocks = DTCoreTextHTMLContentRenderer().render(

@@ -20,6 +20,9 @@ final class PostSummaryCellNode: ASCellNode {
     private let post: PostSummary
     private let avatarLoader = AvatarImageLoader.shared
     private var hasRequestedAvatar = false
+    private var hasDisplayableAuthor: Bool {
+        AuthorDisplayPolicy.isDisplayable(post.authorName)
+    }
 
     private lazy var avatarNode: ASDisplayNode = {
         let node = ASDisplayNode(viewBlock: { [weak self] in
@@ -81,7 +84,7 @@ final class PostSummaryCellNode: ASCellNode {
         let contentStack = ASStackLayoutSpec.horizontal()
         contentStack.spacing = Layout.horizontalSpacing
         contentStack.alignItems = .start
-        contentStack.children = [avatarNode, textStack]
+        contentStack.children = hasDisplayableAuthor ? [avatarNode, textStack] : [textStack]
 
         return ASInsetLayoutSpec(insets: Layout.contentInset, child: contentStack)
     }
@@ -97,6 +100,7 @@ final class PostSummaryCellNode: ASCellNode {
     }
 
     private func requestAvatarIfNeeded() {
+        guard hasDisplayableAuthor else { return }
         guard !hasRequestedAvatar else { return }
         guard let avatarImageView else { return }
         hasRequestedAvatar = true
@@ -121,8 +125,10 @@ final class PostSummaryCellNode: ASCellNode {
             metadata.append(NSAttributedString(string: "  ", attributes: attributes))
         }
 
-        appendSeparatorIfNeeded()
-        metadata.append(NSAttributedString(string: post.authorName, attributes: attributes))
+        if let authorName = AuthorDisplayPolicy.displayName(from: post.authorName) {
+            appendSeparatorIfNeeded()
+            metadata.append(NSAttributedString(string: authorName, attributes: attributes))
+        }
 
         appendSeparatorIfNeeded()
         metadata.append(metricAttributedText(

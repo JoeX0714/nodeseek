@@ -33,6 +33,27 @@ struct PostSummaryCellNodeTests {
         #expect(!text.contains(" · "))
     }
 
+    @Test func metadataTextOmitsMissingAuthorFallback() {
+        let post = PostSummary(
+            id: "4",
+            title: "缺少作者",
+            url: URL(string: "https://www.nodeseek.com/post-4")!,
+            authorName: "未知用户",
+            nodeName: "NodeSeek",
+            replyCount: 2,
+            viewCount: 10,
+            lastActivityText: "1min ago"
+        )
+
+        let text = PostSummaryCellNode.metadataAttributedText(for: post).string
+
+        #expect(!text.contains("未知用户"))
+        #expect(text.contains("10"))
+        #expect(text.contains("2"))
+        #expect(text.contains("1min ago"))
+        #expect(!text.hasPrefix("  "))
+    }
+
     @Test func postSummaryCellUsesDenseReadingListTypography() throws {
         let post = PostSummary(
             id: "2",

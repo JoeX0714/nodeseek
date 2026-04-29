@@ -29,6 +29,9 @@ final class PostBodyCellNode: ASCellNode {
     private let avatarLoader = AvatarImageLoader.shared
     private weak var avatarImageView: UIImageView?
     private var hasRequestedAvatar = false
+    private var hasDisplayableAuthor: Bool {
+        AuthorDisplayPolicy.isDisplayable(content.authorName)
+    }
 
     private let titleNode = ASTextNode()
     private let subtitleNode = ASTextNode()
@@ -98,11 +101,11 @@ final class PostBodyCellNode: ASCellNode {
         let authorStack = ASStackLayoutSpec.horizontal()
         authorStack.spacing = PostDetailContentLayout.avatarSpacing
         authorStack.alignItems = .center
-        authorStack.children = [avatarNode, subtitleNode]
+        authorStack.children = hasDisplayableAuthor ? [avatarNode, subtitleNode] : [subtitleNode]
 
         let stack = ASStackLayoutSpec.vertical()
         stack.spacing = Layout.verticalSpacing
-        stack.children = [titleNode, authorStack]
+        stack.children = Self.subtitleText(for: content).isEmpty ? [titleNode] : [titleNode, authorStack]
 
         if bodyNodes.isEmpty == false {
             let contentStack = ASStackLayoutSpec.vertical()
@@ -127,7 +130,7 @@ final class PostBodyCellNode: ASCellNode {
 
         subtitleNode.maximumNumberOfLines = 0
         subtitleNode.attributedText = NSAttributedString(
-            string: [content.authorName, content.metadataText].compactMap(\.self).joined(separator: " · "),
+            string: Self.subtitleText(for: content),
             attributes: [
                 .font: UIFont.preferredFont(forTextStyle: .subheadline),
                 .foregroundColor: UIColor.secondaryLabel
@@ -136,6 +139,7 @@ final class PostBodyCellNode: ASCellNode {
     }
 
     private func requestAvatarIfNeeded() {
+        guard hasDisplayableAuthor else { return }
         guard !hasRequestedAvatar else { return }
         guard let avatarImageView else { return }
         hasRequestedAvatar = true
@@ -145,6 +149,18 @@ final class PostBodyCellNode: ASCellNode {
     private func cancelAvatarLoad() {
         guard let avatarImageView else { return }
         avatarLoader.cancel(on: avatarImageView)
+    }
+
+    private static func subtitleText(for content: PostDetailHeaderContent) -> String {
+        [
+            AuthorDisplayPolicy.displayName(from: content.authorName),
+            content.metadataText?.trimmingCharacters(in: .whitespacesAndNewlines)
+        ]
+            .compactMap { value in
+                guard let value, !value.isEmpty else { return nil }
+                return value
+            }
+            .joined(separator: " · ")
     }
 }
 
