@@ -11,6 +11,7 @@ import UIKit
 // MARK: - View Protocol (Presenter -> View)
 protocol PostDetailViewProtocol: AnyObject {
     func showLoading()
+    func showPageLoading()
     func hideLoading()
     func showError(message: String)
     func render(detail: PostDetail)
@@ -21,11 +22,13 @@ protocol PostDetailViewProtocol: AnyObject {
 protocol PostDetailPresenterProtocol: AnyObject {
     func viewDidLoad()
     func didTapLogin()
+    func didSelectPage(_ page: Int)
 }
 
 // MARK: - Interactor Input (Presenter -> Interactor)
 protocol PostDetailInteractorInput: AnyObject {
     func loadPostDetail()
+    func loadPostDetail(page: Int)
 }
 
 // MARK: - Interactor Output (Interactor -> Presenter)

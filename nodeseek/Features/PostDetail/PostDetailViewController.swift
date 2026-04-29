@@ -85,6 +85,7 @@ class PostDetailViewController: UIViewController {
 
     private enum DisplayMode {
         case content
+        case pageSkeleton
         case skeleton
     }
 
@@ -94,8 +95,9 @@ class PostDetailViewController: UIViewController {
 
     private let presenter: PostDetailPresenterProtocol
     private let baseURL = URL(string: "https://www.nodeseek.com")!
-    private let currentPage: Int
+    private var currentPage: Int
     private var currentHeaderContent: PostDetailHeaderContent?
+    private var pagination: PostDetailPagination?
     private var headerRenderedContent: [RenderedContentBlock]?
     private var comments: [Comment] = []
     private var commentRenderedCache: [String: [RenderedContentBlock]] = [:]
@@ -109,6 +111,10 @@ class PostDetailViewController: UIViewController {
     private var pendingReloadIndexPaths: Set<IndexPath> = []
     private var displayMode: DisplayMode = .skeleton
     private var hasRenderedDetailContent = false
+    private var pageLoadingTargetPage: Int?
+    #if DEBUG
+    private var pendingScrollToRow: Int?
+    #endif
     private let skeletonCommentRowCount = 4
     private let renderQueue = DispatchQueue(
         label: "com.nodeseek.app.postdetail.render",
@@ -116,6 +122,13 @@ class PostDetailViewController: UIViewController {
     )
 
     private let tableNode = ASTableNode(style: .plain)
+
+    private enum DetailRow {
+        case header
+        case postRepliesDivider
+        case comment(Int)
+        case skeletonComment(Int)
+    }
 
     private let loadingIndicator: UIActivityIndicatorView = {
         let indicator = UIActivityIndicatorView(style: .medium)
@@ -139,6 +152,15 @@ class PostDetailViewController: UIViewController {
         button.isHidden = true
         button.translatesAutoresizingMaskIntoConstraints = false
         return button
+    }()
+
+    private lazy var pageScrubberView: PageScrubberView = {
+        let view = PageScrubberView()
+        view.onPageSelected = { [weak self] page in
+            self?.pageLoadingTargetPage = page
+            self?.presenter.didSelectPage(page)
+        }
+        return view
     }()
 
     init(
@@ -205,6 +227,7 @@ class PostDetailViewController: UIViewController {
         tableNode.view.translatesAutoresizingMaskIntoConstraints = false
 
         view.addSubview(tableNode.view)
+        view.addSubview(pageScrubberView)
         view.addSubview(loadingIndicator)
         loginButton.addTarget(self, action: #selector(loginButtonTapped), for: .touchUpInside)
         view.addSubview(loginButton)
@@ -215,6 +238,10 @@ class PostDetailViewController: UIViewController {
             tableNode.view.topAnchor.constraint(equalTo: view.topAnchor),
             tableNode.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
+            pageScrubberView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: 12),
+            pageScrubberView.topAnchor.constraint(equalTo: view.topAnchor),
+            pageScrubberView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
             loadingIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             loadingIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor),
 
@@ -223,6 +250,7 @@ class PostDetailViewController: UIViewController {
         ])
 
         reloadTableData()
+        updatePageScrubber(isLoading: false)
     }
 
     private func configureHeader(_ content: PostDetailHeaderContent, renderedContent: [RenderedContentBlock]?) {
@@ -240,13 +268,19 @@ class PostDetailViewController: UIViewController {
     private func scheduleHeaderReload() {
         guard currentHeaderContent != nil else { return }
         guard displayMode == .content else { return }
-        scheduleRowsReload([IndexPath(row: 0, section: 0)])
+        guard let row = detailRows.firstIndex(where: { if case .header = $0 { return true }; return false }) else { return }
+        scheduleRowsReload([IndexPath(row: row, section: 0)])
     }
 
     private func scheduleCommentReload(commentID: String) {
-        let headerRowCount = currentHeaderContent == nil ? 0 : 1
         guard let commentIndex = comments.firstIndex(where: { $0.id == commentID }) else { return }
-        scheduleRowsReload([IndexPath(row: headerRowCount + commentIndex, section: 0)])
+        guard let row = detailRows.firstIndex(where: {
+            if case .comment(let index) = $0 {
+                return index == commentIndex
+            }
+            return false
+        }) else { return }
+        scheduleRowsReload([IndexPath(row: row, section: 0)])
     }
 
     private func scheduleRowsReload(_ indexPaths: [IndexPath]) {
@@ -279,7 +313,7 @@ class PostDetailViewController: UIViewController {
     }
 
     private func hideLoadingSkeleton() {
-        guard displayMode == .skeleton else { return }
+        guard displayMode != .content else { return }
         displayMode = .content
         reloadTableData()
     }
@@ -414,14 +448,19 @@ class PostDetailViewController: UIViewController {
     private func scrollToCurrentPageAnchor(_ anchorID: String) {
         guard displayMode == .content else { return }
 
-        let headerRowCount = currentHeaderContent == nil ? 0 : 1
         let indexPath: IndexPath
-        if (anchorID == "0" || anchorID == "1"), currentHeaderContent != nil {
-            indexPath = IndexPath(row: 0, section: 0)
+        if (anchorID == "0" || anchorID == "1"), currentHeaderContent != nil,
+           let row = detailRows.firstIndex(where: { if case .header = $0 { return true }; return false }) {
+            indexPath = IndexPath(row: row, section: 0)
         } else if let commentIndex = comments.firstIndex(where: { comment in
             comment.anchorID == anchorID || comment.floorText == "#\(anchorID)"
+        }), let row = detailRows.firstIndex(where: {
+            if case .comment(let index) = $0 {
+                return index == commentIndex
+            }
+            return false
         }) {
-            indexPath = IndexPath(row: headerRowCount + commentIndex, section: 0)
+            indexPath = IndexPath(row: row, section: 0)
         } else {
             return
         }
@@ -449,12 +488,11 @@ class PostDetailViewController: UIViewController {
     }
 
     private func resolvedDetailURL() -> URL? {
-        if let sourcePostURL {
-            return sourcePostURL
+        if let postID = currentHeaderContent?.postID, postID.isEmpty == false {
+            return URL(string: "https://www.nodeseek.com/post-\(postID)-\(currentPage)")
         }
 
-        guard let postID = currentHeaderContent?.postID, postID.isEmpty == false else { return nil }
-        return URL(string: "https://www.nodeseek.com/post-\(postID)-1")
+        return sourcePostURL
     }
 
     private func isNodeSeekHost(_ url: URL) -> Bool {
@@ -504,6 +542,76 @@ class PostDetailViewController: UIViewController {
             }
         }
     }
+
+    private var visiblePagination: PostDetailPagination? {
+        guard let pagination, pagination.hasMultiplePages else { return nil }
+        return pagination
+    }
+
+    private var detailRows: [DetailRow] {
+        var rows: [DetailRow] = []
+        if currentHeaderContent != nil {
+            rows.append(.header)
+            if displayMode == .pageSkeleton || comments.isEmpty == false {
+                rows.append(.postRepliesDivider)
+            }
+        }
+        if displayMode == .pageSkeleton {
+            rows.append(contentsOf: (0..<skeletonCommentRowCount).map(DetailRow.skeletonComment))
+        } else {
+            rows.append(contentsOf: comments.indices.map(DetailRow.comment))
+        }
+        return rows
+    }
+
+    private func updatePageScrubber(isLoading: Bool, currentPageOverride: Int? = nil) {
+        guard isViewLoaded else { return }
+        guard let pagination = visiblePagination else {
+            pageScrubberView.configure(currentPage: currentPage, totalPages: 1, isLoading: false)
+            return
+        }
+        pageScrubberView.configure(
+            currentPage: currentPageOverride ?? pagination.currentPage,
+            totalPages: totalPageCount(from: pagination),
+            isLoading: isLoading
+        )
+    }
+
+    private func totalPageCount(from pagination: PostDetailPagination) -> Int {
+        let itemPages = pagination.items.map(\.page)
+        let candidatePages = itemPages + [pagination.currentPage, pagination.previousPage, pagination.nextPage].compactMap { $0 }
+        return max(candidatePages.max() ?? pagination.currentPage, pagination.currentPage)
+    }
+
+    private func pageCompletionScrollRow() -> Int {
+        let rows = detailRows
+        if let commentRow = rows.firstIndex(where: { row in
+            if case .comment = row {
+                return true
+            }
+            return false
+        }) {
+            return commentRow
+        }
+        return rows.firstIndex(where: { if case .header = $0 { return true }; return false }) ?? 0
+    }
+
+    private func fallbackPagination(from pagination: PostDetailPagination?, currentPage: Int) -> PostDetailPagination? {
+        guard let pagination else { return nil }
+        let normalizedPage = max(1, currentPage)
+        let items = pagination.items.map { item in
+            PostDetailPageItem(page: item.page, url: item.url, isCurrent: item.page == normalizedPage)
+        }
+        let pages = items.map(\.page).sorted()
+        let previousPage = pages.last { $0 < normalizedPage }
+        let nextPage = pages.first { $0 > normalizedPage }
+        return PostDetailPagination(
+            currentPage: normalizedPage,
+            items: items,
+            previousPage: previousPage,
+            nextPage: nextPage
+        )
+    }
 }
 
 extension PostDetailViewController: PostDetailViewProtocol {
@@ -517,6 +625,18 @@ extension PostDetailViewController: PostDetailViewProtocol {
         }
     }
 
+    func showPageLoading() {
+        loginButton.isHidden = true
+        loadingIndicator.stopAnimating()
+        guard hasRenderedDetailContent, currentHeaderContent != nil else {
+            showLoading()
+            return
+        }
+        displayMode = .pageSkeleton
+        updatePageScrubber(isLoading: true, currentPageOverride: pageLoadingTargetPage)
+        reloadTableData()
+    }
+
     func hideLoading() {
         loadingIndicator.stopAnimating()
     }
@@ -524,6 +644,8 @@ extension PostDetailViewController: PostDetailViewProtocol {
     func showError(message: String) {
         hideLoadingSkeleton()
         let alert = UIAlertController(title: "错误", message: message, preferredStyle: .alert)
+        pageLoadingTargetPage = nil
+        updatePageScrubber(isLoading: false)
         alert.addAction(UIAlertAction(title: "确定", style: .default))
         present(alert, animated: true)
     }
@@ -531,17 +653,44 @@ extension PostDetailViewController: PostDetailViewProtocol {
     func render(detail: PostDetail) {
         title = "详情"
         loginButton.isHidden = true
+        let shouldScrollToTop = hasRenderedDetailContent && detail.page != currentPage
+        let existingHeaderContent = currentHeaderContent
+        let existingRenderedContent = headerRenderedContent
+        let shouldPreserveHeader = hasRenderedDetailContent
+            && detail.page != 1
+            && existingHeaderContent?.postID == detail.id
+            && existingHeaderContent?.contentHTML.isEmpty == false
+        currentPage = max(1, detail.page)
+        pageLoadingTargetPage = nil
         renderGeneration += 1
         hasRenderedDetailContent = true
         displayMode = .content
-        let headerContent = PostDetailHeaderContent(detail: detail)
-        configureHeader(headerContent, renderedContent: nil)
+        let headerContent = shouldPreserveHeader ? existingHeaderContent! : PostDetailHeaderContent(detail: detail)
+        configureHeader(headerContent, renderedContent: shouldPreserveHeader ? existingRenderedContent : nil)
+        pagination = detail.pagination ?? (shouldPreserveHeader ? fallbackPagination(from: pagination, currentPage: detail.page) : nil)
         comments = detail.comments
         commentRenderedCache.removeAll(keepingCapacity: true)
         renderedCommentIDs.removeAll(keepingCapacity: true)
         commentRenderInFlight.removeAll(keepingCapacity: true)
+        updatePageScrubber(isLoading: false)
         reloadTableData()
-        scheduleHeaderRender(for: headerContent)
+        if shouldScrollToTop {
+            let targetRow = pageCompletionScrollRow()
+            #if DEBUG
+            pendingScrollToRow = targetRow
+            #endif
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.tableNode.scrollToRow(
+                    at: IndexPath(row: targetRow, section: 0),
+                    at: .top,
+                    animated: false
+                )
+            }
+        }
+        if shouldPreserveHeader == false || existingRenderedContent == nil {
+            scheduleHeaderRender(for: headerContent)
+        }
         preheatCommentRender(for: comments)
     }
 
@@ -562,10 +711,12 @@ extension PostDetailViewController: PostDetailViewProtocol {
             contentHTML: message
         )
         configureHeader(headerContent, renderedContent: nil)
+        pagination = nil
         comments = []
         commentRenderedCache.removeAll(keepingCapacity: true)
         renderedCommentIDs.removeAll(keepingCapacity: true)
         commentRenderInFlight.removeAll(keepingCapacity: true)
+        updatePageScrubber(isLoading: false)
         reloadTableData()
         scheduleHeaderRender(for: headerContent)
     }
@@ -692,7 +843,7 @@ extension PostDetailViewController: ASTableDataSource, ASTableDelegate {
         if displayMode == .skeleton {
             return 1 + skeletonCommentRowCount
         }
-        return (currentHeaderContent == nil ? 0 : 1) + comments.count
+        return detailRows.count
     }
 
     func tableNode(_ tableNode: ASTableNode, nodeBlockForRowAt indexPath: IndexPath) -> ASCellNodeBlock {
@@ -703,8 +854,16 @@ extension PostDetailViewController: ASTableDataSource, ASTableDelegate {
             }
         }
 
-        let headerRowCount = currentHeaderContent == nil ? 0 : 1
-        if indexPath.row == 0, let header = currentHeaderContent {
+        let rows = detailRows
+        guard rows.indices.contains(indexPath.row) else {
+            return { ASCellNode() }
+        }
+
+        switch rows[indexPath.row] {
+        case .header:
+            guard let header = currentHeaderContent else {
+                return { ASCellNode() }
+            }
             let renderedContent = headerRenderedContent
             return { [weak self] in
                 PostBodyCellNode(
@@ -721,39 +880,71 @@ extension PostDetailViewController: ASTableDataSource, ASTableDelegate {
                     }
                 )
             }
-        }
+        case .postRepliesDivider:
+            return {
+                PostRepliesDividerCellNode()
+            }
+        case .skeletonComment(_):
+            return {
+                PostDetailSkeletonCellNode(kind: .comment)
+            }
+        case .comment(let commentIndex):
+            guard comments.indices.contains(commentIndex) else {
+                return { ASCellNode() }
+            }
 
-        let commentIndex = indexPath.row - headerRowCount
-        guard comments.indices.contains(commentIndex) else {
-            return { ASCellNode() }
-        }
-
-        let comment = comments[commentIndex]
-        let renderedBody = commentRenderedCache[comment.id]
-        return { [weak self] in
-            CommentCellNode(
-                comment: comment,
-                renderedBody: renderedBody,
-                onImageTapped: { imageURLs, initialIndex in
-                    self?.presentPhotoBrowser(imageURLs: imageURLs, initialIndex: initialIndex)
-                },
-                onLinkTapped: { url in
-                    self?.handleContentLinkTap(url)
-                },
-                onTextLayoutInvalidated: {
-                    self?.scheduleAttachmentLayoutRefresh()
-                }
-            )
+            let comment = comments[commentIndex]
+            let renderedBody = commentRenderedCache[comment.id]
+            return { [weak self] in
+                CommentCellNode(
+                    comment: comment,
+                    renderedBody: renderedBody,
+                    onImageTapped: { imageURLs, initialIndex in
+                        self?.presentPhotoBrowser(imageURLs: imageURLs, initialIndex: initialIndex)
+                    },
+                    onLinkTapped: { url in
+                        self?.handleContentLinkTap(url)
+                    },
+                    onTextLayoutInvalidated: {
+                        self?.scheduleAttachmentLayoutRefresh()
+                    }
+                )
+            }
         }
     }
 
     func tableNode(_ tableNode: ASTableNode, willDisplayRowWith node: ASCellNode) {
         guard displayMode == .content else { return }
-        let headerRowCount = currentHeaderContent == nil ? 0 : 1
-        guard let indexPath = tableNode.indexPath(for: node), indexPath.row >= headerRowCount else { return }
-        let commentIndex = indexPath.row - headerRowCount
+        guard let indexPath = tableNode.indexPath(for: node) else { return }
+        let rows = detailRows
+        guard rows.indices.contains(indexPath.row),
+              case .comment(let commentIndex) = rows[indexPath.row] else { return }
         guard comments.indices.contains(commentIndex) else { return }
         scheduleCommentRenderIfNeeded(for: comments[commentIndex])
+    }
+}
+
+private final class PostRepliesDividerCellNode: ASCellNode {
+    private enum Layout {
+        static let height: CGFloat = 8
+    }
+
+    private let dividerNode = ASDisplayNode()
+
+    override init() {
+        super.init()
+        automaticallyManagesSubnodes = true
+        selectionStyle = .none
+        backgroundColor = .systemBackground
+        dividerNode.backgroundColor = .secondarySystemBackground
+    }
+
+    override func layoutSpecThatFits(_ constrainedSize: ASSizeRange) -> ASLayoutSpec {
+        dividerNode.style.height = ASDimension(unit: .points, value: Layout.height)
+        if constrainedSize.max.width.isFinite {
+            dividerNode.style.width = ASDimension(unit: .points, value: constrainedSize.max.width)
+        }
+        return ASInsetLayoutSpec(insets: .zero, child: dividerNode)
     }
 }
 

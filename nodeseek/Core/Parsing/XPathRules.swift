@@ -30,8 +30,12 @@ enum XPathRules {
     static let fallbackLastActive = ".//time"
 
     static let postDetailTitle = "//*[contains(@class, 'post-title')]//a[contains(@class, 'post-title-link')] | //*[contains(@class, 'post-title')]//h1"
-    static let postDetailBodyItem = "//*[contains(@class, 'nsk-post')]//*[contains(@class, 'content-item')][1]"
+    static let postDetailBodyItem = "//*[contains(@class, 'nsk-post')]//*[contains(@class, 'content-item') and not(ancestor::ul[contains(@class, 'comments')])][1]"
     static let postDetailComments = "//ul[contains(@class, 'comments')]/li[contains(@class, 'content-item')]"
+    static let postDetailPagination = "//*[contains(@class, 'post-top-pager') or contains(@class, 'post-bottom-pager')][1]"
+    static let pagerPositionItems = ".//*[contains(@class, 'pager-pos')]"
+    static let pagerPrevious = ".//*[contains(@class, 'pager-prev') and not(@aria-disabled='true')]"
+    static let pagerNext = ".//*[contains(@class, 'pager-next') and not(@aria-disabled='true')]"
     static let contentAuthor = ".//*[contains(@class, 'author-name')]"
     static let contentCreatedAt = ".//*[contains(@class, 'date-created')]//time"
     static let contentCategory = ".//*[contains(@class, 'content-category')]//a"
