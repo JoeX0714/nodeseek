@@ -1,0 +1,69 @@
+//
+//  LoginWebViewControllerTests.swift
+//  nodeseekTests
+//
+
+import Testing
+import UIKit
+@testable import nodeseek
+
+@MainActor
+struct LoginWebViewControllerTests {
+    @Test func showsHintAndCloseButton() throws {
+        let synchronizer = SpyLoginCookieSynchronizer()
+        let viewController = LoginWebViewController(cookieSynchronizer: synchronizer)
+
+        viewController.loadViewIfNeeded()
+
+        let hintLabel = try #require(viewController.view.firstLabel(text: "登录成功后关闭当前页面即可"))
+        #expect(hintLabel.numberOfLines == 0)
+        #expect(viewController.navigationItem.rightBarButtonItem?.accessibilityLabel == "关闭登录页")
+    }
+
+    @Test func closeSyncsCookiesAndCallsCompletion() async throws {
+        let synchronizer = SpyLoginCookieSynchronizer()
+        var closeCount = 0
+        let viewController = LoginWebViewController(cookieSynchronizer: synchronizer) {
+            closeCount += 1
+        }
+        viewController.loadViewIfNeeded()
+
+        let closeButton = try #require(viewController.navigationItem.rightBarButtonItem)
+        let action = try #require(closeButton.action)
+        _ = (closeButton.target as AnyObject).perform(action)
+        try await Task.sleep(nanoseconds: 120_000_000)
+
+        #expect(synchronizer.syncWebToURLSessionCount == 1)
+        #expect(closeCount == 1)
+    }
+}
+
+@MainActor
+private final class SpyLoginCookieSynchronizer: LoginCookieSynchronizing {
+    private(set) var syncURLSessionToWebCount = 0
+    private(set) var syncWebToURLSessionCount = 0
+
+    func syncURLSessionCookiesToWebView() async {
+        syncURLSessionToWebCount += 1
+    }
+
+    func syncWebViewCookiesToURLSession() async {
+        syncWebToURLSessionCount += 1
+    }
+}
+
+private extension UIView {
+    func firstLabel(text: String) -> UILabel? {
+        if let label = self as? UILabel, label.text == text {
+            return label
+        }
+
+        for subview in subviews {
+            if let matched = subview.firstLabel(text: text) {
+                return matched
+            }
+        }
+
+        return nil
+    }
+}
