@@ -12,6 +12,77 @@ import UIKit
 @testable import nodeseek
 
 struct DTCoreTextHTMLContentRendererTests {
+    @Test func rendersTableAsSeparateBlockBetweenTextBlocks() throws {
+        let renderer = DTCoreTextHTMLContentRenderer()
+        let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
+        let blocks = renderer.render(
+            fragment: """
+            <p>before</p>
+            <table>
+              <thead><tr><th>Plan</th><th>Price</th></tr></thead>
+              <tbody><tr><td>Starter</td><td>$5</td></tr></tbody>
+            </table>
+            <p>after</p>
+            """,
+            baseURL: baseURL,
+            maxImageWidth: 320
+        )
+
+        #expect(blocks.count == 3)
+
+        guard case .text(let beforeText) = blocks[0] else {
+            Issue.record("Expected leading text block")
+            return
+        }
+        #expect(beforeText.string.contains("before"))
+
+        guard case .table(let table) = blocks[1] else {
+            Issue.record("Expected table block")
+            return
+        }
+        #expect(table.rows.count == 2)
+        #expect(table.rows[0].isHeader)
+        #expect(table.rows[0].cells.map(\.text) == ["Plan", "Price"])
+        #expect(table.rows[1].cells.map(\.text) == ["Starter", "$5"])
+
+        guard case .text(let afterText) = blocks[2] else {
+            Issue.record("Expected trailing text block")
+            return
+        }
+        #expect(afterText.string.contains("after"))
+    }
+
+    @Test func rendersImageOnlyTableCells() throws {
+        let renderer = DTCoreTextHTMLContentRenderer()
+        let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
+        let blocks = renderer.render(
+            fragment: """
+            <table>
+            <thead><tr><th>IPv4测试结果</th><th>IPv6测试结果</th></tr></thead>
+            <tbody>
+            <tr>
+            <td><img src="https://github.com/xykt/NetQuality/raw/main/res/v4_cn.png" alt="IPv4"></td>
+            <td><img src="https://github.com/xykt/NetQuality/raw/main/res/v6_cn.png" alt="IPv6"></td>
+            </tr>
+            </tbody>
+            </table>
+            """,
+            baseURL: baseURL,
+            maxImageWidth: 320
+        )
+
+        let table = try #require(blocks.compactMap { block -> RenderedTableBlock? in
+            guard case .table(let table) = block else { return nil }
+            return table
+        }.first)
+
+        #expect(table.rows.count == 2)
+        #expect(table.rows[1].cells.count == 2)
+        #expect(table.rows[1].cells[0].text.isEmpty)
+        #expect(table.rows[1].cells[0].imageURL?.absoluteString == "https://github.com/xykt/NetQuality/raw/main/res/v4_cn.png")
+        #expect(table.rows[1].cells[1].imageURL?.absoluteString == "https://github.com/xykt/NetQuality/raw/main/res/v6_cn.png")
+    }
+
     @Test func rendersLinkAsAbsoluteURL() throws {
         let renderer = DTCoreTextHTMLContentRenderer()
         let baseURL = try #require(URL(string: "https://www.nodeseek.com"))

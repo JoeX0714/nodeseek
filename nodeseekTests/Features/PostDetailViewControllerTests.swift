@@ -112,9 +112,10 @@ struct PostDetailViewControllerTests {
         try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 let attributedText = NSAttributedString(string: "正文")
+                let renderedContent: [RenderedContentBlock] = [.text(attributedText)]
                 _ = PostBodyCellNode(
                     content: header,
-                    attributedContent: attributedText,
+                    renderedContent: renderedContent,
                     onImageTapped: { _, _ in },
                     onTextLayoutInvalidated: {}
                 ).layoutThatFits(ASSizeRange(
@@ -123,7 +124,7 @@ struct PostDetailViewControllerTests {
                 ))
                 _ = CommentCellNode(
                     comment: comment,
-                    attributedBody: attributedText,
+                    renderedBody: renderedContent,
                     onImageTapped: { _, _ in },
                     onTextLayoutInvalidated: {}
                 ).layoutThatFits(ASSizeRange(
@@ -133,6 +134,46 @@ struct PostDetailViewControllerTests {
                 continuation.resume()
             }
         }
+    }
+
+    @Test func tableNodeKeepsViewportWidthAndMeasuresContentHeight() {
+        let table = RenderedTableBlock(rows: [
+            .init(cells: [
+                .init(text: "Plan", isHeader: true),
+                .init(text: "A very long column header", isHeader: true)
+            ], isHeader: true),
+            .init(cells: [
+                .init(text: "Starter", isHeader: false),
+                .init(text: "Enough content to require a real row height", isHeader: false)
+            ], isHeader: false)
+        ])
+        let node = DetailTableNode(table: table, onImageTapped: { _, _ in })
+        let layout = node.layoutThatFits(ASSizeRange(
+            min: .zero,
+            max: CGSize(width: 320, height: CGFloat.greatestFiniteMagnitude)
+        ))
+
+        #expect(layout.size.width == 320)
+        #expect(layout.size.height > 0)
+    }
+
+    @Test func tableNodeAllocatesStableHeightForImageCells() throws {
+        let imageURL = try #require(URL(string: "https://github.com/xykt/NetQuality/raw/main/res/v4_cn.png"))
+        let table = RenderedTableBlock(rows: [
+            .init(cells: [
+                .init(text: "IPv4测试结果", isHeader: true)
+            ], isHeader: true),
+            .init(cells: [
+                .init(text: "", imageURL: imageURL, isHeader: false)
+            ], isHeader: false)
+        ])
+        let layout = DetailTableLayout.measure(
+            table: table,
+            constrainedSize: CGSize(width: 320, height: CGFloat.greatestFiniteMagnitude)
+        )
+
+        #expect(layout.width == 320)
+        #expect(layout.height >= DetailTableLayout.imageHeight + 42)
     }
 
     @Test func richTextNodeKeepsMeasuredHeightStableAfterNormalImageLoads() throws {
@@ -168,7 +209,7 @@ struct PostDetailViewControllerTests {
         #expect(updatedHeight == initialHeight)
     }
 
-    @Test func richTextNodeMeasuresFixtureWithDTCoreTextHeight() throws {
+    @Test func richTextNodeUsesDTCoreTextHeightForFixture() throws {
         let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
         let html = try FixtureLoader.html(named: "post-705039-1")
         let detail = try KannaNodeSeekParser(baseURL: baseURL).parsePostDetail(
@@ -200,7 +241,22 @@ struct PostDetailViewControllerTests {
         ))
         let expectedHeight = ceil(layoutFrame.frame.maxY)
 
-        #expect(layout.size.height >= expectedHeight)
+        #expect(layout.size.height == expectedHeight)
+    }
+
+    @Test func richTextNodePrefersDTCoreTextHeightWhenBoundingHeightIsLarger() {
+        let height = DetailRichTextNode.resolvedMeasuredHeight(
+            dtCoreTextHeight: 120,
+            boundingHeight: 300
+        )
+
+        #expect(height == 120)
+    }
+
+    @Test func richTextNodeUsesDefaultWidthForUnboundedMeasurement() {
+        let width = DetailRichTextNode.resolvedMeasureWidth(.infinity)
+
+        #expect(width == 320)
     }
 }
 

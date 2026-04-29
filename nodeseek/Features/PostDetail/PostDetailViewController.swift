@@ -28,9 +28,9 @@ class PostDetailViewController: UIViewController {
     private let presenter: PostDetailPresenterProtocol
     private let baseURL = URL(string: "https://www.nodeseek.com")!
     private var currentHeaderContent: PostDetailHeaderContent?
-    private var headerAttributedContent: NSAttributedString?
+    private var headerRenderedContent: [RenderedContentBlock]?
     private var comments: [Comment] = []
-    private var commentAttributedCache: [String: NSAttributedString] = [:]
+    private var commentRenderedCache: [String: [RenderedContentBlock]] = [:]
     private var renderedCommentIDs: Set<String> = []
     private var commentRenderInFlight: Set<String> = []
     private var renderGeneration: Int = 0
@@ -67,7 +67,7 @@ class PostDetailViewController: UIViewController {
 
         if let initialHeader {
             currentHeaderContent = initialHeader
-            headerAttributedContent = nil
+            headerRenderedContent = nil
             scheduleHeaderRender(for: initialHeader)
         }
     }
@@ -133,9 +133,9 @@ class PostDetailViewController: UIViewController {
         reloadTableData()
     }
 
-    private func configureHeader(_ content: PostDetailHeaderContent, attributedContent: NSAttributedString?) {
+    private func configureHeader(_ content: PostDetailHeaderContent, renderedContent: [RenderedContentBlock]?) {
         currentHeaderContent = content
-        headerAttributedContent = attributedContent
+        headerRenderedContent = renderedContent
     }
 
     private func reloadTableData() {
@@ -198,7 +198,7 @@ class PostDetailViewController: UIViewController {
         let width = availableHeaderContentWidth
         let baseURL = baseURL
         renderQueue.async { [weak self] in
-            let attributed = Self.makeAttributedText(
+            let renderedContent = Self.makeRenderedContent(
                 html: html,
                 baseURL: baseURL,
                 maxImageWidth: width
@@ -207,33 +207,19 @@ class PostDetailViewController: UIViewController {
                 guard let self else { return }
                 guard self.renderGeneration == generation else { return }
                 guard self.currentHeaderContent?.postID == content.postID else { return }
-                self.configureHeader(content, attributedContent: attributed)
+                self.configureHeader(content, renderedContent: renderedContent)
                 self.scheduleHeaderReload()
             }
         }
     }
 
-    private static func makeAttributedText(
+    private static func makeRenderedContent(
         html: String,
         baseURL: URL,
         maxImageWidth: CGFloat
-    ) -> NSAttributedString? {
+    ) -> [RenderedContentBlock]? {
         let blocks = DTCoreTextHTMLContentRenderer().render(fragment: html, baseURL: baseURL, maxImageWidth: maxImageWidth)
-        guard blocks.isEmpty == false else { return nil }
-
-        let result = NSMutableAttributedString()
-        for block in blocks {
-            switch block {
-            case .text(let attributedText):
-                result.append(attributedText)
-            case .imagePlaceholder(let url):
-                result.append(NSAttributedString(string: url?.absoluteString ?? "[图片]"))
-            case .unsupported(let reason):
-                result.append(NSAttributedString(string: reason))
-            }
-        }
-
-        return result.length > 0 ? result : nil
+        return blocks.isEmpty ? nil : blocks
     }
 
     private var availableHeaderContentWidth: CGFloat {
@@ -334,7 +320,7 @@ class PostDetailViewController: UIViewController {
         let width = availableCommentContentWidth
         let baseURL = baseURL
         renderQueue.async { [weak self] in
-            let attributed = Self.makeAttributedText(
+            let renderedContent = Self.makeRenderedContent(
                 html: html,
                 baseURL: baseURL,
                 maxImageWidth: width
@@ -344,10 +330,10 @@ class PostDetailViewController: UIViewController {
                 guard self.renderGeneration == generation else { return }
                 self.commentRenderInFlight.remove(commentID)
                 self.renderedCommentIDs.insert(commentID)
-                if let attributed {
-                    self.commentAttributedCache[commentID] = attributed
+                if let renderedContent {
+                    self.commentRenderedCache[commentID] = renderedContent
                 } else {
-                    self.commentAttributedCache.removeValue(forKey: commentID)
+                    self.commentRenderedCache.removeValue(forKey: commentID)
                 }
                 self.scheduleCommentReload(commentID: commentID)
             }
@@ -382,9 +368,9 @@ extension PostDetailViewController: PostDetailViewProtocol {
         hasRenderedDetailContent = true
         displayMode = .content
         let headerContent = PostDetailHeaderContent(detail: detail)
-        configureHeader(headerContent, attributedContent: nil)
+        configureHeader(headerContent, renderedContent: nil)
         comments = detail.comments
-        commentAttributedCache.removeAll(keepingCapacity: true)
+        commentRenderedCache.removeAll(keepingCapacity: true)
         renderedCommentIDs.removeAll(keepingCapacity: true)
         commentRenderInFlight.removeAll(keepingCapacity: true)
         reloadTableData()
@@ -398,7 +384,7 @@ extension PostDetailViewController: PostDetailViewProtocol {
         hasRenderedDetailContent = true
         displayMode = .content
         let existing = currentHeaderContent
-        headerAttributedContent = nil
+        headerRenderedContent = nil
         let headerContent = PostDetailHeaderContent(
             postID: existing?.postID ?? "login-required",
             title: existing?.title ?? "需要登录",
@@ -407,9 +393,9 @@ extension PostDetailViewController: PostDetailViewProtocol {
             metadataText: existing?.metadataText,
             contentHTML: message
         )
-        configureHeader(headerContent, attributedContent: nil)
+        configureHeader(headerContent, renderedContent: nil)
         comments = []
-        commentAttributedCache.removeAll(keepingCapacity: true)
+        commentRenderedCache.removeAll(keepingCapacity: true)
         renderedCommentIDs.removeAll(keepingCapacity: true)
         commentRenderInFlight.removeAll(keepingCapacity: true)
         reloadTableData()
@@ -551,11 +537,11 @@ extension PostDetailViewController: ASTableDataSource, ASTableDelegate {
 
         let headerRowCount = currentHeaderContent == nil ? 0 : 1
         if indexPath.row == 0, let header = currentHeaderContent {
-            let attributedContent = headerAttributedContent
+            let renderedContent = headerRenderedContent
             return { [weak self] in
                 PostBodyCellNode(
                     content: header,
-                    attributedContent: attributedContent,
+                    renderedContent: renderedContent,
                     onImageTapped: { imageURLs, initialIndex in
                         self?.presentPhotoBrowser(imageURLs: imageURLs, initialIndex: initialIndex)
                     },
@@ -572,11 +558,11 @@ extension PostDetailViewController: ASTableDataSource, ASTableDelegate {
         }
 
         let comment = comments[commentIndex]
-        let attributedBody = commentAttributedCache[comment.id]
+        let renderedBody = commentRenderedCache[comment.id]
         return { [weak self] in
             CommentCellNode(
                 comment: comment,
-                attributedBody: attributedBody,
+                renderedBody: renderedBody,
                 onImageTapped: { imageURLs, initialIndex in
                     self?.presentPhotoBrowser(imageURLs: imageURLs, initialIndex: initialIndex)
                 },
