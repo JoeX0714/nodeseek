@@ -8,13 +8,19 @@
 import UIKit
 import AsyncDisplayKit
 import DTCoreText
-import ImageIO
 import OSLog
 import SafariServices
 import WebKit
 import JXPhotoBrowser
 
 class PostDetailViewController: UIViewController {
+    private static let detailRenderLogger = Logger(subsystem: "com.nodeseek.app", category: "DetailRenderPipeline")
+
+    private enum DisplayMode {
+        case content
+        case skeleton
+    }
+
     private enum Layout {
         static let horizontalInset: CGFloat = 20
         static let commentHorizontalInset: CGFloat = 12
@@ -37,6 +43,9 @@ class PostDetailViewController: UIViewController {
     private var attachmentLayoutRefreshWorkItem: DispatchWorkItem?
     private var tableReloadWorkItem: DispatchWorkItem?
     private var pendingReloadIndexPaths: Set<IndexPath> = []
+    private var displayMode: DisplayMode = .skeleton
+    private var hasRenderedDetailContent = false
+    private let skeletonCommentRowCount = 4
     private let renderQueue = DispatchQueue(
         label: "com.nodeseek.app.postdetail.render",
         qos: .userInitiated
@@ -125,9 +134,7 @@ class PostDetailViewController: UIViewController {
             loadingIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor)
         ])
 
-        if currentHeaderContent != nil || comments.isEmpty == false {
-            reloadTableData()
-        }
+        reloadTableData()
     }
 
     private func configureHeader(_ content: PostDetailHeaderContent, attributedContent: NSAttributedString?) {
@@ -144,6 +151,7 @@ class PostDetailViewController: UIViewController {
 
     private func scheduleHeaderReload() {
         guard currentHeaderContent != nil else { return }
+        guard displayMode == .content else { return }
         scheduleRowsReload([IndexPath(row: 0, section: 0)])
     }
 
@@ -173,6 +181,19 @@ class PostDetailViewController: UIViewController {
         }
         tableReloadWorkItem = workItem
         DispatchQueue.main.async(execute: workItem)
+    }
+
+    private func showLoadingSkeletonIfNeeded() {
+        guard hasRenderedDetailContent == false else { return }
+        guard displayMode != .skeleton else { return }
+        displayMode = .skeleton
+        reloadTableData()
+    }
+
+    private func hideLoadingSkeleton() {
+        guard displayMode == .skeleton else { return }
+        displayMode = .content
+        reloadTableData()
     }
 
     private func scheduleHeaderRender(for content: PostDetailHeaderContent) {
@@ -238,9 +259,19 @@ class PostDetailViewController: UIViewController {
         attachmentLayoutRefreshWorkItem?.cancel()
         let workItem = DispatchWorkItem { [weak self] in
             guard let self, self.isViewLoaded else { return }
+            if NodeSeekDebugConfig.enableDetailRenderDiagnostics {
+                let visibleRows = self.tableNode.indexPathsForVisibleRows().map { "\($0.section):\($0.row)" }.joined(separator: ",")
+                Self.detailRenderLogger.info(
+                    "scheduleAttachmentLayoutRefresh fire visible=\(visibleRows, privacy: .public) rows=\(self.tableNode(self.tableNode, numberOfRowsInSection: 0), privacy: .public)"
+                )
+            }
             self.tableNode.relayoutItems()
+            self.tableNode.performBatch(animated: false, updates: {})
         }
         attachmentLayoutRefreshWorkItem = workItem
+        if NodeSeekDebugConfig.enableDetailRenderDiagnostics {
+            Self.detailRenderLogger.info("scheduleAttachmentLayoutRefresh queued")
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: workItem)
     }
 
@@ -331,7 +362,12 @@ class PostDetailViewController: UIViewController {
 
 extension PostDetailViewController: PostDetailViewProtocol {
     func showLoading() {
-        loadingIndicator.startAnimating()
+        if hasRenderedDetailContent {
+            loadingIndicator.startAnimating()
+        } else {
+            loadingIndicator.stopAnimating()
+            showLoadingSkeletonIfNeeded()
+        }
     }
 
     func hideLoading() {
@@ -339,6 +375,7 @@ extension PostDetailViewController: PostDetailViewProtocol {
     }
 
     func showError(message: String) {
+        hideLoadingSkeleton()
         let alert = UIAlertController(title: "错误", message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "确定", style: .default))
         present(alert, animated: true)
@@ -347,6 +384,8 @@ extension PostDetailViewController: PostDetailViewProtocol {
     func render(detail: PostDetail) {
         title = "详情"
         renderGeneration += 1
+        hasRenderedDetailContent = true
+        displayMode = .content
         let headerContent = PostDetailHeaderContent(detail: detail)
         configureHeader(headerContent, attributedContent: nil)
         comments = detail.comments
@@ -361,6 +400,8 @@ extension PostDetailViewController: PostDetailViewProtocol {
     func renderLoginRequired(message: String) {
         title = "详情"
         renderGeneration += 1
+        hasRenderedDetailContent = true
+        displayMode = .content
         let existing = currentHeaderContent
         headerAttributedContent = nil
         let headerContent = PostDetailHeaderContent(
@@ -499,10 +540,20 @@ private final class CookieSharedWebViewController: UIViewController, WKNavigatio
 
 extension PostDetailViewController: ASTableDataSource, ASTableDelegate {
     func tableNode(_ tableNode: ASTableNode, numberOfRowsInSection section: Int) -> Int {
-        (currentHeaderContent == nil ? 0 : 1) + comments.count
+        if displayMode == .skeleton {
+            return 1 + skeletonCommentRowCount
+        }
+        return (currentHeaderContent == nil ? 0 : 1) + comments.count
     }
 
     func tableNode(_ tableNode: ASTableNode, nodeBlockForRowAt indexPath: IndexPath) -> ASCellNodeBlock {
+        if displayMode == .skeleton {
+            let kind: PostDetailSkeletonCellNode.Kind = indexPath.row == 0 ? .header : .comment
+            return {
+                PostDetailSkeletonCellNode(kind: kind)
+            }
+        }
+
         let headerRowCount = currentHeaderContent == nil ? 0 : 1
         if indexPath.row == 0, let header = currentHeaderContent {
             let attributedContent = headerAttributedContent
@@ -542,6 +593,7 @@ extension PostDetailViewController: ASTableDataSource, ASTableDelegate {
     }
 
     func tableNode(_ tableNode: ASTableNode, willDisplayRowWith node: ASCellNode) {
+        guard displayMode == .content else { return }
         let headerRowCount = currentHeaderContent == nil ? 0 : 1
         guard let indexPath = tableNode.indexPath(for: node), indexPath.row >= headerRowCount else { return }
         let commentIndex = indexPath.row - headerRowCount
@@ -783,13 +835,13 @@ private final class PostDetailCommentCell: UITableViewCell {
 }
 
 final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextContentViewDelegate {
-    private enum Layout {
-        static let fixedStickerWidth: CGFloat = 65
-    }
+    private static let logger = Logger(subsystem: "com.nodeseek.app", category: "DetailRichTextView")
 
     private var imageTapHandler: (([URL], Int) -> Void)?
     private var layoutInvalidatedHandler: (() -> Void)?
+    private var attachmentLayoutUpdatedHandler: ((URL, CGSize, CGSize) -> Void)?
     private var lastLayoutWidth: CGFloat = 0
+    private let diagnosticID = String(UUID().uuidString.prefix(8))
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -810,11 +862,16 @@ final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextCon
     func configure(
         _ attributedText: NSAttributedString?,
         onImageTapped: (([URL], Int) -> Void)?,
-        onLayoutInvalidated: (() -> Void)?
+        onLayoutInvalidated: (() -> Void)?,
+        onAttachmentLayoutUpdated: ((URL, CGSize, CGSize) -> Void)? = nil
     ) {
         imageTapHandler = onImageTapped
         layoutInvalidatedHandler = onLayoutInvalidated
+        attachmentLayoutUpdatedHandler = onAttachmentLayoutUpdated
         attributedString = attributedText ?? NSAttributedString()
+        logDiagnostics(
+            "configure length=\(attributedString.length) bounds=\(Self.string(from: bounds.size)) attachments=\(attachmentDiagnostics())"
+        )
         removeAllCustomViews()
         layouter = nil
         relayoutText()
@@ -826,6 +883,7 @@ final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextCon
         let width = bounds.width
         if width > 0, abs(width - lastLayoutWidth) > 0.5 {
             lastLayoutWidth = width
+            logDiagnostics("layoutSubviews widthChanged width=\(Self.numberString(width)) bounds=\(Self.string(from: bounds.size))")
             layouter = nil
             relayoutText()
             invalidateIntrinsicContentSize()
@@ -858,13 +916,17 @@ final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextCon
     ) -> UIView? {
         guard attachment is DTImageTextAttachment,
               let contentURL = attachment.contentURL else {
+            logDiagnostics("viewForAttachment skipped type=\(String(describing: type(of: attachment))) contentURL=\(String(describing: attachment.contentURL)) frame=\(Self.string(from: frame))")
             return nil
         }
 
+        logDiagnostics(
+            "viewForAttachment url=\(contentURL.absoluteString) frame=\(Self.string(from: frame)) original=\(Self.string(from: attachment.originalSize)) display=\(Self.string(from: attachment.displaySize)) bounds=\(Self.string(from: bounds.size))"
+        )
         let imageView = DetailInlineImageView(
             frame: frame,
             imageURL: contentURL,
-            targetPixelWidth: maxImageWidth(for: contentURL) * displayScale,
+            targetPixelWidth: targetImageWidth(for: contentURL) * displayScale,
             displayScale: displayScale,
             onImageLoaded: { [weak self] loadedURL, imageSize in
                 self?.handleLoadedImage(loadedURL, imageSize: imageSize)
@@ -881,28 +943,39 @@ final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextCon
     }
 
     private func handleLoadedImage(_ url: URL, imageSize: CGSize) {
-        guard updateImageAttachments(matching: url, originalSize: imageSize) else {
+        guard let displaySize = updateImageAttachments(matching: url, originalSize: imageSize) else {
+            logDiagnostics(
+                "imageLoaded noAttachmentUpdate url=\(url.absoluteString) imageSize=\(Self.string(from: imageSize)) attachments=\(attachmentDiagnostics())"
+            )
             return
         }
+        logDiagnostics(
+            "imageLoaded updated url=\(url.absoluteString) imageSize=\(Self.string(from: imageSize)) display=\(Self.string(from: displaySize))"
+        )
+        attachmentLayoutUpdatedHandler?(url, imageSize, displaySize)
 
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
+            self.removeAllCustomViews()
             self.layouter = nil
             self.relayoutText()
             self.invalidateIntrinsicContentSize()
+            self.logDiagnostics(
+                "imageLoaded relayout intrinsic=\(Self.string(from: self.intrinsicContentSize)) bounds=\(Self.string(from: self.bounds.size))"
+            )
             self.setNeedsLayout()
             self.layoutInvalidatedHandler?()
         }
     }
 
-    private func updateImageAttachments(matching url: URL, originalSize: CGSize) -> Bool {
+    private func updateImageAttachments(matching url: URL, originalSize: CGSize) -> CGSize? {
         guard attributedString.length > 0,
               originalSize.width > 0,
               originalSize.height > 0 else {
-            return false
+            return nil
         }
 
-        var didUpdate = false
+        var updatedDisplaySize: CGSize?
         attributedString.enumerateAttribute(
             .attachment,
             in: NSRange(location: 0, length: attributedString.length)
@@ -913,16 +986,32 @@ final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextCon
             }
 
             let maxWidth = maxImageWidth(for: url)
-            let displaySize = Self.scaledSize(for: originalSize, maxWidth: maxWidth)
+            let isSticker = isStickerImageURL(url)
+            let displaySize = isSticker
+                ? DetailImageLayout.scaledSize(
+                    for: originalSize,
+                    maxWidth: maxWidth,
+                    maxHeight: nil
+                )
+                : DetailImageLayout.fixedNormalImageSize(maxWidth: maxWidth)
+            if isSticker == false, attachment.displaySize == displaySize {
+                logDiagnostics(
+                    "normal attachment fixed size unchanged url=\(url.absoluteString) imageSize=\(Self.string(from: originalSize)) display=\(Self.string(from: displaySize))"
+                )
+                return
+            }
             guard attachment.originalSize != originalSize || attachment.displaySize != displaySize else {
+                logDiagnostics(
+                    "attachment already current url=\(url.absoluteString) original=\(Self.string(from: originalSize)) display=\(Self.string(from: displaySize))"
+                )
                 return
             }
 
             attachment.originalSize = originalSize
             attachment.displaySize = displaySize
-            didUpdate = true
+            updatedDisplaySize = displaySize
         }
-        return didUpdate
+        return updatedDisplaySize
     }
 
     private func handleImageTap(_ tappedURL: URL) {
@@ -958,7 +1047,14 @@ final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextCon
 
     private func maxImageWidth(for url: URL) -> CGFloat {
         let width = bounds.width > 0 ? bounds.width : 320
-        return isStickerImageURL(url) ? min(width, Layout.fixedStickerWidth) : width
+        return isStickerImageURL(url) ? min(width, DetailImageLayout.fixedStickerWidth) : width
+    }
+
+    private func targetImageWidth(for url: URL) -> CGFloat {
+        let maxWidth = maxImageWidth(for: url)
+        return isStickerImageURL(url)
+            ? maxWidth
+            : DetailImageLayout.fixedNormalImageSize(maxWidth: maxWidth).width
     }
 
     private func richTextSize(constrainedToWidth width: CGFloat) -> CGSize {
@@ -977,6 +1073,9 @@ final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextCon
         layoutFrame = nil
         _ = layoutFrame
         let size = super.intrinsicContentSize
+        logDiagnostics(
+            "richTextSize width=\(Self.numberString(width)) result=\(Self.string(from: size)) bounds=\(Self.string(from: bounds.size)) attachments=\(attachmentDiagnostics())"
+        )
         return CGSize(width: UIView.noIntrinsicMetric, height: ceil(max(size.height, 1)))
     }
 
@@ -988,21 +1087,53 @@ final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextCon
         url.absoluteString.lowercased().contains("sticker")
     }
 
-    private static func scaledSize(for size: CGSize, maxWidth: CGFloat) -> CGSize {
-        guard size.width > 0, size.height > 0, maxWidth > 0 else { return size }
-        guard size.width > maxWidth else { return size }
-        let scale = maxWidth / size.width
-        return CGSize(width: maxWidth, height: max(1, size.height * scale))
+    private func logDiagnostics(_ message: String) {
+        guard NodeSeekDebugConfig.enableDetailRenderDiagnostics else { return }
+        Self.logger.info("[\(self.diagnosticID, privacy: .public)] \(message, privacy: .public)")
     }
+
+    private func attachmentDiagnostics() -> String {
+        guard attributedString.length > 0 else { return "[]" }
+        var parts: [String] = []
+        attributedString.enumerateAttribute(
+            .attachment,
+            in: NSRange(location: 0, length: attributedString.length)
+        ) { value, _, _ in
+            guard let attachment = value as? DTTextAttachment else { return }
+            parts.append(
+                "url=\(attachment.contentURL?.absoluteString ?? "nil"),original=\(Self.string(from: attachment.originalSize)),display=\(Self.string(from: attachment.displaySize))"
+            )
+        }
+        if parts.count > 6 {
+            return "[\(parts.prefix(6).joined(separator: " | ")) | ... total=\(parts.count)]"
+        }
+        return "[\(parts.joined(separator: " | "))]"
+    }
+
+    private static func string(from rect: CGRect) -> String {
+        "x=\(numberString(rect.origin.x)),y=\(numberString(rect.origin.y)),w=\(numberString(rect.width)),h=\(numberString(rect.height))"
+    }
+
+    private static func string(from size: CGSize) -> String {
+        "\(numberString(size.width))x\(numberString(size.height))"
+    }
+
+    private static func numberString(_ value: CGFloat) -> String {
+        String(format: "%.1f", Double(value))
+    }
+
 }
 
 final class DetailInlineImageView: UIImageView {
+    private static let logger = Logger(subsystem: "com.nodeseek.app", category: "DetailInlineImageView")
+
     private let imageURL: URL
     private let targetPixelWidth: CGFloat
     private let displayScale: CGFloat
     private let onImageLoaded: (URL, CGSize) -> Void
     private let onImageTapped: (URL) -> Void
     private var loadToken: UUID?
+    private let diagnosticID = String(UUID().uuidString.prefix(8))
 
     init(
         frame: CGRect,
@@ -1030,6 +1161,7 @@ final class DetailInlineImageView: UIImageView {
         super.didMoveToSuperview()
 
         guard superview != nil else {
+            logDiagnostics("removed url=\(imageURL.absoluteString) frame=\(Self.string(from: frame))")
             loadToken = nil
             return
         }
@@ -1037,7 +1169,10 @@ final class DetailInlineImageView: UIImageView {
 
         let token = UUID()
         loadToken = token
-        DetailAttachmentDataSource.shared.loadImageForInline(
+        logDiagnostics(
+            "startLoad url=\(imageURL.absoluteString) frame=\(Self.string(from: frame)) targetPixelWidth=\(Self.numberString(targetPixelWidth)) displayScale=\(Self.numberString(displayScale))"
+        )
+        DetailImageLoader.shared.loadImageForInline(
             imageURL,
             maxPixelWidth: targetPixelWidth,
             displayScale: displayScale
@@ -1046,7 +1181,12 @@ final class DetailInlineImageView: UIImageView {
                 guard let self, self.loadToken == token else { return }
                 self.image = image
                 if let image {
+                    self.logDiagnostics(
+                        "loaded url=\(self.imageURL.absoluteString) imageSize=\(Self.string(from: image.size)) frame=\(Self.string(from: self.frame))"
+                    )
                     self.onImageLoaded(self.imageURL, image.size)
+                } else {
+                    self.logDiagnostics("loaded nil url=\(self.imageURL.absoluteString)")
                 }
             }
         }
@@ -1055,6 +1195,23 @@ final class DetailInlineImageView: UIImageView {
     @objc
     private func handleTap() {
         onImageTapped(imageURL)
+    }
+
+    private func logDiagnostics(_ message: String) {
+        guard NodeSeekDebugConfig.enableDetailRenderDiagnostics else { return }
+        Self.logger.info("[\(self.diagnosticID, privacy: .public)] \(message, privacy: .public)")
+    }
+
+    private static func string(from rect: CGRect) -> String {
+        "x=\(numberString(rect.origin.x)),y=\(numberString(rect.origin.y)),w=\(numberString(rect.width)),h=\(numberString(rect.height))"
+    }
+
+    private static func string(from size: CGSize) -> String {
+        "\(numberString(size.width))x\(numberString(size.height))"
+    }
+
+    private static func numberString(_ value: CGFloat) -> String {
+        String(format: "%.1f", Double(value))
     }
 }
 
@@ -1098,7 +1255,7 @@ private final class DetailPhotoBrowserPresenter: NSObject, JXPhotoBrowserDelegat
         let requestKey = imageURL.absoluteString
         photoCell.imageView.image = nil
         photoCell.imageView.accessibilityIdentifier = requestKey
-        DetailAttachmentDataSource.shared.loadImageForPreview(imageURL) { [weak photoCell] image in
+        DetailImageLoader.shared.loadImageForPreview(imageURL) { [weak photoCell] image in
             DispatchQueue.main.async {
                 guard let photoCell else { return }
                 guard photoCell.imageView.accessibilityIdentifier == requestKey else { return }
@@ -1112,305 +1269,5 @@ private final class DetailPhotoBrowserPresenter: NSObject, JXPhotoBrowserDelegat
         guard let photoCell = cell as? JXZoomImageCell else { return }
         photoCell.imageView.accessibilityIdentifier = nil
         photoCell.imageView.image = nil
-    }
-}
-
-final class DetailAttachmentDataSource: NSObject {
-    private struct ImagePayload {
-        let data: Data
-        let mimeType: String?
-        let image: UIImage
-        let isFallback: Bool
-    }
-
-    private struct InlineImageCacheKey: Hashable {
-        let url: URL
-        let maxPixelWidth: Int
-        let displayScaleKey: Int
-    }
-
-    private typealias PayloadCompletion = (ImagePayload) -> Void
-    private typealias InlineImageCompletion = (UIImage?) -> Void
-
-    static let shared = DetailAttachmentDataSource()
-
-    private enum Limits {
-        static let maxPixelSide: CGFloat = 16_384
-        static let fallbackSize = CGSize(width: 8, height: 8)
-    }
-
-    private let logger = Logger(subsystem: "com.nodeseek.app", category: "DetailAttachment")
-    private let session: URLSession
-    private let stateQueue = DispatchQueue(label: "com.nodeseek.app.detailattachment.state")
-    private var payloadCache: [URL: ImagePayload] = [:]
-    private var inFlightCallbacks: [URL: [PayloadCompletion]] = [:]
-    private var inlineImageCache: [InlineImageCacheKey: UIImage] = [:]
-    private var inlineImageCallbacks: [InlineImageCacheKey: [InlineImageCompletion]] = [:]
-
-    private override init() {
-        let configuration = URLSessionConfiguration.default
-        configuration.httpCookieStorage = .shared
-        configuration.httpShouldSetCookies = true
-        configuration.requestCachePolicy = .returnCacheDataElseLoad
-        configuration.timeoutIntervalForRequest = 20
-        configuration.timeoutIntervalForResource = 20
-        self.session = URLSession(configuration: configuration)
-        super.init()
-    }
-
-    func loadImageForPreview(_ imageURL: URL, completion: @escaping (UIImage?) -> Void) {
-        fetchPayload(for: imageURL) { payload in
-            completion(payload.image)
-        }
-    }
-
-    func loadImageForInline(
-        _ imageURL: URL,
-        maxPixelWidth: CGFloat,
-        displayScale: CGFloat,
-        completion: @escaping (UIImage?) -> Void
-    ) {
-        let pixelWidth = max(1, Int(ceil(maxPixelWidth)))
-        let imageScale = max(displayScale, 1)
-        let cacheURL = AvatarImageLoader.resolveImageURL(imageURL) ?? imageURL
-        let key = InlineImageCacheKey(
-            url: cacheURL,
-            maxPixelWidth: pixelWidth,
-            displayScaleKey: Int((imageScale * 100).rounded())
-        )
-
-        if let cachedImage = stateQueue.sync(execute: { inlineImageCache[key] }) {
-            completion(cachedImage)
-            return
-        }
-
-        let shouldStartLoad = stateQueue.sync { () -> Bool in
-            if var callbacks = inlineImageCallbacks[key] {
-                callbacks.append(completion)
-                inlineImageCallbacks[key] = callbacks
-                return false
-            }
-            inlineImageCallbacks[key] = [completion]
-            return true
-        }
-        guard shouldStartLoad else { return }
-
-        fetchPayload(for: imageURL) { [weak self] payload in
-            guard let self else { return }
-            let image = self.downsampleImage(
-                data: payload.data,
-                maxPixelSize: pixelWidth
-            ) ?? payload.image
-            let callbacks = self.stateQueue.sync {
-                if payload.isFallback == false {
-                    self.inlineImageCache[key] = image
-                }
-                return self.inlineImageCallbacks.removeValue(forKey: key) ?? []
-            }
-            callbacks.forEach { $0(image) }
-        }
-    }
-
-    private func fetchPayload(for imageURL: URL, completion: @escaping PayloadCompletion) {
-        if let dataURLPayload = decodeDataURL(imageURL) {
-            let image = UIImage(data: dataURLPayload.data) ?? Self.fallbackImage
-            completion(ImagePayload(
-                data: dataURLPayload.data,
-                mimeType: dataURLPayload.mimeType,
-                image: image,
-                isFallback: image === Self.fallbackImage
-            ))
-            return
-        }
-
-        guard let resolvedURL = AvatarImageLoader.resolveImageURL(imageURL) else {
-            logger.error("attachment URL 非法，使用兜底图 url=\(imageURL.absoluteString, privacy: .public)")
-            completion(Self.fallbackPayload)
-            return
-        }
-
-        if let cachedPayload = stateQueue.sync(execute: { payloadCache[resolvedURL] }) {
-            completion(cachedPayload)
-            return
-        }
-
-        let shouldStartRequest = stateQueue.sync { () -> Bool in
-            if var callbacks = inFlightCallbacks[resolvedURL] {
-                callbacks.append(completion)
-                inFlightCallbacks[resolvedURL] = callbacks
-                return false
-            }
-            inFlightCallbacks[resolvedURL] = [completion]
-            return true
-        }
-        guard shouldStartRequest else { return }
-
-        var request = URLRequest(url: resolvedURL)
-        request.httpMethod = "GET"
-        request.timeoutInterval = 20
-        request.cachePolicy = .returnCacheDataElseLoad
-        WebRequestFingerprint.applyImageHeaders(to: &request)
-
-        session.dataTask(with: request) { [weak self] data, response, error in
-            guard let self else { return }
-            let payload = self.validatePayload(
-                resolvedURL: resolvedURL,
-                data: data,
-                mimeType: response?.mimeType,
-                error: error
-            )
-            self.completePayload(for: resolvedURL, payload: payload)
-        }.resume()
-    }
-
-    private func completePayload(for url: URL, payload: ImagePayload) {
-        let callbacks: [PayloadCompletion] = stateQueue.sync {
-            if payload.isFallback == false {
-                payloadCache[url] = payload
-            }
-            return inFlightCallbacks.removeValue(forKey: url) ?? []
-        }
-        callbacks.forEach { $0(payload) }
-    }
-
-    private func validatePayload(
-        resolvedURL: URL,
-        data: Data?,
-        mimeType: String?,
-        error: Error?
-    ) -> ImagePayload {
-        guard let data else {
-            logger.error(
-                "attachment 下载失败，使用兜底图 url=\(resolvedURL.absoluteString, privacy: .public), error=\(error?.localizedDescription ?? "unknown", privacy: .public)"
-            )
-            return Self.fallbackPayload
-        }
-
-        if dataLooksLikeHTML(data) {
-            logger.error(
-                "attachment 返回HTML内容，使用兜底图 url=\(resolvedURL.absoluteString, privacy: .public), bytes=\(data.count, privacy: .public), snippet=\(self.snippet(from: data), privacy: .public)"
-            )
-            return Self.fallbackPayload
-        }
-
-        guard let image = UIImage(data: data) else {
-            logger.error(
-                "attachment 图片解码失败，使用兜底图 url=\(resolvedURL.absoluteString, privacy: .public), bytes=\(data.count, privacy: .public), mime=\(mimeType ?? "unknown", privacy: .public)"
-            )
-            return Self.fallbackPayload
-        }
-
-        let imageSize = image.size
-        guard imageSize.width.isFinite,
-              imageSize.height.isFinite,
-              imageSize.width > 0,
-              imageSize.height > 0,
-              imageSize.width <= Limits.maxPixelSide,
-              imageSize.height <= Limits.maxPixelSide else {
-            logger.error(
-                "attachment 图片尺寸异常，使用兜底图 url=\(resolvedURL.absoluteString, privacy: .public), size=\(NSCoder.string(for: imageSize), privacy: .public), bytes=\(data.count, privacy: .public), mime=\(mimeType ?? "unknown", privacy: .public)"
-            )
-            return Self.fallbackPayload
-        }
-
-        if let mimeType, mimeType.lowercased().hasPrefix("image/") == false {
-            logger.warning(
-                "attachment MIME非image但已解码成功，继续展示 url=\(resolvedURL.absoluteString, privacy: .public), mime=\(mimeType, privacy: .public)"
-            )
-        }
-
-        logger.debug(
-            "attachment 下载并校验通过 url=\(resolvedURL.absoluteString, privacy: .public), size=\(NSCoder.string(for: imageSize), privacy: .public), bytes=\(data.count, privacy: .public), mime=\(mimeType ?? "unknown", privacy: .public)"
-        )
-        return ImagePayload(
-            data: data,
-            mimeType: mimeType,
-            image: image,
-            isFallback: false
-        )
-    }
-
-    private func downsampleImage(data: Data, maxPixelSize: Int) -> UIImage? {
-        guard maxPixelSize > 0 else { return nil }
-
-        let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
-        guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions) else {
-            return nil
-        }
-
-        let downsampleOptions = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
-        ] as CFDictionary
-
-        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, downsampleOptions) else {
-            return nil
-        }
-
-        return UIImage(cgImage: image, scale: 1, orientation: .up)
-    }
-
-    private static let fallbackPNGData: Data = {
-        let renderer = UIGraphicsImageRenderer(size: Limits.fallbackSize)
-        let image = renderer.image { context in
-            UIColor(white: 0.88, alpha: 1).setFill()
-            context.fill(CGRect(origin: .zero, size: Limits.fallbackSize))
-        }
-        return image.pngData() ?? Data()
-    }()
-
-    private static let fallbackImage: UIImage = UIImage(data: fallbackPNGData) ?? UIImage()
-
-    private static let fallbackPayload = ImagePayload(
-        data: fallbackPNGData,
-        mimeType: "image/png",
-        image: fallbackImage,
-        isFallback: true
-    )
-
-    private func dataLooksLikeHTML(_ data: Data) -> Bool {
-        guard let prefix = String(data: data.prefix(256), encoding: .utf8)?
-            .lowercased()
-            .replacingOccurrences(of: "\n", with: " ")
-            .replacingOccurrences(of: "\r", with: " ") else {
-            return false
-        }
-        return prefix.contains("<html")
-            || prefix.contains("<!doctype html")
-            || prefix.contains("<body")
-            || prefix.contains("challenge-platform")
-            || prefix.contains("cf_chl")
-    }
-
-    private func snippet(from data: Data) -> String {
-        String(data: data.prefix(120), encoding: .utf8)?
-            .replacingOccurrences(of: "\n", with: " ")
-            .replacingOccurrences(of: "\r", with: " ")
-            ?? ""
-    }
-
-    private func decodeDataURL(_ url: URL) -> (data: Data, mimeType: String?)? {
-        let raw = url.absoluteString
-        guard raw.lowercased().hasPrefix("data:"),
-              let commaIndex = raw.firstIndex(of: ",") else {
-            return nil
-        }
-
-        let header = String(raw[raw.startIndex..<commaIndex]).lowercased()
-        let payloadStart = raw.index(after: commaIndex)
-        let payload = String(raw[payloadStart...])
-
-        guard header.contains(";base64"),
-              let data = Data(base64Encoded: payload, options: .ignoreUnknownCharacters) else {
-            return nil
-        }
-
-        let mimeType = header
-            .replacingOccurrences(of: "data:", with: "")
-            .components(separatedBy: ";")
-            .first
-        return (data, mimeType)
     }
 }

@@ -104,4 +104,20 @@ struct KannaNodeSeekParserTests {
         #expect(detail.comments.first?.createdAtText == "34min ago")
         #expect(detail.comments.first?.contentHTML.contains("CPU限制30%") == true)
     }
+
+    @Test func parsesMagicTabsDetailFixtureWithANSIAndImageTabs() throws {
+        let html = try FixtureLoader.html(named: "post-705039-1")
+        let parser = KannaNodeSeekParser(baseURL: URL(string: "https://www.nodeseek.com")!)
+
+        let detail = try parser.parsePostDetail(
+            html: html,
+            url: URL(string: "https://www.nodeseek.com/post-705039-1")!
+        )
+
+        #expect(detail.id == "705039")
+        #expect(detail.contentHTML.contains("nsk-magic-tabs"))
+        #expect(detail.contentHTML.contains("language-ansi"))
+        #expect(detail.contentHTML.contains("https://i.111666.best/image/G9D5ncG5qndySgQtNwvFq4.webp"))
+        #expect(detail.contentHTML.contains("https://i.111666.best/image/noEhdCSyuAeuREqqSWgdY5.webp"))
+    }
 }

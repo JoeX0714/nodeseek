@@ -7,13 +7,13 @@
 
 import DTCoreText
 import Foundation
+import Kanna
 import OSLog
 import UIKit
 
 struct DTCoreTextHTMLContentRenderer {
     private enum Layout {
         static let defaultMaxImageWidth: CGFloat = 320
-        static let fixedAttachmentWidth: CGFloat = 65
     }
 
     private static let imageSourceRegex = try! NSRegularExpression(
@@ -22,6 +22,10 @@ struct DTCoreTextHTMLContentRenderer {
     )
     private static let listMarkerRegex = try! NSRegularExpression(
         pattern: "\\t((?:\\d+[.)])|[•◦▪])\\t",
+        options: []
+    )
+    private static let ansiCodeRegex = try! NSRegularExpression(
+        pattern: "(?:\\u001B\\[|\\[)\\d{1,3}(?:;\\d{1,3})*m",
         options: []
     )
     private static let logger = Logger(subsystem: "com.nodeseek.app", category: "DetailDTCoreTextRenderer")
@@ -33,8 +37,15 @@ struct DTCoreTextHTMLContentRenderer {
     func render(fragment: String, baseURL: URL, maxImageWidth: CGFloat) -> [RenderedContentBlock] {
         guard fragment.isEmpty == false else { return [] }
 
-        let normalizedFragment = normalizeImageSources(in: fragment, baseURL: baseURL)
+        logDiagnostics(
+            "render start fragmentLength=\(fragment.count) hasMagicTabs=\(fragment.contains("nsk-magic-tabs")) maxImageWidth=\(numberString(maxImageWidth))"
+        )
+        let expandedFragment = expandNodeSeekMagicTabs(in: fragment)
+        let normalizedFragment = normalizeImageSources(in: expandedFragment, baseURL: baseURL)
         let normalizedSources = imageSources(in: normalizedFragment)
+        logDiagnostics(
+            "render normalized expandedLength=\(expandedFragment.count) normalizedLength=\(normalizedFragment.count) imageSources=\(normalizedSources.count) urls=\(normalizedSources.prefix(6).joined(separator: " | "))"
+        )
         let html = wrapHTML(fragment: normalizedFragment, baseURL: baseURL)
         guard let data = html.data(using: .utf8) else {
             return fallbackBlocks(from: fragment)
@@ -45,7 +56,7 @@ struct DTCoreTextHTMLContentRenderer {
             DTDefaultFontSize: UIFont.preferredFont(forTextStyle: .body).pointSize,
             DTDefaultTextColor: UIColor.label,
             DTDefaultLinkColor: UIColor.systemBlue,
-            DTMaxImageSize: NSValue(cgSize: CGSize(width: maxImageWidth, height: CGFloat.greatestFiniteMagnitude)),
+            DTMaxImageSize: NSValue(cgSize: CGSize(width: maxImageWidth, height: DetailImageLayout.maxImageHeight)),
             DTUseiOS6Attributes: true
         ]
         let builder = DTHTMLAttributedStringBuilder(
@@ -63,7 +74,142 @@ struct DTCoreTextHTMLContentRenderer {
             imageSources: normalizedSources,
             maxImageWidth: maxImageWidth
         )
+        logDiagnostics(
+            "render done textLength=\(normalized.length) attachments=\(attachmentDiagnostics(in: normalized))"
+        )
         return normalized.length > 0 ? [.text(normalized)] : fallbackBlocks(from: normalizedFragment)
+    }
+
+    private func expandNodeSeekMagicTabs(in fragment: String) -> String {
+        guard fragment.contains("nsk-magic-tabs") else { return fragment }
+        guard let document = try? HTML(
+            html: "<div id=\"__nodeseek_fragment_root__\">\(fragment)</div>",
+            encoding: .utf8
+        ),
+              let root = document.at_css("#__nodeseek_fragment_root__") else {
+            return fragment
+        }
+
+        let expanded = root.children
+            .compactMap { expandedHTML(for: $0) }
+            .joined()
+        return expanded.isEmpty ? fragment : expanded
+    }
+
+    private func expandedHTML(for node: XMLElement) -> String? {
+        guard hasClass("nsk-magic-tabs", in: node) else {
+            return node.toHTML
+        }
+
+        var sections: [String] = []
+        var pendingTitleHTML: String?
+
+        for child in node.children {
+            if hasClass("nsk-magic-tab-title", in: child) {
+                if let titleHTML = pendingTitleHTML {
+                    sections.append(expandedMagicTabTitleHTML(titleHTML))
+                }
+                pendingTitleHTML = child.innerHTML ?? child.text
+                continue
+            }
+
+            if hasClass("nsk-magic-tab-body", in: child) {
+                if let titleHTML = pendingTitleHTML {
+                    sections.append(expandedMagicTabTitleHTML(titleHTML))
+                    pendingTitleHTML = nil
+                }
+                if let bodyHTML = child.innerHTML, bodyHTML.isEmpty == false {
+                    sections.append("<div>\(simplifiedMagicTabBodyHTML(bodyHTML))</div>")
+                }
+                continue
+            }
+
+            if let titleHTML = pendingTitleHTML {
+                sections.append(expandedMagicTabTitleHTML(titleHTML))
+                pendingTitleHTML = nil
+            }
+            if let childHTML = child.toHTML {
+                sections.append(childHTML)
+            }
+        }
+
+        if let titleHTML = pendingTitleHTML {
+            sections.append(expandedMagicTabTitleHTML(titleHTML))
+        }
+
+        return sections.joined(separator: "\n")
+    }
+
+    private func expandedMagicTabTitleHTML(_ titleHTML: String) -> String {
+        "<p><strong>\(titleHTML)</strong></p>"
+    }
+
+    private func simplifiedMagicTabBodyHTML(_ bodyHTML: String) -> String {
+        let containsXtermRows = bodyHTML.contains("xterm-rows")
+        let mayContainANSICode = bodyHTML.contains("language-ansi") || bodyHTML.contains("data-ansicode")
+        guard containsXtermRows || mayContainANSICode else { return bodyHTML }
+        guard let document = try? HTML(
+            html: "<div id=\"__nodeseek_magic_tab_body__\">\(bodyHTML)</div>",
+            encoding: .utf8
+        ),
+              let root = document.at_css("#__nodeseek_magic_tab_body__") else {
+            return bodyHTML
+        }
+
+        var blocks: [String] = []
+
+        if containsXtermRows {
+            blocks.append(contentsOf: root.css(".xterm-rows").compactMap { rows -> String? in
+                let lines = rows.children.compactMap { row -> String? in
+                    guard let text = row.text?.trimmingCharacters(in: .whitespacesAndNewlines),
+                          text.isEmpty == false else {
+                        return nil
+                    }
+                    return text
+                }
+                guard lines.isEmpty == false else { return nil }
+                return "<pre><code>\(escapedHTML(lines.joined(separator: "\n")))</code></pre>"
+            })
+        }
+
+        if mayContainANSICode {
+            blocks.append(contentsOf: root.css("pre > code").compactMap { code -> String? in
+                let isANSICode = hasClass("language-ansi", in: code) || (code.toHTML?.contains("data-ansicode") == true)
+                guard isANSICode else { return nil }
+                guard let rawText = code.text, rawText.isEmpty == false else { return nil }
+                let normalizedText = stripANSICodes(from: rawText)
+                guard normalizedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+                    return nil
+                }
+                return "<pre><code>\(escapedHTML(normalizedText))</code></pre>"
+            })
+        }
+
+        for image in root.css("img") {
+            if let imageHTML = image.toHTML {
+                blocks.append(imageHTML)
+            }
+        }
+
+        return blocks.isEmpty ? bodyHTML : blocks.joined(separator: "\n")
+    }
+
+    private func escapedHTML(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+    }
+
+    private func stripANSICodes(from text: String) -> String {
+        let escapedText = text.replacingOccurrences(of: "\u{001B}", with: "")
+        let fullRange = NSRange(location: 0, length: (escapedText as NSString).length)
+        return Self.ansiCodeRegex.stringByReplacingMatches(
+            in: escapedText,
+            options: [],
+            range: fullRange,
+            withTemplate: ""
+        )
     }
 
     private func wrapHTML(fragment: String, baseURL: URL) -> String {
@@ -156,6 +302,8 @@ struct DTCoreTextHTMLContentRenderer {
 
         var normalizedCount = 0
         var stickerFixedCount = 0
+        var placeholderCount = 0
+        var attachmentSummaries: [String] = []
         var imageIndex = 0
         attributed.enumerateAttribute(
             .attachment,
@@ -171,33 +319,51 @@ struct DTCoreTextHTMLContentRenderer {
             }
 
             let maxWidth = isStickerImageURL(imageURL)
-                ? min(maxImageWidth, Layout.fixedAttachmentWidth)
+                ? min(maxImageWidth, DetailImageLayout.fixedStickerWidth)
                 : maxImageWidth
-            if isStickerImageURL(imageURL) {
+            let maxHeight = isStickerImageURL(imageURL) ? nil : DetailImageLayout.maxImageHeight
+            let isSticker = isStickerImageURL(imageURL)
+            if isSticker {
                 stickerFixedCount += 1
             }
 
             let originalSize = attachment.originalSize
-            if originalSize.width > 0, originalSize.height > 0 {
-                attachment.displaySize = Self.scaledSize(for: originalSize, maxWidth: maxWidth)
+            var usedPlaceholder = false
+            if isSticker == false {
+                attachment.displaySize = DetailImageLayout.fixedNormalImageSize(maxWidth: maxWidth)
+            } else if originalSize.width > 0, originalSize.height > 0 {
+                attachment.displaySize = DetailImageLayout.scaledSize(
+                    for: originalSize,
+                    maxWidth: maxWidth,
+                    maxHeight: maxHeight
+                )
             } else if attachment.displaySize.width > 0, attachment.displaySize.height > 0 {
-                attachment.displaySize = Self.scaledSize(for: attachment.displaySize, maxWidth: maxWidth)
+                attachment.displaySize = DetailImageLayout.scaledSize(
+                    for: attachment.displaySize,
+                    maxWidth: maxWidth,
+                    maxHeight: maxHeight
+                )
+            } else {
+                // 避免 attachment 初始尺寸为 0 时无法创建视图，导致图片永远不触发下载回流。
+                attachment.displaySize = DetailImageLayout.placeholderSize(
+                    maxWidth: maxWidth,
+                    maxHeight: maxHeight,
+                    isSticker: isSticker
+                )
+                usedPlaceholder = true
+                placeholderCount += 1
             }
 
+            attachmentSummaries.append(
+                "url=\(imageURL.absoluteString),original=\(string(from: attachment.originalSize)),display=\(string(from: attachment.displaySize)),placeholder=\(usedPlaceholder)"
+            )
             normalizedCount += 1
             imageIndex += 1
         }
 
-        Self.logger.debug(
-            "已保留DTCoreText图片附件，count=\(normalizedCount, privacy: .public), stickerFixed=\(stickerFixedCount, privacy: .public)"
+        logDiagnostics(
+            "已保留DTCoreText图片附件 count=\(normalizedCount) stickerFixed=\(stickerFixedCount) placeholder=\(placeholderCount) details=\(attachmentSummaries.prefix(6).joined(separator: " | "))"
         )
-    }
-
-    private static func scaledSize(for size: CGSize, maxWidth: CGFloat) -> CGSize {
-        guard size.width > 0, size.height > 0, maxWidth > 0 else { return size }
-        guard size.width > maxWidth else { return size }
-        let scale = maxWidth / size.width
-        return CGSize(width: maxWidth, height: max(1, size.height * scale))
     }
 
     private func normalizeImageSources(in fragment: String, baseURL: URL) -> String {
@@ -235,6 +401,44 @@ struct DTCoreTextHTMLContentRenderer {
     private func isStickerImageURL(_ url: URL?) -> Bool {
         guard let absolute = url?.absoluteString.lowercased() else { return false }
         return absolute.contains("sticker")
+    }
+
+    private func logDiagnostics(_ message: String) {
+        guard NodeSeekDebugConfig.enableDetailRenderDiagnostics else { return }
+        Self.logger.info("\(message, privacy: .public)")
+    }
+
+    private func attachmentDiagnostics(in attributedText: NSAttributedString) -> String {
+        guard attributedText.length > 0 else { return "[]" }
+        var parts: [String] = []
+        attributedText.enumerateAttribute(
+            .attachment,
+            in: NSRange(location: 0, length: attributedText.length)
+        ) { value, _, _ in
+            guard let attachment = value as? DTTextAttachment else { return }
+            parts.append(
+                "url=\(attachment.contentURL?.absoluteString ?? "nil"),original=\(string(from: attachment.originalSize)),display=\(string(from: attachment.displaySize))"
+            )
+        }
+        if parts.count > 6 {
+            return "[\(parts.prefix(6).joined(separator: " | ")) | ... total=\(parts.count)]"
+        }
+        return "[\(parts.joined(separator: " | "))]"
+    }
+
+    private func string(from size: CGSize) -> String {
+        "\(numberString(size.width))x\(numberString(size.height))"
+    }
+
+    private func numberString(_ value: CGFloat) -> String {
+        String(format: "%.1f", Double(value))
+    }
+
+    private func hasClass(_ className: String, in node: XMLElement) -> Bool {
+        guard let classes = node.className?.split(whereSeparator: { $0.isWhitespace }) else {
+            return false
+        }
+        return classes.contains { $0 == className }
     }
 
     private func fallbackBlocks(from html: String) -> [RenderedContentBlock] {

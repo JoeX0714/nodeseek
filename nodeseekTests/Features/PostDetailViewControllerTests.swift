@@ -7,13 +7,14 @@
 
 import Foundation
 import AsyncDisplayKit
+import DTCoreText
 import Testing
 import UIKit
 @testable import nodeseek
 
 @MainActor
 struct PostDetailViewControllerTests {
-    @Test func usesTableViewWithPostSummaryHeaderAndCommentCells() throws {
+    @Test func startsWithSkeletonRowsEvenWhenInitialHeaderExists() throws {
         let post = PostSummary(
             id: "703863",
             title: "列表标题",
@@ -33,8 +34,8 @@ struct PostDetailViewControllerTests {
         viewController.loadViewIfNeeded()
 
         let tableView = try #require(viewController.view.firstSubview(of: UITableView.self))
-        #expect(tableView.tableHeaderView != nil)
-        #expect(tableView.numberOfRows(inSection: 0) == 0)
+        #expect(tableView.tableHeaderView == nil)
+        #expect(tableView.numberOfRows(inSection: 0) == 5)
 
         viewController.render(detail: PostDetail(
             id: "703863",
@@ -50,7 +51,30 @@ struct PostDetailViewControllerTests {
             replyForm: nil
         ))
 
-        #expect(tableView.numberOfRows(inSection: 0) == 2)
+        #expect(tableView.numberOfRows(inSection: 0) == 3)
+    }
+
+    @Test func showsSkeletonRowsWhileInitialDetailIsLoading() throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter)
+
+        viewController.loadViewIfNeeded()
+        viewController.showLoading()
+
+        let tableView = try #require(viewController.view.firstSubview(of: UITableView.self))
+        #expect(tableView.numberOfRows(inSection: 0) == 5)
+
+        viewController.render(detail: PostDetail(
+            id: "703863",
+            title: "详情标题",
+            authorName: "ipv4",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "<p>正文</p>",
+            comments: [],
+            replyForm: nil
+        ))
+        #expect(tableView.numberOfRows(inSection: 0) == 1)
     }
 
     @Test func addsRefreshButtonAndCanTriggerReload() throws {
@@ -68,7 +92,6 @@ struct PostDetailViewControllerTests {
     }
 
     @Test func detailTextureCellsCanBeConstructedOffMainThread() async throws {
-        let attributedText = NSAttributedString(string: "正文")
         let header = PostDetailHeaderContent(
             postID: "703863",
             title: "标题",
@@ -88,6 +111,7 @@ struct PostDetailViewControllerTests {
 
         try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
+                let attributedText = NSAttributedString(string: "正文")
                 _ = PostBodyCellNode(
                     content: header,
                     attributedContent: attributedText,
@@ -109,6 +133,74 @@ struct PostDetailViewControllerTests {
                 continuation.resume()
             }
         }
+    }
+
+    @Test func richTextNodeKeepsMeasuredHeightStableAfterNormalImageLoads() throws {
+        let imageURL = try #require(URL(string: "https://i.111666.best/image/network.webp"))
+        let blocks = DTCoreTextHTMLContentRenderer().render(
+            fragment: "<p><img src=\"\(imageURL.absoluteString)\" alt=\"image\"></p><p>正文</p>",
+            baseURL: URL(string: "https://www.nodeseek.com")!,
+            maxImageWidth: 320
+        )
+        let attributedText = try #require(blocks.compactMap { block -> NSAttributedString? in
+            guard case .text(let text) = block else { return nil }
+            return text
+        }.first)
+        let node = DetailRichTextNode(
+            attributedText: attributedText,
+            onImageTapped: { _, _ in },
+            onLayoutInvalidated: {}
+        )
+        let constrainedSize = ASSizeRange(
+            min: .zero,
+            max: CGSize(width: 320, height: CGFloat.greatestFiniteMagnitude)
+        )
+
+        let initialHeight = node.layoutThatFits(constrainedSize).size.height
+        let didUpdate = node.updateAttachmentLayout(
+            matching: imageURL,
+            originalSize: CGSize(width: 800, height: 1600),
+            displaySize: DetailImageLayout.fixedNormalImageSize(maxWidth: 320)
+        )
+        let updatedHeight = node.layoutThatFits(constrainedSize).size.height
+
+        #expect(didUpdate)
+        #expect(updatedHeight == initialHeight)
+    }
+
+    @Test func richTextNodeMeasuresFixtureWithDTCoreTextHeight() throws {
+        let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
+        let html = try FixtureLoader.html(named: "post-705039-1")
+        let detail = try KannaNodeSeekParser(baseURL: baseURL).parsePostDetail(
+            html: html,
+            url: URL(string: "https://www.nodeseek.com/post-705039-1")!
+        )
+        let blocks = DTCoreTextHTMLContentRenderer().render(
+            fragment: detail.contentHTML,
+            baseURL: baseURL,
+            maxImageWidth: 320
+        )
+        let attributed = try #require(blocks.compactMap { block -> NSAttributedString? in
+            guard case .text(let text) = block else { return nil }
+            return text
+        }.first)
+        let node = DetailRichTextNode(
+            attributedText: attributed,
+            onImageTapped: { _, _ in },
+            onLayoutInvalidated: {}
+        )
+        let layout = node.layoutThatFits(ASSizeRange(
+            min: .zero,
+            max: CGSize(width: 320, height: CGFloat.greatestFiniteMagnitude)
+        ))
+        let layouter = try #require(DTCoreTextLayouter(attributedString: attributed))
+        let layoutFrame = try #require(layouter.layoutFrame(
+            with: CGRect(x: 0, y: 0, width: 320, height: 16_777_215),
+            range: NSRange(location: 0, length: 0)
+        ))
+        let expectedHeight = ceil(layoutFrame.frame.maxY)
+
+        #expect(layout.size.height >= expectedHeight)
     }
 }
 
