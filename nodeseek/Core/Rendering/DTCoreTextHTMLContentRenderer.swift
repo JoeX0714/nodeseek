@@ -15,6 +15,7 @@ struct DTCoreTextHTMLContentRenderer {
     private enum Layout {
         static let defaultMaxImageWidth: CGFloat = 320
         static let bodyLineSpacing: CGFloat = 5
+        static let blockquoteTextIndent: CGFloat = 11
     }
 
     private static let linkColor = UIColor(red: 15 / 255, green: 128 / 255, blue: 85 / 255, alpha: 1)
@@ -472,8 +473,14 @@ struct DTCoreTextHTMLContentRenderer {
         blockquote {
             background-color: #f6f8fa;
             border-left: 3px solid #d0d7de;
-            margin: 8px 0 12px 0;
-            padding: 10px 10px 10px 8px;
+            margin-top: 8px;
+            margin-right: 0;
+            margin-bottom: 12px;
+            margin-left: 0;
+            padding-top: 12px;
+            padding-right: 10px;
+            padding-bottom: 12px;
+            padding-left: 8px;
             color: #555555;
         }
         pre {
@@ -539,8 +546,25 @@ struct DTCoreTextHTMLContentRenderer {
             style.setParagraphStyle(baseStyle)
             style.lineSpacing = max(style.lineSpacing, Layout.bodyLineSpacing)
             style.lineBreakMode = .byWordWrapping
+            if containsBlockquoteTextBlock(in: attributed, range: range) {
+                style.firstLineHeadIndent = Layout.blockquoteTextIndent
+                style.headIndent = Layout.blockquoteTextIndent
+                style.tailIndent = -Layout.blockquoteTextIndent
+            }
             attributed.addAttribute(.paragraphStyle, value: style, range: range)
         }
+    }
+
+    private func containsBlockquoteTextBlock(in attributed: NSAttributedString, range: NSRange) -> Bool {
+        guard range.location != NSNotFound, range.length > 0, NSMaxRange(range) <= attributed.length else {
+            return false
+        }
+        let textBlocks = attributed.attribute(
+            NSAttributedString.Key(DTTextBlocksAttribute),
+            at: range.location,
+            effectiveRange: nil
+        ) as? [DTTextBlock]
+        return textBlocks?.contains { $0.backgroundColor != nil } == true
     }
 
     private func normalizedSystemFont(from font: UIFont, fallback: UIFont) -> UIFont {

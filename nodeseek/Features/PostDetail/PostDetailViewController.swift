@@ -389,7 +389,7 @@ class PostDetailViewController: UIViewController {
 
         let headerRowCount = currentHeaderContent == nil ? 0 : 1
         let indexPath: IndexPath
-        if anchorID == "1", currentHeaderContent != nil {
+        if (anchorID == "0" || anchorID == "1"), currentHeaderContent != nil {
             indexPath = IndexPath(row: 0, section: 0)
         } else if let commentIndex = comments.firstIndex(where: { comment in
             comment.anchorID == anchorID || comment.floorText == "#\(anchorID)"
@@ -963,6 +963,7 @@ final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextCon
     private enum QuoteStyle {
         static let borderWidth: CGFloat = 3
         static let borderColor = UIColor(red: 208 / 255, green: 215 / 255, blue: 222 / 255, alpha: 1)
+        static let cornerRadius: CGFloat = 4
     }
 
     private static let logger = Logger(subsystem: "com.nodeseek.app", category: "DetailRichTextView")
@@ -1099,15 +1100,19 @@ final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextCon
     ) -> Bool {
         guard let backgroundColor = textBlock.backgroundColor else { return true }
 
+        let quoteFrame = frame
+        let backgroundPath = UIBezierPath(roundedRect: quoteFrame, cornerRadius: QuoteStyle.cornerRadius)
+
         context.saveGState()
         context.setFillColor(backgroundColor.cgColor)
-        context.fill(frame)
+        context.addPath(backgroundPath.cgPath)
+        context.fillPath()
         context.setFillColor(QuoteStyle.borderColor.cgColor)
         context.fill(CGRect(
-            x: frame.minX,
-            y: frame.minY,
+            x: quoteFrame.minX,
+            y: quoteFrame.minY,
             width: QuoteStyle.borderWidth,
-            height: frame.height
+            height: quoteFrame.height
         ))
         context.restoreGState()
         return false

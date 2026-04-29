@@ -233,6 +233,24 @@ struct PostDetailViewControllerTests {
         #expect(anchorID == "4")
     }
 
+    @Test func resolvesZeroHashLinksToOwnerAnchor() throws {
+        let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
+        let url = try #require(URL(string: "#0", relativeTo: baseURL)?.absoluteURL)
+
+        let destination = try #require(PostDetailLinkResolver.destination(
+            for: url,
+            baseURL: baseURL,
+            currentPostID: "704174",
+            currentPage: 1
+        ))
+
+        guard case .currentPageAnchor(let anchorID) = destination else {
+            Issue.record("Expected current page anchor destination")
+            return
+        }
+        #expect(anchorID == "0")
+    }
+
     @Test func resolvesCurrentPostSamePageFragmentLinksToCurrentPageAnchor() throws {
         let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
         let url = try #require(URL(string: "/post-704174-1#4", relativeTo: baseURL)?.absoluteURL)

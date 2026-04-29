@@ -228,9 +228,19 @@ struct DTCoreTextHTMLContentRendererTests {
             effectiveRange: nil
         ) as? [DTTextBlock]
         let quoteBlock = try #require(textBlocks?.first { $0.backgroundColor != nil })
-        #expect(quoteBlock.padding.top >= 10)
-        #expect(quoteBlock.padding.bottom >= 10)
+        #expect(quoteBlock.padding.top >= 12)
+        #expect(quoteBlock.padding.bottom >= 12)
         #expect(quoteBlock.padding.left <= 8)
+
+        let paragraphStyle = try #require(attributed.attribute(
+            .paragraphStyle,
+            at: range.location,
+            effectiveRange: nil
+        ) as? NSParagraphStyle)
+        #expect(paragraphStyle.firstLineHeadIndent > 0)
+        #expect(paragraphStyle.firstLineHeadIndent <= 12)
+        #expect(paragraphStyle.headIndent > 0)
+        #expect(paragraphStyle.headIndent <= 12)
     }
 
     @Test func rendersSemanticHTMLWithDistinctTypography() throws {
