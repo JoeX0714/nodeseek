@@ -386,6 +386,7 @@ class PostDetailViewController: UIViewController {
 
 extension PostDetailViewController: PostDetailViewProtocol {
     func showLoading() {
+        loginButton.isHidden = true
         if hasRenderedDetailContent {
             loadingIndicator.startAnimating()
         } else {
