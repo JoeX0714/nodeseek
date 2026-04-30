@@ -15,6 +15,7 @@ class PostDetailInteractor: PostDetailInteractorInput {
     private let post: PostSummary?
     private let service: NodeSeekService
     private let initialPage: Int
+    private let commentSubmitter: NodeSeekCommentSubmitter
     private let sessionStore: NodeSeekSessionStore
     private let logger = Logger(subsystem: "com.nodeseek.app", category: "PostDetailInteractor")
     
@@ -22,12 +23,14 @@ class PostDetailInteractor: PostDetailInteractorInput {
     init(
         post: PostSummary? = nil,
         service: NodeSeekService = NodeSeekService(),
+        commentSubmitter: NodeSeekCommentSubmitter = NodeSeekCommentSubmitter(),
         page: Int = 1,
         sessionStore: NodeSeekSessionStore = .shared
     ) {
         self.post = post
         self.service = service
         self.initialPage = max(1, page)
+        self.commentSubmitter = commentSubmitter
         self.sessionStore = sessionStore
     }
     
@@ -62,6 +65,31 @@ class PostDetailInteractor: PostDetailInteractorInput {
         }
     }
 
+    func submitComment(content: String, completion: @escaping @MainActor (Result<CommentSubmitResponse, Error>) -> Void) {
+        guard let post else {
+            completion(.failure(PostDetailLoadError.missingPost))
+            return
+        }
+
+        Task {
+            do {
+                let referer = post.url
+                let response = try await commentSubmitter.submitComment(
+                    postID: post.id,
+                    content: content,
+                    referer: referer
+                )
+                await MainActor.run {
+                    completion(.success(response))
+                }
+            } catch {
+                await MainActor.run {
+                    completion(.failure(error))
+                }
+            }
+        }
+    }
+
     private func loadDetail(postID: String, page: Int) async throws -> PostDetail? {
         logger.info("详情请求开始，postID=\(postID, privacy: .public), page=\(page)")
         let result = try await service.loadPostDetail(postID: postID, page: page)
@@ -85,12 +113,15 @@ class PostDetailInteractor: PostDetailInteractorInput {
 
 private enum PostDetailLoadError: LocalizedError {
     case challengeRequired(String)
+    case missingPost
     case unknown
 
     var errorDescription: String? {
         switch self {
         case .challengeRequired(let message):
             return message
+        case .missingPost:
+            return "缺少帖子信息，无法发表评论。"
         case .unknown:
             return "详情加载失败，请稍后重试。"
         }

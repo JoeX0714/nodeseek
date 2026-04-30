@@ -14,6 +14,9 @@ protocol PostDetailViewProtocol: AnyObject {
     func showPageLoading()
     func hideLoading()
     func showError(message: String)
+    func showToast(message: String)
+    func setCommentComposerSubmitting(_ isSubmitting: Bool)
+    func clearCommentComposer()
     func render(detail: PostDetail)
     func renderLoginRequired(message: String)
 }
@@ -23,12 +26,14 @@ protocol PostDetailPresenterProtocol: AnyObject {
     func viewDidLoad()
     func didTapLogin()
     func didSelectPage(_ page: Int)
+    func didSubmitComment(content: String)
 }
 
 // MARK: - Interactor Input (Presenter -> Interactor)
 protocol PostDetailInteractorInput: AnyObject {
     func loadPostDetail()
     func loadPostDetail(page: Int)
+    func submitComment(content: String, completion: @escaping @MainActor (Result<CommentSubmitResponse, Error>) -> Void)
 }
 
 // MARK: - Interactor Output (Interactor -> Presenter)

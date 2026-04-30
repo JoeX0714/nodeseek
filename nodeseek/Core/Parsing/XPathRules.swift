@@ -37,6 +37,7 @@ enum XPathRules {
     static let pagerPositionItems = ".//*[contains(@class, 'pager-pos')]"
     static let pagerPrevious = ".//*[contains(@class, 'pager-prev') and not(@aria-disabled='true')]"
     static let pagerNext = ".//*[contains(@class, 'pager-next') and not(@aria-disabled='true')]"
+    static let postDetailNextPage = "//*[contains(@class, 'comment-container')]//a[@rel='next' and contains(@class, 'pager-next')]"
     static let contentAuthor = ".//*[contains(@class, 'author-name')]"
     static let contentCreatedAt = ".//*[contains(@class, 'date-created')]//time"
     static let contentCategory = ".//*[contains(@class, 'content-category')]//a"

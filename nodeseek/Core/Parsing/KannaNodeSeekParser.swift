@@ -190,7 +190,8 @@ struct KannaNodeSeekParser: NodeSeekParser {
             comments: comments,
             replyForm: nil,
             page: page,
-            pagination: pagination
+            pagination: pagination,
+            isLastPage: document.at_xpath(XPathRules.postDetailNextPage) == nil
         )
     }
 
@@ -318,6 +319,7 @@ struct KannaNodeSeekParser: NodeSeekParser {
             avatarURL: avatarURL,
             floorText: firstText(in: item, xpaths: [XPathRules.contentFloor]),
             createdAtText: firstText(in: item, xpaths: [XPathRules.contentCreatedAt]),
+            createdAtTitleText: item.at_xpath(XPathRules.contentCreatedAt)?["title"]?.trimmedNonEmpty,
             contentHTML: item.at_xpath(XPathRules.contentArticle)?.innerHTML?.trimmedNonEmpty ?? ""
         )
     }
