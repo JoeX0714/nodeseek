@@ -132,6 +132,8 @@ class PostDetailViewController: UIViewController {
     private var pendingReloadIndexPaths: Set<IndexPath> = []
     private var displayMode: DisplayMode = .skeleton
     private var hasRenderedDetailContent = false
+    private var showsReplyEntry = false
+    private var replyContextBarHeightConstraint: NSLayoutConstraint?
     private let skeletonCommentRowCount = 4
     private let renderQueue = DispatchQueue(
         label: "com.nodeseek.app.postdetail.render",
@@ -160,6 +162,108 @@ class PostDetailViewController: UIViewController {
         button.configuration = configuration
         button.accessibilityIdentifier = "post-detail-login-button"
         button.isHidden = true
+        button.translatesAutoresizingMaskIntoConstraints = false
+        return button
+    }()
+
+    private let replyButton: UIButton = {
+        let button = UIButton(type: .system)
+        var configuration = UIButton.Configuration.filled()
+        configuration.image = UIImage(systemName: "text.bubble.fill")
+        configuration.baseBackgroundColor = .label
+        configuration.baseForegroundColor = .systemBackground
+        configuration.cornerStyle = .fixed
+        configuration.background.cornerRadius = 0
+        configuration.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 14)
+        button.configuration = configuration
+        button.accessibilityIdentifier = "post-detail-reply-button"
+        button.accessibilityLabel = "评论"
+        button.isHidden = true
+        button.layer.cornerRadius = 24
+        button.layer.maskedCorners = [.layerMinXMinYCorner, .layerMinXMaxYCorner]
+        button.clipsToBounds = true
+        button.translatesAutoresizingMaskIntoConstraints = false
+        return button
+    }()
+
+    private let replyEditorBackdrop: UIControl = {
+        let control = UIControl()
+        control.backgroundColor = UIColor.black.withAlphaComponent(0.08)
+        control.accessibilityIdentifier = "post-detail-reply-backdrop"
+        control.isHidden = true
+        control.translatesAutoresizingMaskIntoConstraints = false
+        return control
+    }()
+
+    private let replyEditorContainer: UIView = {
+        let view = UIView()
+        view.backgroundColor = .systemBackground
+        view.layer.cornerRadius = 18
+        view.layer.borderColor = UIColor.separator.cgColor
+        view.layer.borderWidth = 1
+        view.layer.shadowColor = UIColor.black.cgColor
+        view.layer.shadowOpacity = 0.12
+        view.layer.shadowRadius = 16
+        view.layer.shadowOffset = CGSize(width: 0, height: 8)
+        view.accessibilityIdentifier = "post-detail-reply-editor"
+        view.isHidden = true
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
+    }()
+
+    private let replyContextBar: UIView = {
+        let view = UIView()
+        view.backgroundColor = .secondarySystemBackground
+        view.layer.cornerRadius = 10
+        view.accessibilityIdentifier = "post-detail-reply-context-bar"
+        view.isHidden = true
+        view.translatesAutoresizingMaskIntoConstraints = false
+        return view
+    }()
+
+    private let replyContextLabel: UILabel = {
+        let label = UILabel()
+        label.font = .preferredFont(forTextStyle: .footnote)
+        label.textColor = .secondaryLabel
+        label.lineBreakMode = .byTruncatingTail
+        label.accessibilityIdentifier = "post-detail-reply-context-label"
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }()
+
+    private let replyContextCloseButton: UIButton = {
+        let button = UIButton(type: .system)
+        var configuration = UIButton.Configuration.plain()
+        configuration.image = UIImage(systemName: "xmark")
+        configuration.baseForegroundColor = .tertiaryLabel
+        configuration.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4)
+        button.configuration = configuration
+        button.accessibilityLabel = "取消引用"
+        button.translatesAutoresizingMaskIntoConstraints = false
+        return button
+    }()
+
+    private let replyTextView: UITextView = {
+        let textView = UITextView()
+        textView.font = .preferredFont(forTextStyle: .body)
+        textView.backgroundColor = .secondarySystemBackground
+        textView.layer.cornerRadius = 12
+        textView.textContainerInset = UIEdgeInsets(top: 10, left: 8, bottom: 10, right: 8)
+        textView.accessibilityIdentifier = "post-detail-reply-text-view"
+        textView.translatesAutoresizingMaskIntoConstraints = false
+        return textView
+    }()
+
+    private let inlineReplySendButton: UIButton = {
+        let button = UIButton(type: .system)
+        var configuration = UIButton.Configuration.plain()
+        configuration.image = UIImage(systemName: "arrow.up")
+        configuration.baseForegroundColor = .label
+        configuration.background.backgroundColor = .clear
+        configuration.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 6, bottom: 6, trailing: 6)
+        button.configuration = configuration
+        button.accessibilityIdentifier = "post-detail-reply-send-button"
+        button.accessibilityLabel = "发送"
         button.translatesAutoresizingMaskIntoConstraints = false
         return button
     }()
@@ -231,6 +335,25 @@ class PostDetailViewController: UIViewController {
         view.addSubview(loadingIndicator)
         loginButton.addTarget(self, action: #selector(loginButtonTapped), for: .touchUpInside)
         view.addSubview(loginButton)
+        replyButton.addTarget(self, action: #selector(replyButtonTapped), for: .touchUpInside)
+        view.addSubview(replyButton)
+        replyEditorBackdrop.addTarget(self, action: #selector(dismissReplyEditor), for: .touchUpInside)
+        view.addSubview(replyEditorBackdrop)
+        inlineReplySendButton.addTarget(self, action: #selector(sendReplyTapped), for: .touchUpInside)
+        replyContextCloseButton.addTarget(self, action: #selector(clearReplyContext), for: .touchUpInside)
+        replyContextBar.addSubview(replyContextLabel)
+        replyContextBar.addSubview(replyContextCloseButton)
+        replyEditorContainer.addSubview(replyContextBar)
+        replyEditorContainer.addSubview(replyTextView)
+        replyEditorContainer.addSubview(inlineReplySendButton)
+        view.addSubview(replyEditorContainer)
+
+        let replyEditorBottomConstraint = replyEditorContainer.bottomAnchor.constraint(
+            equalTo: view.keyboardLayoutGuide.topAnchor,
+            constant: -12
+        )
+        let replyContextBarHeightConstraint = replyContextBar.heightAnchor.constraint(equalToConstant: 0)
+        self.replyContextBarHeightConstraint = replyContextBarHeightConstraint
 
         NSLayoutConstraint.activate([
             tableNode.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -242,7 +365,47 @@ class PostDetailViewController: UIViewController {
             loadingIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor),
 
             loginButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            loginButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -28)
+            loginButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -28),
+
+            replyButton.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            replyButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -28),
+            replyButton.widthAnchor.constraint(equalToConstant: 56),
+            replyButton.heightAnchor.constraint(equalToConstant: 48),
+
+            replyEditorBackdrop.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            replyEditorBackdrop.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            replyEditorBackdrop.topAnchor.constraint(equalTo: view.topAnchor),
+            replyEditorBackdrop.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
+            replyEditorContainer.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 12),
+            replyEditorContainer.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -12),
+            replyEditorBottomConstraint,
+            replyEditorContainer.heightAnchor.constraint(greaterThanOrEqualToConstant: 96),
+
+            replyContextBar.leadingAnchor.constraint(equalTo: replyEditorContainer.leadingAnchor, constant: 12),
+            replyContextBar.trailingAnchor.constraint(equalTo: replyEditorContainer.trailingAnchor, constant: -12),
+            replyContextBar.topAnchor.constraint(equalTo: replyEditorContainer.topAnchor, constant: 12),
+            replyContextBarHeightConstraint,
+
+            replyContextLabel.leadingAnchor.constraint(equalTo: replyContextBar.leadingAnchor, constant: 10),
+            replyContextLabel.trailingAnchor.constraint(equalTo: replyContextCloseButton.leadingAnchor, constant: -6),
+            replyContextLabel.centerYAnchor.constraint(equalTo: replyContextBar.centerYAnchor),
+
+            replyContextCloseButton.trailingAnchor.constraint(equalTo: replyContextBar.trailingAnchor, constant: -6),
+            replyContextCloseButton.centerYAnchor.constraint(equalTo: replyContextBar.centerYAnchor),
+            replyContextCloseButton.widthAnchor.constraint(equalToConstant: 24),
+            replyContextCloseButton.heightAnchor.constraint(equalToConstant: 24),
+
+            replyTextView.leadingAnchor.constraint(equalTo: replyEditorContainer.leadingAnchor, constant: 12),
+            replyTextView.topAnchor.constraint(equalTo: replyContextBar.bottomAnchor, constant: 8),
+            replyTextView.bottomAnchor.constraint(equalTo: replyEditorContainer.bottomAnchor, constant: -12),
+            replyTextView.trailingAnchor.constraint(equalTo: inlineReplySendButton.leadingAnchor, constant: -8),
+            replyTextView.heightAnchor.constraint(greaterThanOrEqualToConstant: 72),
+
+            inlineReplySendButton.trailingAnchor.constraint(equalTo: replyEditorContainer.trailingAnchor, constant: -12),
+            inlineReplySendButton.centerYAnchor.constraint(equalTo: replyTextView.centerYAnchor),
+            inlineReplySendButton.widthAnchor.constraint(equalToConstant: 40),
+            inlineReplySendButton.heightAnchor.constraint(equalToConstant: 40)
         ])
 
         reloadTableData()
@@ -379,6 +542,77 @@ class PostDetailViewController: UIViewController {
     @objc
     private func loginButtonTapped() {
         presenter.didTapLogin()
+    }
+
+    @objc
+    private func replyButtonTapped() {
+        presentReplyEditor(contextText: nil)
+    }
+
+    private func updateReplyButtonVisibility() {
+        replyButton.isHidden = showsReplyEntry == false || displayMode != .content || replyEditorContainer.isHidden == false
+    }
+
+    private func presentReplyEditor(contextText: String?) {
+        guard showsReplyEntry, displayMode == .content else { return }
+        updateReplyContext(contextText)
+        replyEditorBackdrop.isHidden = false
+        replyEditorContainer.isHidden = false
+        view.bringSubviewToFront(replyEditorBackdrop)
+        view.bringSubviewToFront(replyEditorContainer)
+        view.setNeedsLayout()
+        view.layoutIfNeeded()
+        updateReplyButtonVisibility()
+        if view.window != nil {
+            replyTextView.becomeFirstResponder()
+        }
+    }
+
+    private func presentReplyEditor(action: String, for comment: Comment) {
+        let authorName = AuthorDisplayPolicy.displayName(from: comment.authorName) ?? comment.authorName
+        let contextParts = [
+            action,
+            Self.trimmedNonEmpty(authorName),
+            comment.floorText.flatMap(Self.trimmedNonEmpty)
+        ]
+            .compactMap(\.self)
+        presentReplyEditor(contextText: contextParts.joined(separator: " "))
+    }
+
+    nonisolated private static func trimmedNonEmpty(_ text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func updateReplyContext(_ contextText: String?) {
+        if let contextText, contextText.isEmpty == false {
+            replyContextLabel.text = contextText
+            replyContextBar.isHidden = false
+            replyContextBarHeightConstraint?.constant = 32
+        } else {
+            replyContextLabel.text = nil
+            replyContextBar.isHidden = true
+            replyContextBarHeightConstraint?.constant = 0
+        }
+    }
+
+    @objc
+    private func dismissReplyEditor() {
+        replyTextView.resignFirstResponder()
+        replyEditorBackdrop.isHidden = true
+        replyEditorContainer.isHidden = true
+        updateReplyContext(nil)
+        updateReplyButtonVisibility()
+    }
+
+    @objc
+    private func clearReplyContext() {
+        updateReplyContext(nil)
+    }
+
+    @objc
+    private func sendReplyTapped() {
+        replyTextView.resignFirstResponder()
     }
 
     @objc
@@ -532,6 +766,7 @@ class PostDetailViewController: UIViewController {
 extension PostDetailViewController: PostDetailViewProtocol {
     func showLoading() {
         loginButton.isHidden = true
+        replyButton.isHidden = true
         if hasRenderedDetailContent {
             loadingIndicator.startAnimating()
         } else {
@@ -542,6 +777,7 @@ extension PostDetailViewController: PostDetailViewProtocol {
 
     func hideLoading() {
         loadingIndicator.stopAnimating()
+        updateReplyButtonVisibility()
     }
 
     func showError(message: String) {
@@ -554,6 +790,7 @@ extension PostDetailViewController: PostDetailViewProtocol {
     func render(detail: PostDetail) {
         title = "详情"
         loginButton.isHidden = true
+        showsReplyEntry = true
         renderGeneration += 1
         hasRenderedDetailContent = true
         displayMode = .content
@@ -566,11 +803,15 @@ extension PostDetailViewController: PostDetailViewProtocol {
         reloadTableData()
         scheduleHeaderRender(for: headerContent)
         preheatCommentRender(for: comments)
+        updateReplyButtonVisibility()
     }
 
     func renderLoginRequired(message: String) {
         title = "详情"
         loginButton.isHidden = false
+        showsReplyEntry = false
+        dismissReplyEditor()
+        updateReplyButtonVisibility()
         renderGeneration += 1
         hasRenderedDetailContent = true
         displayMode = .content
@@ -593,6 +834,24 @@ extension PostDetailViewController: PostDetailViewProtocol {
         scheduleHeaderRender(for: headerContent)
     }
 }
+
+#if DEBUG
+extension PostDetailViewController {
+    func showReplyEditorForTesting(action: String, authorName: String, floorText: String?) {
+        showsReplyEntry = true
+        displayMode = .content
+        let comment = Comment(
+            id: "reply-editor-test-comment",
+            authorName: authorName,
+            avatarURL: nil,
+            floorText: floorText,
+            createdAtText: nil,
+            contentHTML: ""
+        )
+        presentReplyEditor(action: action, for: comment)
+    }
+}
+#endif
 
 private final class CookieSharedWebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
     private let url: URL
@@ -880,6 +1139,12 @@ extension PostDetailViewController: ASTableDataSource, ASTableDelegate {
                 },
                 onLinkTapped: { url in
                     self?.handleContentLinkTap(url)
+                },
+                onQuoteTapped: { _ in
+                    self?.presentReplyEditor(action: "引用", for: comment)
+                },
+                onReplyTapped: { _ in
+                    self?.presentReplyEditor(action: "回复", for: comment)
                 },
                 onTextLayoutInvalidated: {
                     self?.scheduleAttachmentLayoutRefresh()

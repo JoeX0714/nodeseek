@@ -35,6 +35,8 @@ final class CommentCellNode: ASCellNode {
     private let comment: Comment
     private let onImageTapped: ([URL], Int) -> Void
     private let onLinkTapped: (URL) -> Void
+    private let onQuoteTapped: (Comment) -> Void
+    private let onReplyTapped: (Comment) -> Void
     private let onTextLayoutInvalidated: () -> Void
     private let avatarLoader = AvatarImageLoader.shared
     private weak var avatarImageView: UIImageView?
@@ -47,6 +49,8 @@ final class CommentCellNode: ASCellNode {
     private let timeNode = ASTextNode()
     private let floorNode = ASTextNode()
     private let separatorNode = ASDisplayNode()
+    private let quoteButtonNode = ASButtonNode()
+    private let replyButtonNode = ASButtonNode()
     private let bodyNodes: [ASDisplayNode]
 
     private lazy var avatarNode: ASDisplayNode = {
@@ -71,11 +75,15 @@ final class CommentCellNode: ASCellNode {
         renderedBody: [RenderedContentBlock]?,
         onImageTapped: @escaping ([URL], Int) -> Void,
         onLinkTapped: @escaping (URL) -> Void = { _ in },
+        onQuoteTapped: @escaping (Comment) -> Void = { _ in },
+        onReplyTapped: @escaping (Comment) -> Void = { _ in },
         onTextLayoutInvalidated: @escaping () -> Void
     ) {
         self.comment = comment
         self.onImageTapped = onImageTapped
         self.onLinkTapped = onLinkTapped
+        self.onQuoteTapped = onQuoteTapped
+        self.onReplyTapped = onReplyTapped
         self.onTextLayoutInvalidated = onTextLayoutInvalidated
         self.bodyNodes = DetailContentBlockNodeFactory.makeNodes(
             from: renderedBody ?? [],
@@ -89,6 +97,7 @@ final class CommentCellNode: ASCellNode {
         backgroundColor = .systemBackground
         separatorNode.backgroundColor = .separator
         configureText()
+        configureActionButtons()
     }
 
     override func didLoad() {
@@ -143,6 +152,7 @@ final class CommentCellNode: ASCellNode {
         for bodyNode in bodyNodes {
             textChildren.append(bodyNode)
         }
+        textChildren.append(actionButtonsLayoutSpec())
 
         let textStack = ASStackLayoutSpec.vertical()
         textStack.spacing = Layout.bodySpacing
@@ -205,6 +215,46 @@ final class CommentCellNode: ASCellNode {
                 .foregroundColor: UIColor.tertiaryLabel
             ]
         )
+    }
+
+    private func configureActionButtons() {
+        configureActionButton(quoteButtonNode, title: "引用", accessibilityLabel: "引用评论")
+        configureActionButton(replyButtonNode, title: "回复", accessibilityLabel: "回复评论")
+        quoteButtonNode.addTarget(self, action: #selector(quoteButtonTapped), forControlEvents: .touchUpInside)
+        replyButtonNode.addTarget(self, action: #selector(replyButtonTapped), forControlEvents: .touchUpInside)
+    }
+
+    private func configureActionButton(_ button: ASButtonNode, title: String, accessibilityLabel: String) {
+        button.setAttributedTitle(
+            NSAttributedString(
+                string: title,
+                attributes: [
+                    .font: UIFont.preferredFont(forTextStyle: .subheadline),
+                    .foregroundColor: UIColor.secondaryLabel
+                ]
+            ),
+            for: .normal
+        )
+        button.contentEdgeInsets = UIEdgeInsets(top: 4, left: 8, bottom: 4, right: 8)
+        button.accessibilityLabel = accessibilityLabel
+    }
+
+    private func actionButtonsLayoutSpec() -> ASLayoutSpec {
+        let actionStack = ASStackLayoutSpec.horizontal()
+        actionStack.spacing = 4
+        actionStack.justifyContent = .end
+        actionStack.children = [quoteButtonNode, replyButtonNode]
+        return actionStack
+    }
+
+    @objc
+    private func quoteButtonTapped() {
+        onQuoteTapped(comment)
+    }
+
+    @objc
+    private func replyButtonTapped() {
+        onReplyTapped(comment)
     }
 
     private func requestAvatarIfNeeded() {

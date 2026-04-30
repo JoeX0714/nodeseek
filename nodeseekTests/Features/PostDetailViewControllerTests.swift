@@ -126,6 +126,8 @@ struct PostDetailViewControllerTests {
                     comment: comment,
                     renderedBody: renderedContent,
                     onImageTapped: { _, _ in },
+                    onQuoteTapped: { _ in },
+                    onReplyTapped: { _ in },
                     onTextLayoutInvalidated: {}
                 ).layoutThatFits(ASSizeRange(
                     min: .zero,
@@ -486,6 +488,131 @@ struct PostDetailLoginViewControllerTests {
         #expect(button.isHidden)
     }
 
+    @Test func replyButtonShowsForReplyableDetailAndPresentsInlineEditor() throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter)
+
+        viewController.loadViewIfNeeded()
+        viewController.render(detail: PostDetail(
+            id: "703863",
+            title: "详情标题",
+            authorName: "ipv4",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "<p>正文</p>",
+            comments: [],
+            replyForm: ReplyForm(
+                actionURL: URL(string: "https://www.nodeseek.com/post-703863-1")!,
+                method: "POST",
+                textFieldName: "content",
+                hiddenFields: [:]
+            )
+        ))
+
+        let button = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-reply-button"))
+        #expect(button.isHidden == false)
+        #expect(button.configuration?.image != nil)
+        #expect(button.configuration?.title == nil)
+        #expect(button.configuration?.baseBackgroundColor == .label)
+        #expect(button.configuration?.baseForegroundColor == .systemBackground)
+        #expect(button.layer.maskedCorners == [.layerMinXMinYCorner, .layerMinXMaxYCorner])
+
+        button.sendActions(for: .touchUpInside)
+
+        let editor = try #require(viewController.view.firstSubview(accessibilityIdentifier: "post-detail-reply-editor"))
+        #expect(editor.isHidden == false)
+        let textView = try #require(viewController.view.firstSubview(accessibilityIdentifier: "post-detail-reply-text-view"))
+        #expect(textView.isHidden == false)
+        #expect(textView.bounds.height > 0)
+        #expect(viewController.presentedViewController == nil)
+    }
+
+    @Test func replyButtonShowsForLoadedDetailEvenWithoutParsedReplyForm() throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter)
+
+        viewController.loadViewIfNeeded()
+        viewController.render(detail: PostDetail(
+            id: "703863",
+            title: "详情标题",
+            authorName: "ipv4",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "<p>正文</p>",
+            comments: [],
+            replyForm: nil
+        ))
+
+        let button = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-reply-button"))
+        #expect(button.isHidden == false)
+    }
+
+    @Test func inlineReplyEditorUsesArrowSendButtonWithoutFilledBackground() throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter)
+
+        viewController.loadViewIfNeeded()
+        viewController.render(detail: PostDetail(
+            id: "703863",
+            title: "详情标题",
+            authorName: "ipv4",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "<p>正文</p>",
+            comments: [],
+            replyForm: nil
+        ))
+
+        let replyButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-reply-button"))
+        replyButton.sendActions(for: .touchUpInside)
+
+        let button = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-reply-send-button"))
+        #expect(button.accessibilityLabel == "发送")
+        #expect(button.configuration?.image != nil)
+        #expect(button.configuration?.title == nil)
+        #expect(button.configuration?.baseForegroundColor == .label)
+        #expect(button.configuration?.background.backgroundColor == .clear)
+    }
+
+    @Test func inlineReplySendButtonAlignsWithTextViewCenterY() throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter)
+
+        viewController.loadViewIfNeeded()
+        viewController.view.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+        viewController.render(detail: PostDetail(
+            id: "703863",
+            title: "详情标题",
+            authorName: "ipv4",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "<p>正文</p>",
+            comments: [],
+            replyForm: nil
+        ))
+
+        let replyButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-reply-button"))
+        replyButton.sendActions(for: .touchUpInside)
+        viewController.view.layoutIfNeeded()
+
+        let textView = try #require(viewController.view.firstSubview(accessibilityIdentifier: "post-detail-reply-text-view"))
+        let sendButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-reply-send-button"))
+        #expect(abs(textView.center.y - sendButton.center.y) < 0.5)
+    }
+
+    @Test func commentReplyContextBarShowsSelectedComment() throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter)
+
+        viewController.loadViewIfNeeded()
+        viewController.showReplyEditorForTesting(action: "回复", authorName: "ipv4", floorText: "#4")
+
+        let bar = try #require(viewController.view.firstSubview(accessibilityIdentifier: "post-detail-reply-context-bar"))
+        #expect(bar.isHidden == false)
+        let label = try #require(viewController.view.firstLabel(accessibilityIdentifier: "post-detail-reply-context-label"))
+        #expect(label.text == "回复 ipv4 #4")
+    }
+
     @Test func showLoadingHidesVisibleLoginButton() throws {
         let presenter = SpyPostDetailPresenter()
         let viewController = PostDetailViewController(presenter: presenter)
@@ -537,6 +664,34 @@ private extension UIView {
 
         for subview in subviews {
             if let matched = subview.firstButton(accessibilityIdentifier: accessibilityIdentifier) {
+                return matched
+            }
+        }
+
+        return nil
+    }
+
+    func firstSubview(accessibilityIdentifier: String) -> UIView? {
+        if self.accessibilityIdentifier == accessibilityIdentifier {
+            return self
+        }
+
+        for subview in subviews {
+            if let matched = subview.firstSubview(accessibilityIdentifier: accessibilityIdentifier) {
+                return matched
+            }
+        }
+
+        return nil
+    }
+
+    func firstLabel(accessibilityIdentifier: String) -> UILabel? {
+        if let label = self as? UILabel, label.accessibilityIdentifier == accessibilityIdentifier {
+            return label
+        }
+
+        for subview in subviews {
+            if let matched = subview.firstLabel(accessibilityIdentifier: accessibilityIdentifier) {
                 return matched
             }
         }
