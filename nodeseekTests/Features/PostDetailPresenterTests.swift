@@ -70,87 +70,6 @@ struct PostDetailPresenterTests {
         #expect(interactor.loadedPages == [2, 2])
     }
 
-    @Test func commentSubmitSuccessReloadsWhenCurrentDetailIsLastPage() {
-        let interactor = SpyPostDetailInteractor()
-        let router = SpyPostDetailRouter()
-        let presenter = PostDetailPresenter(interactor: interactor, router: router)
-        let view = SpyPostDetailView()
-        presenter.setView(view)
-        presenter.didLoadPostDetail(PostDetailResponse(detail: PostDetail(
-            id: "706958",
-            title: "标题",
-            authorName: "mist",
-            avatarURL: nil,
-            metadataText: nil,
-            contentHTML: "<p>正文</p>",
-            comments: [],
-            isLastPage: true
-        )))
-
-        presenter.didSubmitComment(content: "bdbd")
-        interactor.capturedCommentCompletion?(.success(CommentSubmitResponse(message: nil)))
-
-        #expect(interactor.submitCommentCount == 1)
-        #expect(interactor.loadPostDetailCount == 1)
-        #expect(view.clearComposerCount == 1)
-        #expect(view.toastMessage == nil)
-    }
-
-    @Test func commentSubmitTogglesSubmittingStateAroundRequest() {
-        let interactor = SpyPostDetailInteractor()
-        let router = SpyPostDetailRouter()
-        let presenter = PostDetailPresenter(interactor: interactor, router: router)
-        let view = SpyPostDetailView()
-        presenter.setView(view)
-
-        presenter.didSubmitComment(content: "bdbd")
-
-        #expect(view.commentSubmittingStates == [true])
-
-        interactor.capturedCommentCompletion?(.success(CommentSubmitResponse(message: nil)))
-
-        #expect(view.commentSubmittingStates == [true, false])
-    }
-
-    @Test func commentSubmitSuccessShowsToastWhenCurrentDetailIsNotLastPage() {
-        let interactor = SpyPostDetailInteractor()
-        let router = SpyPostDetailRouter()
-        let presenter = PostDetailPresenter(interactor: interactor, router: router)
-        let view = SpyPostDetailView()
-        presenter.setView(view)
-        presenter.didLoadPostDetail(PostDetailResponse(detail: PostDetail(
-            id: "706958",
-            title: "标题",
-            authorName: "mist",
-            avatarURL: nil,
-            metadataText: nil,
-            contentHTML: "<p>正文</p>",
-            comments: [],
-            isLastPage: false
-        )))
-
-        presenter.didSubmitComment(content: "bdbd")
-        interactor.capturedCommentCompletion?(.success(CommentSubmitResponse(message: nil)))
-
-        #expect(interactor.submitCommentCount == 1)
-        #expect(interactor.loadPostDetailCount == 0)
-        #expect(view.clearComposerCount == 1)
-        #expect(view.toastMessage == "评论已发布，可到最后一页查看")
-    }
-
-    @Test func emptyCommentShowsErrorWithoutSubmitting() {
-        let interactor = SpyPostDetailInteractor()
-        let router = SpyPostDetailRouter()
-        let presenter = PostDetailPresenter(interactor: interactor, router: router)
-        let view = SpyPostDetailView()
-        presenter.setView(view)
-
-        presenter.didSubmitComment(content: "  \n ")
-
-        #expect(interactor.submitCommentCount == 0)
-        #expect(view.errorMessage == "评论内容不能为空。")
-    }
-
     @Test func replySubmissionSuccessFinishesComposerAndReloadsCurrentPage() {
         let interactor = SpyPostDetailInteractor()
         let router = SpyPostDetailRouter()
@@ -183,9 +102,7 @@ struct PostDetailPresenterTests {
 private final class SpyPostDetailInteractor: PostDetailInteractorInput {
     private(set) var loadedPages: [Int] = []
     private(set) var loadPostDetailCount = 0
-    private(set) var submitCommentCount = 0
     private(set) var submittedReplyContent: String?
-    var capturedCommentCompletion: ((Result<CommentSubmitResponse, Error>) -> Void)?
 
     func loadPostDetail() {
         loadPostDetail(page: 1)
@@ -194,11 +111,6 @@ private final class SpyPostDetailInteractor: PostDetailInteractorInput {
     func loadPostDetail(page: Int) {
         loadPostDetailCount += 1
         loadedPages.append(page)
-    }
-
-    func submitComment(content: String, completion: @escaping @MainActor (Result<CommentSubmitResponse, Error>) -> Void) {
-        submitCommentCount += 1
-        capturedCommentCompletion = completion
     }
 
     func submitReply(content: String) {
@@ -221,9 +133,7 @@ private final class SpyPostDetailView: PostDetailViewProtocol {
     private(set) var pageLoadingCount = 0
     var errorMessage: String?
     var toastMessage: String?
-    private(set) var commentSubmittingStates: [Bool] = []
     private(set) var replySubmittingStates: [Bool] = []
-    private(set) var clearComposerCount = 0
     private(set) var finishReplySubmissionCount = 0
 
     func showLoading() { loadingCount += 1 }
@@ -231,8 +141,6 @@ private final class SpyPostDetailView: PostDetailViewProtocol {
     func hideLoading() {}
     func showError(message: String) { errorMessage = message }
     func showToast(message: String) { toastMessage = message }
-    func setCommentComposerSubmitting(_ isSubmitting: Bool) { commentSubmittingStates.append(isSubmitting) }
-    func clearCommentComposer() { clearComposerCount += 1 }
     func setReplySubmitting(_ isSubmitting: Bool) { replySubmittingStates.append(isSubmitting) }
     func finishReplySubmission() { finishReplySubmissionCount += 1 }
     func render(detail: PostDetail) {}

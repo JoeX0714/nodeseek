@@ -1017,64 +1017,27 @@ struct PostDetailLoginViewControllerTests {
         #expect(button.isHidden)
     }
 
-    @Test func showsBottomCommentComposerAndSubmitsPlainText() throws {
+    @Test func detailUsesOnlyFloatingReplyEntry() throws {
         let presenter = SpyPostDetailPresenter()
         let viewController = PostDetailViewController(presenter: presenter)
 
         viewController.loadViewIfNeeded()
+        viewController.render(detail: PostDetail(
+            id: "703863",
+            title: "详情标题",
+            authorName: "ipv4",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "<p>正文</p>",
+            comments: []
+        ))
 
-        let textView = try #require(viewController.view.firstTextView(accessibilityIdentifier: "post-detail-comment-input"))
-        let sendButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-comment-send-button"))
-        let placeholderLabel = try #require(viewController.view.firstLabel(accessibilityIdentifier: "post-detail-comment-placeholder-label"))
-        #expect(textView.text.isEmpty)
-        #expect(textView.isScrollEnabled == false)
-        #expect(textView.textContainerInset.top == 12)
-        #expect(placeholderLabel.text == "写下你的评论...")
-        #expect(placeholderLabel.isHidden == false)
-        #expect(sendButton.isEnabled == false)
-        #expect(sendButton.isHidden)
+        #expect(viewController.view.firstTextView(accessibilityIdentifier: "post-detail-comment-input") == nil)
+        #expect(viewController.view.firstButton(accessibilityIdentifier: "post-detail-comment-send-button") == nil)
+        #expect(viewController.view.firstLabel(accessibilityIdentifier: "post-detail-comment-placeholder-label") == nil)
 
-        textView.text = "bdbd"
-        textView.delegate?.textViewDidChange?(textView)
-        #expect(placeholderLabel.isHidden)
-        viewController.simulateKeyboardVisibleForTesting()
-        #expect(sendButton.isHidden == false)
-        sendButton.sendActions(for: .touchUpInside)
-
-        #expect(presenter.submittedComments == ["bdbd"])
-    }
-
-    @Test func commentComposerDefaultsToSingleLineHeightAndReducedTopPadding() throws {
-        let presenter = SpyPostDetailPresenter()
-        let viewController = PostDetailViewController(presenter: presenter)
-
-        viewController.loadViewIfNeeded()
-        viewController.view.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
-        viewController.view.layoutIfNeeded()
-
-        let textView = try #require(viewController.view.firstTextView(accessibilityIdentifier: "post-detail-comment-input"))
-        let expectedHeight = (textView.font?.lineHeight ?? 0)
-            + textView.textContainerInset.top
-            + textView.textContainerInset.bottom
-
-        #expect(abs(textView.bounds.height - expectedHeight) < 1)
-        #expect(textView.textContainerInset.top == 12)
-    }
-
-    @Test func commentSendButtonVisibilityTracksKeyboardVisibility() throws {
-        let presenter = SpyPostDetailPresenter()
-        let viewController = PostDetailViewController(presenter: presenter)
-
-        viewController.loadViewIfNeeded()
-        let sendButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-comment-send-button"))
-
-        #expect(sendButton.isHidden)
-
-        viewController.simulateKeyboardVisibleForTesting()
-        #expect(sendButton.isHidden == false)
-
-        viewController.simulateKeyboardHiddenForTesting()
-        #expect(sendButton.isHidden)
+        let floatingReplyButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-reply-button"))
+        #expect(floatingReplyButton.isHidden == false)
     }
 
     @Test func commentComposerAddsNonCancellingDismissKeyboardTapGesture() throws {
@@ -1085,67 +1048,6 @@ struct PostDetailLoginViewControllerTests {
 
         let tapGesture = try #require(viewController.view.gestureRecognizers?.compactMap { $0 as? UITapGestureRecognizer }.first)
         #expect(tapGesture.cancelsTouchesInView == false)
-    }
-
-    @Test func clearCommentComposerResetsTextReplyTargetAndSendButton() throws {
-        let presenter = SpyPostDetailPresenter()
-        let viewController = PostDetailViewController(presenter: presenter)
-        let comment = Comment(
-            id: "1",
-            anchorID: "10",
-            authorName: "netcup",
-            avatarURL: nil,
-            floorText: "#10",
-            createdAtText: "1min ago",
-            createdAtTitleText: nil,
-            contentHTML: "<p>第一段</p>"
-        )
-
-        viewController.loadViewIfNeeded()
-        viewController.handleReply(to: comment)
-        let textView = try #require(viewController.view.firstTextView(accessibilityIdentifier: "post-detail-comment-input"))
-        let sendButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-comment-send-button"))
-        let targetLabel = try #require(viewController.view.firstLabel(accessibilityIdentifier: "post-detail-comment-target-label"))
-
-        textView.text = "bdbd"
-        textView.delegate?.textViewDidChange?(textView)
-        viewController.simulateKeyboardVisibleForTesting()
-        #expect(sendButton.isEnabled)
-        #expect(targetLabel.isHidden == false)
-
-        viewController.clearCommentComposer()
-
-        #expect(textView.text.isEmpty)
-        #expect(sendButton.isEnabled == false)
-        #expect(sendButton.isHidden == false)
-        #expect(targetLabel.isHidden)
-    }
-
-    @Test func commentSubmitLoadingStateShowsSpinnerOnSendButton() throws {
-        let presenter = SpyPostDetailPresenter()
-        let viewController = PostDetailViewController(presenter: presenter)
-
-        viewController.loadViewIfNeeded()
-
-        let textView = try #require(viewController.view.firstTextView(accessibilityIdentifier: "post-detail-comment-input"))
-        let sendButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-comment-send-button"))
-
-        textView.text = "bdbd"
-        textView.delegate?.textViewDidChange?(textView)
-        viewController.simulateKeyboardVisibleForTesting()
-        #expect(sendButton.isEnabled)
-
-        viewController.setCommentComposerSubmitting(true)
-
-        #expect(sendButton.isEnabled == false)
-        #expect(sendButton.configuration?.showsActivityIndicator == true)
-        #expect(sendButton.configuration?.image == nil)
-
-        viewController.setCommentComposerSubmitting(false)
-
-        #expect(sendButton.isEnabled)
-        #expect(sendButton.configuration?.showsActivityIndicator == false)
-        #expect(sendButton.configuration?.image != nil)
     }
 
     @Test func replyAndQuoteActionsUpdateComposerState() throws {
@@ -1190,126 +1092,6 @@ struct PostDetailLoginViewControllerTests {
         #expect(presenter.sentReplyContent?.contains("第二段") == false)
     }
 
-    @Test func quotePrefillExpandsCommentComposerHeight() throws {
-        let presenter = SpyPostDetailPresenter()
-        let viewController = PostDetailViewController(presenter: presenter)
-        let comment = Comment(
-            id: "1",
-            anchorID: "10",
-            authorName: "netcup",
-            avatarURL: nil,
-            floorText: "#10",
-            createdAtText: "1min ago",
-            createdAtTitleText: "2026-04-29 13:58:43",
-            contentHTML: "<p>这是一段用于测试输入框高度自适应的引用内容，会被预填到评论输入框里。</p>"
-        )
-
-        viewController.loadViewIfNeeded()
-        viewController.view.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
-        viewController.view.layoutIfNeeded()
-
-        let textView = try #require(viewController.view.firstTextView(accessibilityIdentifier: "post-detail-comment-input"))
-        let initialHeight = textView.bounds.height
-
-        viewController.handleQuote(comment)
-        viewController.view.layoutIfNeeded()
-
-        #expect(textView.bounds.height > initialHeight)
-        #expect(textView.isScrollEnabled == false)
-    }
-
-    @Test func longQuotePrefillCapsCommentComposerAtMaximumHeight() throws {
-        let presenter = SpyPostDetailPresenter()
-        let viewController = PostDetailViewController(presenter: presenter)
-        let longParagraph = Array(repeating: "这是一段很长的引用内容，用于验证输入框最大高度。", count: 40).joined()
-        let comment = Comment(
-            id: "1",
-            anchorID: "10",
-            authorName: "netcup",
-            avatarURL: nil,
-            floorText: "#10",
-            createdAtText: "1min ago",
-            createdAtTitleText: "2026-04-29 13:58:43",
-            contentHTML: "<p>\(longParagraph)</p>"
-        )
-
-        viewController.loadViewIfNeeded()
-        viewController.view.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
-        viewController.view.layoutIfNeeded()
-
-        let textView = try #require(viewController.view.firstTextView(accessibilityIdentifier: "post-detail-comment-input"))
-        let expectedMaximumHeight = (textView.font?.lineHeight ?? 0) * 6
-            + textView.textContainerInset.top
-            + textView.textContainerInset.bottom
-
-        viewController.handleQuote(comment)
-        viewController.view.layoutIfNeeded()
-
-        #expect(abs(textView.bounds.height - expectedMaximumHeight) < 1)
-        #expect(textView.isScrollEnabled)
-    }
-
-    @Test func quotePrefillRestoresScrollingWhenComposerAlreadyAtMaximumHeight() throws {
-        let presenter = SpyPostDetailPresenter()
-        let viewController = PostDetailViewController(presenter: presenter)
-        let firstParagraph = Array(repeating: "第一段长引用内容，用于撑满输入框高度。", count: 40).joined()
-        let secondParagraph = Array(repeating: "第二段长引用内容，再次预填时高度仍然应该封顶并允许滚动。", count: 40).joined()
-        let firstComment = Comment(
-            id: "1",
-            anchorID: "10",
-            authorName: "netcup",
-            avatarURL: nil,
-            floorText: "#10",
-            createdAtText: "1min ago",
-            createdAtTitleText: "2026-04-29 13:58:43",
-            contentHTML: "<p>\(firstParagraph)</p>"
-        )
-        let secondComment = Comment(
-            id: "2",
-            anchorID: "11",
-            authorName: "coldsword",
-            avatarURL: nil,
-            floorText: "#11",
-            createdAtText: "2min ago",
-            createdAtTitleText: "2026-04-29 14:00:00",
-            contentHTML: "<p>\(secondParagraph)</p>"
-        )
-
-        viewController.loadViewIfNeeded()
-        viewController.view.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
-        viewController.view.layoutIfNeeded()
-
-        let textView = try #require(viewController.view.firstTextView(accessibilityIdentifier: "post-detail-comment-input"))
-
-        viewController.handleQuote(firstComment)
-        viewController.view.layoutIfNeeded()
-        #expect(textView.isScrollEnabled)
-
-        textView.isScrollEnabled = false
-        viewController.handleQuote(secondComment)
-        viewController.view.layoutIfNeeded()
-
-        #expect(textView.isScrollEnabled)
-    }
-
-    @Test func pastedLongCommentTextGetsDeferredHeightRecalibration() async throws {
-        let presenter = SpyPostDetailPresenter()
-        let viewController = PostDetailViewController(presenter: presenter)
-
-        viewController.loadViewIfNeeded()
-        viewController.view.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
-        viewController.view.layoutIfNeeded()
-
-        let textView = try #require(viewController.view.firstTextView(accessibilityIdentifier: "post-detail-comment-input"))
-        textView.text = Array(repeating: "这是一段模拟粘贴进输入框的长文本，用于覆盖换行布局延迟稳定的情况。", count: 50).joined()
-        textView.delegate?.textViewDidChange?(textView)
-
-        textView.isScrollEnabled = false
-        try await Task.sleep(nanoseconds: 180_000_000)
-
-        #expect(textView.isScrollEnabled)
-    }
-
     @Test func renderShowsToastMessage() throws {
         let presenter = SpyPostDetailPresenter()
         let viewController = PostDetailViewController(presenter: presenter)
@@ -1327,7 +1109,6 @@ private final class SpyPostDetailPresenter: PostDetailPresenterProtocol {
     private(set) var loadCount = 0
     private(set) var didTapLoginCount = 0
     private(set) var selectedPages: [Int] = []
-    private(set) var submittedComments: [String] = []
     private(set) var sentReplyContent: String?
 
     func viewDidLoad() {
@@ -1340,10 +1121,6 @@ private final class SpyPostDetailPresenter: PostDetailPresenterProtocol {
 
     func didSelectPage(_ page: Int) {
         selectedPages.append(page)
-    }
-
-    func didSubmitComment(content: String) {
-        submittedComments.append(content)
     }
 
     func didTapSendReply(content: String) {

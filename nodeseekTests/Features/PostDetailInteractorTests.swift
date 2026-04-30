@@ -243,6 +243,11 @@ private actor URLCapturingHTMLClient: HTMLClient {
         return response
     }
 
+    func post(_ url: URL, formFields: [String: String]) async throws -> HTMLResponse {
+        urls.append(url)
+        return response
+    }
+
     func requestedURLs() -> [URL] {
         urls
     }

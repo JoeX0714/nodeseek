@@ -65,31 +65,6 @@ class PostDetailInteractor: PostDetailInteractorInput {
         }
     }
 
-    func submitComment(content: String, completion: @escaping @MainActor (Result<CommentSubmitResponse, Error>) -> Void) {
-        guard let post else {
-            completion(.failure(PostDetailLoadError.missingPost))
-            return
-        }
-
-        Task {
-            do {
-                let referer = post.url
-                let response = try await commentSubmitter.submitComment(
-                    postID: post.id,
-                    content: content,
-                    referer: referer
-                )
-                await MainActor.run {
-                    completion(.success(response))
-                }
-            } catch {
-                await MainActor.run {
-                    completion(.failure(error))
-                }
-            }
-        }
-    }
-
     func submitReply(content: String) {
         let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmedContent.isEmpty == false else {
