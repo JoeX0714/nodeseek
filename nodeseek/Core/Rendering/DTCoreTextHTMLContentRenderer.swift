@@ -12,11 +12,6 @@ import OSLog
 import UIKit
 
 struct DTCoreTextHTMLContentRenderer {
-    private struct ImageDescriptor {
-        let url: URL?
-        let isSticker: Bool
-    }
-
     private enum Layout {
         static let defaultMaxImageWidth: CGFloat = 320
         static let bodyLineSpacing: CGFloat = 5
@@ -84,9 +79,8 @@ struct DTCoreTextHTMLContentRenderer {
         let expandedFragment = expandNodeSeekMagicTabs(in: fragment)
         let normalizedVideoFragment = normalizeVideoStickerSources(in: expandedFragment, baseURL: baseURL)
         let normalizedFragment = normalizeImageSources(in: normalizedVideoFragment, baseURL: baseURL)
-        let normalizedSources = imageDescriptors(in: normalizedFragment, baseURL: baseURL)
         logDiagnostics(
-            "render normalized expandedLength=\(expandedFragment.count) normalizedLength=\(normalizedFragment.count) imageSources=\(normalizedSources.count) urls=\(normalizedSources.prefix(6).compactMap { $0.url?.absoluteString }.joined(separator: " | "))"
+            "render normalized expandedLength=\(expandedFragment.count) normalizedLength=\(normalizedFragment.count)"
         )
 
         let blocks = renderContentBlocks(
@@ -103,7 +97,6 @@ struct DTCoreTextHTMLContentRenderer {
             return fallbackBlocks(from: fragment)
         }
 
-        let imageSources = imageDescriptors(in: fragment, baseURL: baseURL)
         let options: [String: Any] = [
             NSBaseURLDocumentOption: baseURL,
             DTDefaultFontSize: UIFont.preferredFont(forTextStyle: .body).pointSize,
@@ -124,7 +117,6 @@ struct DTCoreTextHTMLContentRenderer {
         let normalized = normalize(
             attributed: rendered,
             baseURL: baseURL,
-            imageSources: imageSources,
             maxImageWidth: maxImageWidth
         )
         logDiagnostics(
@@ -639,7 +631,6 @@ struct DTCoreTextHTMLContentRenderer {
     private func normalize(
         attributed: NSAttributedString,
         baseURL: URL,
-        imageSources: [ImageDescriptor],
         maxImageWidth: CGFloat
     ) -> NSMutableAttributedString {
         let mutable = NSMutableAttributedString(attributedString: attributed)
@@ -650,7 +641,7 @@ struct DTCoreTextHTMLContentRenderer {
         normalizeTextBlocks(in: mutable)
         normalizeLinks(in: mutable, baseURL: baseURL)
         normalizeVisibleListMarkers(in: mutable)
-        normalizeImageAttachments(in: mutable, imageSources: imageSources, maxImageWidth: maxImageWidth)
+        normalizeMediaAttachments(in: mutable, baseURL: baseURL, maxImageWidth: maxImageWidth)
         return mutable
     }
 
@@ -816,9 +807,9 @@ struct DTCoreTextHTMLContentRenderer {
         }
     }
 
-    private func normalizeImageAttachments(
+    private func normalizeMediaAttachments(
         in attributed: NSMutableAttributedString,
-        imageSources: [ImageDescriptor],
+        baseURL: URL,
         maxImageWidth: CGFloat
     ) {
         guard maxImageWidth > 0 else { return }
@@ -827,21 +818,19 @@ struct DTCoreTextHTMLContentRenderer {
         var stickerFixedCount = 0
         var placeholderCount = 0
         var attachmentSummaries: [String] = []
-        var imageIndex = 0
         attributed.enumerateAttribute(
             .attachment,
             in: NSRange(location: 0, length: attributed.length)
-        ) { value, range, _ in
+        ) { value, _, _ in
             guard let attachment = value as? DTTextAttachment else { return }
             let contentURL = attachment.contentURL
-            let descriptor = imageIndex < imageSources.count ? imageSources[imageIndex] : nil
-            guard let imageURL = contentURL ?? descriptor?.url else { return }
+            guard let imageURL = contentURL ?? attachmentSourceURL(from: attachment, baseURL: baseURL) else { return }
 
             if attachment.contentURL == nil {
                 attachment.contentURL = imageURL
             }
 
-            let isSticker = (descriptor?.isSticker == true) || isStickerImageURL(imageURL)
+            let isSticker = hasStickerClass(in: attachment.attributes) || isStickerImageURL(imageURL)
             if isSticker {
                 stickerFixedCount += 1
             }
@@ -869,12 +858,28 @@ struct DTCoreTextHTMLContentRenderer {
                 "url=\(imageURL.absoluteString),original=\(string(from: attachment.originalSize)),display=\(string(from: attachment.displaySize)),placeholder=\(usedPlaceholder)"
             )
             normalizedCount += 1
-            imageIndex += 1
         }
 
         logDiagnostics(
             "已保留DTCoreText图片附件 count=\(normalizedCount) stickerFixed=\(stickerFixedCount) placeholder=\(placeholderCount) details=\(attachmentSummaries.prefix(6).joined(separator: " | "))"
         )
+    }
+
+    private func attachmentSourceURL(from attachment: DTTextAttachment, baseURL: URL) -> URL? {
+        if let source = DetailAttachmentAttributes.value(named: "src", in: attachment.attributes),
+           let resolved = AvatarImageLoader.resolveImageURL(source, baseURL: baseURL) {
+            return resolved
+        }
+        if let source = DetailAttachmentAttributes.value(named: "data-src", in: attachment.attributes)
+            ?? DetailAttachmentAttributes.value(named: "data-original", in: attachment.attributes),
+           let resolved = AvatarImageLoader.resolveImageURL(source, baseURL: baseURL) {
+            return resolved
+        }
+        if let srcset = DetailAttachmentAttributes.value(named: "srcset", in: attachment.attributes),
+           let source = preferredSourceFromSrcset(srcset) {
+            return AvatarImageLoader.resolveImageURL(source, baseURL: baseURL)
+        }
+        return nil
     }
 
     private func normalizeImageSources(in fragment: String, baseURL: URL) -> String {
@@ -981,19 +986,6 @@ struct DTCoreTextHTMLContentRenderer {
         return mutable
     }
 
-    private func imageDescriptors(in fragment: String, baseURL: URL) -> [ImageDescriptor] {
-        let source = fragment as NSString
-        let fullRange = NSRange(location: 0, length: source.length)
-        let matches = Self.imageTagRegex.matches(in: fragment, options: [], range: fullRange)
-        guard matches.isEmpty == false else { return [] }
-        return matches.compactMap { match in
-            let tag = source.substring(with: match.range)
-            guard let rawSource = preferredImageSource(in: tag),
-                  let resolved = AvatarImageLoader.resolveImageURL(rawSource, baseURL: baseURL) else { return nil }
-            return ImageDescriptor(url: resolved, isSticker: hasStickerClass(in: tag))
-        }
-    }
-
     private func preferredImageSource(in tag: String) -> String? {
         if let source = attributeValue(Self.srcAttributeRegex, in: tag), source.isEmpty == false {
             return source
@@ -1033,6 +1025,10 @@ struct DTCoreTextHTMLContentRenderer {
     private func hasStickerClass(in tag: String) -> Bool {
         guard let classValue = attributeValue(Self.classAttributeRegex, in: tag) else { return false }
         return classValue.split(whereSeparator: { $0.isWhitespace }).contains { $0 == "sticker" }
+    }
+
+    private func hasStickerClass(in attributes: [AnyHashable: Any]?) -> Bool {
+        DetailAttachmentAttributes.hasClass("sticker", in: attributes)
     }
 
     private func isStickerImageURL(_ url: URL?) -> Bool {
@@ -1084,5 +1080,22 @@ struct DTCoreTextHTMLContentRenderer {
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return fallback.isEmpty ? [] : [.text(NSAttributedString(string: fallback))]
+    }
+}
+
+enum DetailAttachmentAttributes {
+    static func value(named name: String, in attributes: [AnyHashable: Any]?) -> String? {
+        guard let attributes else { return nil }
+        if let value = attributes[name] as? String {
+            return value
+        }
+        return attributes.first { key, _ in
+            String(describing: key).caseInsensitiveCompare(name) == .orderedSame
+        }?.value as? String
+    }
+
+    static func hasClass(_ className: String, in attributes: [AnyHashable: Any]?) -> Bool {
+        guard let classValue = value(named: "class", in: attributes) else { return false }
+        return classValue.split(whereSeparator: { $0.isWhitespace }).contains { $0 == className }
     }
 }

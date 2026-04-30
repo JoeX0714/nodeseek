@@ -574,6 +574,74 @@ struct DTCoreTextHTMLContentRendererTests {
         #expect(attachmentURL?.absoluteString == "https://www.nodeseek.com/static/image/sticker/emoji/01.mp4")
     }
 
+    @Test func keepsStickerClassClassificationAfterVideoAttachment() throws {
+        let renderer = DTCoreTextHTMLContentRenderer()
+        let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
+        let blocks = renderer.render(
+            fragment: """
+            <p><video class="sticker" width="100" height="100">
+                <source src="/static/image/sticker/emoji/01.mp4" type="video/mp4">
+            </video><img class="sticker" src="/static/image/yct/015.gif" alt="yct015"></p>
+            """,
+            baseURL: baseURL,
+            maxImageWidth: 320
+        )
+        let attributed = try #require(
+            blocks.compactMap { block -> NSAttributedString? in
+                guard case .text(let text) = block else { return nil }
+                return text
+            }.first
+        )
+
+        var attachments: [DTTextAttachment] = []
+        attributed.enumerateAttribute(
+            .attachment,
+            in: NSRange(location: 0, length: attributed.length)
+        ) { value, _, _ in
+            guard let attachment = value as? DTTextAttachment else { return }
+            attachments.append(attachment)
+        }
+
+        #expect(attachments.map { $0.displaySize } == [
+            CGSize(width: 65, height: 65),
+            CGSize(width: 65, height: 65)
+        ])
+        #expect(attachments.last?.contentURL?.absoluteString == "https://www.nodeseek.com/static/image/yct/015.gif")
+    }
+
+    @Test func treatsVideoStickerClassAsStickerWhenURLDoesNotContainSticker() throws {
+        let renderer = DTCoreTextHTMLContentRenderer()
+        let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
+        let blocks = renderer.render(
+            fragment: """
+            <p><video class="sticker" width="100" height="100">
+                <source src="/static/image/emoji/01.mp4" type="video/mp4">
+            </video></p>
+            """,
+            baseURL: baseURL,
+            maxImageWidth: 320
+        )
+        let attributed = try #require(
+            blocks.compactMap { block -> NSAttributedString? in
+                guard case .text(let text) = block else { return nil }
+                return text
+            }.first
+        )
+
+        var attachment: DTTextAttachment?
+        attributed.enumerateAttribute(
+            .attachment,
+            in: NSRange(location: 0, length: attributed.length)
+        ) { value, _, stop in
+            guard let value = value as? DTTextAttachment else { return }
+            attachment = value
+            stop.pointee = true
+        }
+
+        #expect(attachment?.contentURL?.absoluteString == "https://www.nodeseek.com/static/image/emoji/01.mp4")
+        #expect(attachment?.displaySize == CGSize(width: 65, height: 65))
+    }
+
     @Test func usesHalfWidthSquareForNonStickerImageAttachments() throws {
         let renderer = DTCoreTextHTMLContentRenderer()
         let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
