@@ -16,6 +16,10 @@ struct PostDetailResponse {
     let detail: PostDetail
 }
 
+struct PostDetailSubmitReplyResponse: Equatable {
+    let message: String?
+}
+
 struct PostDetailHeaderContent: Equatable {
     let postID: String
     let title: String

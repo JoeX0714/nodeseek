@@ -50,7 +50,6 @@ struct PostDetailViewControllerTests {
                 Comment(id: "1", authorName: "a", avatarURL: nil, floorText: "#1", createdAtText: "1min ago", contentHTML: "<p>评论一</p>"),
                 Comment(id: "2", authorName: "b", avatarURL: nil, floorText: "#2", createdAtText: "2min ago", contentHTML: "<p>评论二</p>")
             ],
-            replyForm: nil
         ))
 
         #expect(viewController.testRowCount(inSection: 0) == 4)
@@ -74,7 +73,6 @@ struct PostDetailViewControllerTests {
             metadataText: "刚刚",
             contentHTML: "<p>正文</p>",
             comments: [],
-            replyForm: nil
         ))
         #expect(viewController.testRowCount(inSection: 0) == 1)
     }
@@ -95,7 +93,6 @@ struct PostDetailViewControllerTests {
                 Comment(id: "1", authorName: "a", avatarURL: nil, floorText: "#1", createdAtText: "1min ago", contentHTML: "<p>评论一</p>"),
                 Comment(id: "2", authorName: "b", avatarURL: nil, floorText: "#2", createdAtText: "2min ago", contentHTML: "<p>评论二</p>")
             ],
-            replyForm: nil,
             page: 1,
             pagination: PostDetailPagination(
                 currentPage: 1,
@@ -240,7 +237,6 @@ struct PostDetailViewControllerTests {
             comments: [
                 Comment(id: "1", authorName: "a", avatarURL: nil, floorText: "#1", createdAtText: "1min ago", contentHTML: "<p>评论一</p>")
             ],
-            replyForm: nil,
             page: 1,
             pagination: PostDetailPagination(
                 currentPage: 1,
@@ -277,7 +273,6 @@ struct PostDetailViewControllerTests {
             comments: [
                 Comment(id: "1", authorName: "a", avatarURL: nil, floorText: "#1", createdAtText: "1min ago", contentHTML: "<p>评论一</p>")
             ],
-            replyForm: nil,
             page: 1,
             pagination: PostDetailPagination(
                 currentPage: 1,
@@ -300,7 +295,6 @@ struct PostDetailViewControllerTests {
             comments: [
                 Comment(id: "11", authorName: "b", avatarURL: nil, floorText: "#11", createdAtText: "刚刚", contentHTML: "<p>第二页评论</p>")
             ],
-            replyForm: nil,
             page: 2,
             pagination: PostDetailPagination(
                 currentPage: 2,
@@ -332,7 +326,6 @@ struct PostDetailViewControllerTests {
                 Comment(id: "1", authorName: "a", avatarURL: nil, floorText: "#1", createdAtText: "1min ago", contentHTML: "<p>评论一</p>"),
                 Comment(id: "2", authorName: "b", avatarURL: nil, floorText: "#2", createdAtText: "2min ago", contentHTML: "<p>评论二</p>")
             ],
-            replyForm: nil,
             page: 1,
             pagination: PostDetailPagination(
                 currentPage: 1,
@@ -366,7 +359,6 @@ struct PostDetailViewControllerTests {
             comments: [
                 Comment(id: "1", authorName: "a", avatarURL: nil, floorText: "#1", createdAtText: "1min ago", contentHTML: "<p>评论一</p>")
             ],
-            replyForm: nil,
             page: 1,
             pagination: PostDetailPagination(
                 currentPage: 1,
@@ -389,7 +381,6 @@ struct PostDetailViewControllerTests {
             comments: [
                 Comment(id: "11", authorName: "c", avatarURL: nil, floorText: "#11", createdAtText: "刚刚", contentHTML: "<p>第二页评论</p>")
             ],
-            replyForm: nil,
             page: 2,
             pagination: PostDetailPagination(
                 currentPage: 2,
@@ -421,7 +412,6 @@ struct PostDetailViewControllerTests {
             comments: [
                 Comment(id: "1", authorName: "a", avatarURL: nil, floorText: "#1", createdAtText: "1min ago", contentHTML: "<p>评论一</p>")
             ],
-            replyForm: nil,
             page: 1,
             pagination: PostDetailPagination(
                 currentPage: 1,
@@ -444,7 +434,6 @@ struct PostDetailViewControllerTests {
             comments: [
                 Comment(id: "11", authorName: "c", avatarURL: nil, floorText: "#11", createdAtText: "刚刚", contentHTML: "<p>第二页评论</p>")
             ],
-            replyForm: nil,
             page: 2,
             pagination: nil
         ))
@@ -671,7 +660,6 @@ struct PostDetailViewControllerTests {
                 Comment(id: "1", authorName: "a", avatarURL: nil, floorText: "#1", createdAtText: "1min ago", contentHTML: "<p>一楼</p>"),
                 Comment(id: "2", authorName: "b", avatarURL: nil, floorText: "#2", createdAtText: "2min ago", contentHTML: "<p>二楼</p>")
             ],
-            replyForm: nil,
             page: 1,
             pagination: nil
         ))
@@ -1008,7 +996,6 @@ struct PostDetailLoginViewControllerTests {
             metadataText: "刚刚",
             contentHTML: "<p>正文</p>",
             comments: [],
-            replyForm: nil
         ))
 
         let button = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-login-button"))
@@ -1176,19 +1163,31 @@ struct PostDetailLoginViewControllerTests {
         )
 
         viewController.loadViewIfNeeded()
+        viewController.render(detail: PostDetail(
+            id: "703863",
+            title: "详情标题",
+            authorName: "ipv4",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "<p>正文</p>",
+            comments: [],
+        ))
         viewController.handleReply(to: comment)
-        let targetLabel = try #require(viewController.view.firstLabel(accessibilityIdentifier: "post-detail-comment-target-label"))
-        #expect(targetLabel.text == "回复 @netcup #10")
+        let contextLabel = try #require(viewController.view.firstLabel(accessibilityIdentifier: "post-detail-reply-context-label"))
+        #expect(contextLabel.text == "回复 netcup #10")
 
-        let cancelButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-comment-target-cancel-button"))
+        let cancelButton = try #require(viewController.view.firstButton(accessibilityLabel: "取消引用"))
         cancelButton.sendActions(for: .touchUpInside)
-        #expect(targetLabel.isHidden)
+        #expect(contextLabel.text == nil)
 
         viewController.handleQuote(comment)
-        let textView = try #require(viewController.view.firstTextView(accessibilityIdentifier: "post-detail-comment-input"))
-        #expect(textView.text.contains("> @netcup [#10]"))
-        #expect(textView.text.contains("第一段"))
-        #expect(textView.text.contains("第二段") == false)
+        let replyTextView = try #require(viewController.view.firstTextView(accessibilityIdentifier: "post-detail-reply-text-view"))
+        replyTextView.text = "正文"
+        let sendButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-reply-send-button"))
+        sendButton.sendActions(for: .touchUpInside)
+        #expect(presenter.sentReplyContent?.contains("> @netcup [#10]") == true)
+        #expect(presenter.sentReplyContent?.contains("第一段") == true)
+        #expect(presenter.sentReplyContent?.contains("第二段") == false)
     }
 
     @Test func quotePrefillExpandsCommentComposerHeight() throws {
@@ -1329,6 +1328,7 @@ private final class SpyPostDetailPresenter: PostDetailPresenterProtocol {
     private(set) var didTapLoginCount = 0
     private(set) var selectedPages: [Int] = []
     private(set) var submittedComments: [String] = []
+    private(set) var sentReplyContent: String?
 
     func viewDidLoad() {
         loadCount += 1
@@ -1345,9 +1345,25 @@ private final class SpyPostDetailPresenter: PostDetailPresenterProtocol {
     func didSubmitComment(content: String) {
         submittedComments.append(content)
     }
+
+    func didTapSendReply(content: String) {
+        sentReplyContent = content
+    }
 }
 
 private extension UIView {
+    func firstButton(accessibilityLabel: String) -> UIButton? {
+        if let button = self as? UIButton, button.accessibilityLabel == accessibilityLabel {
+            return button
+        }
+        for subview in subviews {
+            if let matched = subview.firstButton(accessibilityLabel: accessibilityLabel) {
+                return matched
+            }
+        }
+        return nil
+    }
+
     func firstSubview<T: UIView>(of type: T.Type) -> T? {
         if let matched = self as? T {
             return matched

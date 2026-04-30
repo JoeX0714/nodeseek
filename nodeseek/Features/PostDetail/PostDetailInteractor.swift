@@ -90,6 +90,39 @@ class PostDetailInteractor: PostDetailInteractorInput {
         }
     }
 
+    func submitReply(content: String) {
+        let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedContent.isEmpty == false else {
+            presenter?.didFailSubmitReply(error: "回复内容不能为空。")
+            return
+        }
+
+        guard let post else {
+            presenter?.didFailSubmitReply(error: PostDetailSubmitError.missingPost.localizedDescription)
+            return
+        }
+
+        Task {
+            logger.info("开始通过 WebView 提交回复，postID=\(post.id, privacy: .public)")
+            do {
+                let response = try await commentSubmitter.submitComment(
+                    postID: post.id,
+                    content: trimmedContent,
+                    referer: post.url
+                )
+                await sessionStore.recordSuccess()
+                await MainActor.run {
+                    presenter?.didSubmitReply(PostDetailSubmitReplyResponse(message: response.message))
+                }
+            } catch {
+                logger.error("回复提交失败: \(error.localizedDescription)")
+                await MainActor.run {
+                    presenter?.didFailSubmitReply(error: error.localizedDescription)
+                }
+            }
+        }
+    }
+
     private func loadDetail(postID: String, page: Int) async throws -> PostDetail? {
         logger.info("详情请求开始，postID=\(postID, privacy: .public), page=\(page)")
         let result = try await service.loadPostDetail(postID: postID, page: page)
@@ -124,6 +157,20 @@ private enum PostDetailLoadError: LocalizedError {
             return "缺少帖子信息，无法发表评论。"
         case .unknown:
             return "详情加载失败，请稍后重试。"
+        }
+    }
+}
+
+private enum PostDetailSubmitError: LocalizedError {
+    case challengeRequired(String)
+    case missingPost
+
+    var errorDescription: String? {
+        switch self {
+        case .challengeRequired(let message):
+            return message
+        case .missingPost:
+            return "缺少帖子信息，无法发表评论。"
         }
     }
 }

@@ -72,7 +72,6 @@ struct PostDetail: Equatable, Sendable {
     let metadataText: String?
     let contentHTML: String
     let comments: [Comment]
-    let replyForm: ReplyForm?
     let page: Int
     let pagination: PostDetailPagination?
     let isLastPage: Bool
@@ -85,7 +84,6 @@ struct PostDetail: Equatable, Sendable {
         metadataText: String?,
         contentHTML: String,
         comments: [Comment],
-        replyForm: ReplyForm?,
         page: Int = 1,
         pagination: PostDetailPagination? = nil,
         isLastPage: Bool? = nil
@@ -97,7 +95,6 @@ struct PostDetail: Equatable, Sendable {
         self.metadataText = metadataText
         self.contentHTML = contentHTML
         self.comments = comments
-        self.replyForm = replyForm
         self.page = max(1, page)
         self.pagination = pagination
         self.isLastPage = isLastPage ?? (pagination?.nextPage == nil)
@@ -133,13 +130,6 @@ struct Comment: Equatable, Sendable {
         self.createdAtTitleText = createdAtTitleText
         self.contentHTML = contentHTML
     }
-}
-
-struct ReplyForm: Equatable, Sendable {
-    let actionURL: URL
-    let method: String
-    let textFieldName: String
-    let hiddenFields: [String: String]
 }
 
 struct CheckInState: Equatable, Sendable {

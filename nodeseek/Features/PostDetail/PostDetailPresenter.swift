@@ -17,6 +17,7 @@ class PostDetailPresenter: PostDetailPresenterProtocol {
     private var loadingPage: Int?
     private var currentDetail: PostDetail?
     private var isSubmittingComment = false
+    private var isSubmittingReply = false
     
     // MARK: - Initialization
     init(
@@ -88,6 +89,20 @@ class PostDetailPresenter: PostDetailPresenterProtocol {
             }
         }
     }
+
+    func didTapSendReply(content: String) {
+        guard isSubmittingReply == false else { return }
+
+        let normalizedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalizedContent.isEmpty == false else {
+            view?.showError(message: "回复内容不能为空。")
+            return
+        }
+
+        isSubmittingReply = true
+        view?.setReplySubmitting(true)
+        interactor.submitReply(content: normalizedContent)
+    }
 }
 
 // MARK: - Interactor Output
@@ -110,6 +125,33 @@ extension PostDetailPresenter: PostDetailInteractorOutput {
     func didFailLoadPostDetail(error: String) {
         loadingPage = nil
         view?.hideLoading()
+        view?.showError(message: error)
+    }
+
+    func didSubmitReply(_ response: PostDetailSubmitReplyResponse) {
+        isSubmittingReply = false
+        view?.setReplySubmitting(false)
+        view?.finishReplySubmission()
+
+        let responseMessage = response.message?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if currentDetail?.isLastPage == true {
+            let toastMessage: String
+            if let responseMessage, responseMessage.isEmpty == false {
+                toastMessage = responseMessage
+            } else {
+                toastMessage = "评论已发布"
+            }
+            view?.showToast(message: toastMessage)
+            view?.showLoading()
+            interactor.loadPostDetail(page: currentPage)
+        } else {
+            view?.showToast(message: "评论已发布，可到最后一页查看")
+        }
+    }
+
+    func didFailSubmitReply(error: String) {
+        isSubmittingReply = false
+        view?.setReplySubmitting(false)
         view?.showError(message: error)
     }
 }

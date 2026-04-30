@@ -188,15 +188,10 @@ struct KannaNodeSeekParser: NodeSeekParser {
             metadataText: metadataText,
             contentHTML: contentHTML,
             comments: comments,
-            replyForm: nil,
             page: page,
             pagination: pagination,
             isLastPage: document.at_xpath(XPathRules.postDetailNextPage) == nil
         )
-    }
-
-    func parseReplyForm(html: String, pageURL: URL) throws -> ReplyForm {
-        throw NodeSeekParserError.notImplemented
     }
 
     func parseCheckInState(html: String, pageURL: URL) throws -> CheckInState {
@@ -319,9 +314,38 @@ struct KannaNodeSeekParser: NodeSeekParser {
             avatarURL: avatarURL,
             floorText: firstText(in: item, xpaths: [XPathRules.contentFloor]),
             createdAtText: firstText(in: item, xpaths: [XPathRules.contentCreatedAt]),
-            createdAtTitleText: item.at_xpath(XPathRules.contentCreatedAt)?["title"]?.trimmedNonEmpty,
+            createdAtTitleText: firstAttribute(
+                in: item,
+                xpaths: [XPathRules.contentCreatedAt],
+                attribute: "title"
+            ),
             contentHTML: item.at_xpath(XPathRules.contentArticle)?.innerHTML?.trimmedNonEmpty ?? ""
         )
+    }
+
+    private func isLastPostPage(in document: HTMLDocument, currentURL: URL) -> Bool {
+        guard let currentPostID = Self.postID(from: currentURL) else { return true }
+        let currentPage = currentPostPage(from: currentURL)
+        let nextLinks = document.xpath("//a[@rel='next' and contains(@href, '/post-')]")
+
+        return nextLinks.contains { link in
+            guard let href = link["href"],
+                  let url = URL(string: href, relativeTo: baseURL)?.absoluteURL,
+                  Self.postID(from: url) == currentPostID else {
+                return false
+            }
+
+            return currentPostPage(from: url) > currentPage
+        } == false
+    }
+
+    private func currentPostPage(from url: URL) -> Int {
+        let path = url.path
+        guard let range = path.range(of: #"post[-/]\d+[-/](\d+)"#, options: .regularExpression) else {
+            return 1
+        }
+
+        return Int(String(path[range]).components(separatedBy: CharacterSet.decimalDigits.inverted).last ?? "") ?? 1
     }
 }
 
