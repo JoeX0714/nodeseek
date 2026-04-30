@@ -8,25 +8,13 @@
 import UIKit
 
 final class PostListSideMenuViewController: UIViewController {
-    private static let guestAccount = AccountResponse(displayName: "游客", isLoggedIn: false)
-
     private var sideMenuLeadingConstraint: NSLayoutConstraint?
     private var isSideMenuVisible = false
-    private var isAccountLoggedIn = false
-    private var shouldForceRefreshOnNextShow = false
-    private var refreshTask: Task<Void, Never>?
-    private var loginCloseObserver: NSObjectProtocol?
-    #if DEBUG
-    private var accountDebugObserver: NSObjectProtocol?
-    private var accountDebugLines: [String] = []
-    #endif
     var onLoginTapped: (() -> Void)?
     #if DEBUG
     var onDetailTestTapped: (() -> Void)?
     #endif
-    private let currentAccountStore: CurrentAccountStore
-    private let accountRefresher: any CurrentAccountRefreshing
-    private let refreshMaxAge: TimeInterval
+    private let accountController: PostListSideMenuAccountController
     private let avatarLoader = AvatarImageLoader.shared
 
     private static let defaultAvatarImage: UIImage? = {
@@ -176,9 +164,11 @@ final class PostListSideMenuViewController: UIViewController {
         accountRefresher: (any CurrentAccountRefreshing)? = nil,
         refreshMaxAge: TimeInterval = 60
     ) {
-        self.currentAccountStore = currentAccountStore
-        self.accountRefresher = accountRefresher ?? CurrentAccountRefresher.shared
-        self.refreshMaxAge = refreshMaxAge
+        self.accountController = PostListSideMenuAccountController(
+            currentAccountStore: currentAccountStore,
+            accountRefresher: accountRefresher,
+            refreshMaxAge: refreshMaxAge
+        )
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -186,23 +176,11 @@ final class PostListSideMenuViewController: UIViewController {
         fatalError("init(coder:) has not been implemented")
     }
 
-    deinit {
-        refreshTask?.cancel()
-        if let loginCloseObserver {
-            NotificationCenter.default.removeObserver(loginCloseObserver)
-        }
-        #if DEBUG
-        if let accountDebugObserver {
-            NotificationCenter.default.removeObserver(accountDebugObserver)
-        }
-        #endif
-    }
-
     override func viewDidLoad() {
         super.viewDidLoad()
         setupUI()
-        observeSessionChanges()
-        loadStoredAccount()
+        configureAccountController()
+        accountController.start()
     }
 
     override func viewDidLayoutSubviews() {
@@ -211,7 +189,7 @@ final class PostListSideMenuViewController: UIViewController {
     }
 
     func show(animated: Bool) {
-        refreshAccountIfNeeded()
+        accountController.refreshIfNeeded()
         setVisible(true, animated: animated)
     }
 
@@ -220,8 +198,6 @@ final class PostListSideMenuViewController: UIViewController {
     }
 
     private func renderAccount(_ account: AccountResponse) {
-        appendAccountDebug("ui: render loggedIn=\(account.isLoggedIn) name=\(account.displayName)")
-        isAccountLoggedIn = account.isLoggedIn
         nameLabel.text = account.isLoggedIn ? account.displayName : "未登录"
         statsLabel.text = account.isLoggedIn
             ? account.stats.prefix(3).joined(separator: " · ")
@@ -242,100 +218,22 @@ final class PostListSideMenuViewController: UIViewController {
         }
     }
 
-    private func observeSessionChanges() {
-        loginCloseObserver = NotificationCenter.default.addObserver(
-            forName: .nodeSeekLoginSessionDidClose,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            guard let self else { return }
-            self.appendAccountDebug("ui: login session closed, mark stale")
-            self.shouldForceRefreshOnNextShow = true
-            Task {
-                await self.currentAccountStore.markStale()
-            }
-            if self.isSideMenuVisible {
-                self.refreshAccountIfNeeded(force: true)
-            }
+    private func configureAccountController() {
+        accountController.canRefresh = { [weak self] in
+            self?.view.window != nil
         }
-
+        accountController.isSideMenuVisible = { [weak self] in
+            self?.isSideMenuVisible == true
+        }
+        accountController.onAccountChanged = { [weak self] account in
+            self?.renderAccount(account)
+        }
         #if DEBUG
-        accountDebugObserver = NotificationCenter.default.addObserver(
-            forName: .nodeSeekCurrentAccountDebugMessage,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            guard
-                let self,
-                let message = notification.userInfo?[CurrentAccountDebugLog.messageKey] as? String
-            else {
-                return
-            }
-            self.appendAccountDebug(message)
+        accountController.onDebugTextChanged = { [weak self] text in
+            self?.accountDebugTextView.text = text
         }
         #endif
     }
-
-    private func loadStoredAccount() {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            let snapshot = await currentAccountStore.snapshot()
-            if let snapshot {
-                appendAccountDebug("ui: stored loggedIn=\(snapshot.account.isLoggedIn) name=\(snapshot.account.displayName) age=\(Int(Date().timeIntervalSince(snapshot.updatedAt)))s")
-            } else {
-                appendAccountDebug("ui: stored nil")
-            }
-            renderAccount(snapshot?.account ?? Self.guestAccount)
-        }
-    }
-
-    private func refreshAccountIfNeeded(force: Bool = false) {
-        // 单元测试里一般不会把 VC 挂到 window 上，避免测试时触发真实 WebView 抓取。
-        guard view.window != nil else {
-            appendAccountDebug("ui: refresh skipped, no window")
-            return
-        }
-        guard refreshTask == nil else {
-            appendAccountDebug("ui: refresh skipped, task running")
-            return
-        }
-        let effectiveForce = force || shouldForceRefreshOnNextShow
-        appendAccountDebug("ui: refresh requested force=\(effectiveForce)")
-        shouldForceRefreshOnNextShow = false
-        refreshTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            defer { refreshTask = nil }
-            let account = await accountRefresher.refreshIfNeeded(
-                force: effectiveForce,
-                maxAge: refreshMaxAge
-            )
-            guard !Task.isCancelled else { return }
-            if let account {
-                appendAccountDebug("ui: refresh result loggedIn=\(account.isLoggedIn) name=\(account.displayName)")
-                renderAccount(account)
-                return
-            }
-            let snapshot = await currentAccountStore.snapshot()
-            appendAccountDebug("ui: refresh result nil, fallback stored=\(snapshot?.account.displayName ?? "nil")")
-            renderAccount(snapshot?.account ?? Self.guestAccount)
-        }
-    }
-
-    private func appendAccountDebug(_ message: String) {
-        #if DEBUG
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss"
-        accountDebugLines.append("\(formatter.string(from: Date())) \(message)")
-        accountDebugLines = Array(accountDebugLines.suffix(12))
-        accountDebugTextView.text = accountDebugText
-        #endif
-    }
-
-    #if DEBUG
-    private var accountDebugText: String {
-        "账号调试日志\n" + accountDebugLines.joined(separator: "\n")
-    }
-    #endif
 
     private func setupUI() {
         view.backgroundColor = .clear
@@ -440,14 +338,14 @@ final class PostListSideMenuViewController: UIViewController {
     }
 
     @objc private func accountHeaderTapped() {
-        guard !isAccountLoggedIn else { return }
+        guard !accountController.isLoggedIn else { return }
         hide(animated: true)
         onLoginTapped?()
     }
 
     #if DEBUG
     @objc private func copyAccountDebugLogTapped() {
-        UIPasteboard.general.string = accountDebugTextView.text
+        UIPasteboard.general.string = accountController.debugText
         accountDebugCopyButton.configuration?.title = "已复制"
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
             self?.accountDebugCopyButton.configuration?.title = "复制日志"

@@ -142,11 +142,18 @@ struct HiddenWebViewHTMLClient: HTMLClient {
                 HiddenWebViewLoader.loader(for: channel)
             }
             let response = try await loader.load(request: request, timeoutInterval: timeoutInterval)
-            await requestLock.release()
+            await releaseRequestResources()
             return response
         } catch {
-            await requestLock.release()
+            await releaseRequestResources()
             throw error
+        }
+    }
+
+    private func releaseRequestResources() async {
+        await requestLock.release()
+        await MainActor.run {
+            HiddenWebViewLoader.releaseLoader(for: channel)
         }
     }
 }
@@ -327,6 +334,11 @@ final class HiddenWebViewLoader: NSObject, WKNavigationDelegate {
             isolatedLoaders[id] = loader
             return loader
         }
+    }
+
+    static func releaseLoader(for channel: HiddenWebViewChannel) {
+        guard case .isolated(let id) = channel else { return }
+        isolatedLoaders.removeValue(forKey: id)
     }
 
     private var timeoutInterval: TimeInterval = 20

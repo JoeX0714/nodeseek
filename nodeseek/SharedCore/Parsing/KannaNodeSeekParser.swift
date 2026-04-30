@@ -14,7 +14,15 @@ enum NodeSeekParserError: Error {
 }
 
 struct KannaNodeSeekParser: NodeSeekParser {
+    typealias DebugLogger = @Sendable (String) -> Void
+
     let baseURL: URL
+    private let debugLogger: DebugLogger?
+
+    init(baseURL: URL, debugLogger: DebugLogger? = nil) {
+        self.baseURL = baseURL
+        self.debugLogger = debugLogger
+    }
 
     func parseAccount(html: String) throws -> AccountResponse {
         let document = try HTML(html: html, encoding: .utf8)
@@ -126,11 +134,7 @@ struct KannaNodeSeekParser: NodeSeekParser {
     }
 
     private func postAccountParserDebug(_ message: String) {
-        #if SWIFT_PACKAGE
-        return
-        #else
-        CurrentAccountDebugLog.post(message)
-        #endif
+        debugLogger?(message)
     }
 
     private func tempScriptUserDictionary(from root: [String: Any]) -> [String: Any] {

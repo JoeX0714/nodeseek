@@ -23,7 +23,10 @@ struct NodeSeekService: Sendable {
     ) {
         self.baseURL = baseURL
         self.htmlClient = htmlClient
-        self.parser = parser ?? KannaNodeSeekParser(baseURL: baseURL)
+        self.parser = parser ?? KannaNodeSeekParser(
+            baseURL: baseURL,
+            debugLogger: CurrentAccountDebugLog.post
+        )
         self.challengeDetector = challengeDetector
     }
 

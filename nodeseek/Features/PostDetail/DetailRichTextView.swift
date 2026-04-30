@@ -24,7 +24,6 @@ final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextCon
     private var layoutInvalidatedHandler: (() -> Void)?
     private var attachmentLayoutUpdatedHandler: ((URL, CGSize, CGSize) -> Void)?
     private var lastLayoutWidth: CGFloat = 0
-    private var lastAppliedUserInterfaceStyle: UIUserInterfaceStyle?
     private let diagnosticID = String(UUID().uuidString.prefix(8))
 
     override init(frame: CGRect) {
@@ -37,7 +36,6 @@ final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextCon
         layoutFrameHeightIsConstrainedByBounds = false
         isUserInteractionEnabled = true
         setContentCompressionResistancePriority(.required, for: .vertical)
-        lastAppliedUserInterfaceStyle = traitCollection.userInterfaceStyle
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { [weak self] (view: Self, previousTraitCollection: UITraitCollection) in
             guard let self else { return }
             guard previousTraitCollection.userInterfaceStyle != view.traitCollection.userInterfaceStyle else { return }
@@ -84,7 +82,6 @@ final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextCon
     }
 
     func refreshAppearanceForCurrentTraits() {
-        lastAppliedUserInterfaceStyle = traitCollection.userInterfaceStyle
         rebuildAttributedTextLayout()
     }
 
