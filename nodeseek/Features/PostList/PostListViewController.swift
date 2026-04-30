@@ -345,6 +345,9 @@ class PostListViewController: UIViewController {
         sideMenuViewController.onDetailTestTapped = { [weak self] in
             self?.presenter.didTapDetailTest()
         }
+        sideMenuViewController.onStrikethroughTestTapped = { [weak self] in
+            self?.presenter.didTapStrikethroughTest()
+        }
         addChild(sideMenuViewController)
         view.addSubview(sideMenuViewController.view)
         sideMenuViewController.view.translatesAutoresizingMaskIntoConstraints = false

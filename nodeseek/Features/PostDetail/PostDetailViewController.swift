@@ -1865,6 +1865,17 @@ final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextCon
         fatalError("init(coder:) has not been implemented")
     }
 
+    override func draw(_ layer: CALayer, in context: CGContext) {
+        super.draw(layer, in: context)
+        drawStrikethroughFallback(in: layoutFrame, context: context)
+    }
+
+    override func draw(_ rect: CGRect) {
+        super.draw(rect)
+        guard let context = UIGraphicsGetCurrentContext() else { return }
+        drawStrikethroughFallback(in: layoutFrame, context: context)
+    }
+
     func configure(
         _ attributedText: NSAttributedString?,
         onImageTapped: (([URL], Int) -> Void)?,
@@ -2006,6 +2017,69 @@ final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextCon
         DetailLinkOverlayButton(frame: frame, url: url) { [weak self] tappedURL in
             self?.linkTapHandler?(tappedURL)
         }
+    }
+
+    private func drawStrikethroughFallback(
+        in layoutFrame: DTCoreTextLayoutFrame?,
+        context: CGContext
+    ) {
+        guard let layoutFrame else { return }
+        let runs = layoutFrame.lines
+            .compactMap { $0 as? DTCoreTextLayoutLine }
+            .flatMap { line in line.glyphRuns.compactMap { $0 as? DTCoreTextGlyphRun } }
+            .filter { run in
+                guard run.isTrailingWhitespace() == false else { return false }
+                return Self.hasStrikethroughAttribute(in: run.attributes)
+            }
+        guard runs.isEmpty == false else { return }
+
+        let displayScale = max(traitCollection.displayScale, 1)
+        let lineWidth = max(1 / displayScale, 0.5)
+
+        context.saveGState()
+        context.setLineWidth(lineWidth)
+        context.setLineCap(.butt)
+
+        for run in runs {
+            let frame = run.frame
+            guard frame.width > 0, frame.height > 0 else { continue }
+            let color = Self.foregroundColor(in: run.attributes) ?? tintColor ?? .label
+            let y = Self.pixelAligned(frame.minY + frame.height * 0.48, scale: displayScale)
+
+            context.setStrokeColor(color.cgColor)
+            context.move(to: CGPoint(x: frame.minX, y: y))
+            context.addLine(to: CGPoint(x: frame.maxX, y: y))
+            context.strokePath()
+        }
+
+        context.restoreGState()
+    }
+
+    private static func hasStrikethroughAttribute(in attributes: [AnyHashable: Any]) -> Bool {
+        if let value = attributes[NSAttributedString.Key(DTStrikeOutAttribute)] as? NSNumber,
+           value.boolValue {
+            return true
+        }
+        if let value = attributes[NSAttributedString.Key.strikethroughStyle] as? NSNumber,
+           value.intValue != 0 {
+            return true
+        }
+        return false
+    }
+
+    private static func foregroundColor(in attributes: [AnyHashable: Any]) -> UIColor? {
+        if let color = attributes[NSAttributedString.Key.foregroundColor] as? UIColor {
+            return color
+        }
+        if let color = attributes[kCTForegroundColorAttributeName as NSAttributedString.Key] {
+            return UIColor(cgColor: color as! CGColor)
+        }
+        return nil
+    }
+
+    private static func pixelAligned(_ value: CGFloat, scale: CGFloat) -> CGFloat {
+        guard scale > 0 else { return value }
+        return (value * scale).rounded() / scale
     }
 
     func attributedTextContentView(
