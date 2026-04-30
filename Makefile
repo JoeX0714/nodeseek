@@ -27,7 +27,17 @@ XCODEBUILD_BASE = xcodebuild \
 	-parallel-testing-enabled NO \
 	-maximum-concurrent-test-simulator-destinations 1
 
-.PHONY: spm-test xcode-build-tests xcode-test-core xcode-test-class xcode-test-full
+.PHONY: help spm-test xcode-build-tests xcode-test-core xcode-test-class xcode-test-full
+
+help:
+	@printf '%s\n' \
+		'Available commands:' \
+		'  make help' \
+		'  make spm-test' \
+		'  make xcode-build-tests' \
+		'  make xcode-test-core' \
+		'  make xcode-test-class TEST=KannaNodeSeekParserTests' \
+		'  make xcode-test-full'
 
 spm-test:
 	swift test
