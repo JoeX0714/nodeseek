@@ -122,6 +122,7 @@ struct PostDetailInteractorTests {
         #expect(automation.submittedContent == "测试评论")
         #expect(automation.submittedReferer == post.url)
         #expect(presenter.didSubmitReplyCount == 1)
+        #expect(presenter.submitReplyResponse == CommentSubmitResponse(message: "已发布"))
         #expect(presenter.submitReplyErrorMessage == nil)
     }
 
@@ -196,6 +197,7 @@ private final class SpyPostDetailInteractorOutput: PostDetailInteractorOutput {
     var loginRequiredMessage: String?
     var errorMessage: String?
     var didSubmitReplyCount = 0
+    var submitReplyResponse: CommentSubmitResponse?
     var submitReplyErrorMessage: String?
 
     func didLoadPostDetail(_ response: PostDetailResponse) {
@@ -210,8 +212,9 @@ private final class SpyPostDetailInteractorOutput: PostDetailInteractorOutput {
         errorMessage = error
     }
 
-    func didSubmitReply() {
+    func didSubmitReply(_ response: CommentSubmitResponse) {
         didSubmitReplyCount += 1
+        submitReplyResponse = response
     }
 
     func didFailSubmitReply(error: String) {

@@ -13,6 +13,7 @@ protocol PostDetailViewProtocol: AnyObject {
     func showLoading()
     func hideLoading()
     func showError(message: String)
+    func showToast(message: String)
     func setReplySubmitting(_ isSubmitting: Bool)
     func finishReplySubmission()
     func render(detail: PostDetail)
@@ -37,7 +38,7 @@ protocol PostDetailInteractorOutput: AnyObject {
     func didLoadPostDetail(_ response: PostDetailResponse)
     func didRequireLogin(message: String)
     func didFailLoadPostDetail(error: String)
-    func didSubmitReply()
+    func didSubmitReply(_ response: CommentSubmitResponse)
     func didFailSubmitReply(error: String)
 }
 

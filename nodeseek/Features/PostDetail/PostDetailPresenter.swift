@@ -77,13 +77,24 @@ extension PostDetailPresenter: PostDetailInteractorOutput {
         view?.showError(message: error)
     }
 
-    func didSubmitReply() {
+    func didSubmitReply(_ response: CommentSubmitResponse) {
         isSubmittingReply = false
         view?.setReplySubmitting(false)
         view?.finishReplySubmission()
+
+        let responseMessage = response.message?.trimmingCharacters(in: .whitespacesAndNewlines)
         if currentDetail?.isLastPage == true {
+            let toastMessage: String
+            if let responseMessage, responseMessage.isEmpty == false {
+                toastMessage = responseMessage
+            } else {
+                toastMessage = "评论已发布"
+            }
+            view?.showToast(message: toastMessage)
             view?.showLoading()
             interactor.loadPostDetail()
+        } else {
+            view?.showToast(message: "评论已发布，可到最后一页查看")
         }
     }
 

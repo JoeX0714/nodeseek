@@ -570,6 +570,38 @@ struct PostDetailLoginViewControllerTests {
         #expect(button.configuration?.background.backgroundColor == .clear)
     }
 
+    @Test func inlineReplySendButtonShowsSpinnerWhileSubmitting() throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter)
+
+        viewController.loadViewIfNeeded()
+
+        let button = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-reply-send-button"))
+        viewController.setReplySubmitting(true)
+
+        #expect(button.configuration?.showsActivityIndicator == true)
+        #expect(button.configuration?.image == nil)
+        #expect(button.accessibilityLabel == "正在发送评论")
+
+        viewController.setReplySubmitting(false)
+
+        #expect(button.configuration?.showsActivityIndicator == false)
+        #expect(button.configuration?.image != nil)
+        #expect(button.accessibilityLabel == "发送")
+    }
+
+    @Test func showToastUsesPreviousSuccessMessageStyle() throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter)
+
+        viewController.loadViewIfNeeded()
+        viewController.showToast(message: "已发布")
+
+        let label = try #require(viewController.view.firstLabel(accessibilityIdentifier: "post-detail-toast-label"))
+        #expect(label.text == "已发布")
+        #expect(label.superview?.isHidden == false)
+    }
+
     @Test func inlineReplySendButtonSubmitsTextThroughPresenter() throws {
         let presenter = SpyPostDetailPresenter()
         let viewController = PostDetailViewController(presenter: presenter)

@@ -75,14 +75,14 @@ class PostDetailInteractor: PostDetailInteractorInput {
         Task {
             logger.info("开始通过 WebView 提交回复，postID=\(post.id, privacy: .public)")
             do {
-                _ = try await commentSubmitter.submitComment(
+                let response = try await commentSubmitter.submitComment(
                     postID: post.id,
                     content: trimmedContent,
                     referer: post.url
                 )
                 await sessionStore.recordSuccess()
                 await MainActor.run {
-                    presenter?.didSubmitReply()
+                    presenter?.didSubmitReply(response)
                 }
             } catch {
                 logger.error("回复提交失败: \(error.localizedDescription)")

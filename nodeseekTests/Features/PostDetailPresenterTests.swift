@@ -55,11 +55,63 @@ struct PostDetailPresenterTests {
         )))
 
         presenter.didTapSendReply(content: "测试回复")
-        presenter.didSubmitReply()
+        presenter.didSubmitReply(CommentSubmitResponse(message: "已发布"))
 
         #expect(interactor.loadPostDetailCount == 1)
         #expect(view.finishReplySubmissionCount == 1)
         #expect(view.submittingStates == [true, false])
+        #expect(view.toasts == ["已发布"])
+    }
+
+    @Test func sendReplySuccessShowsDefaultToastWhenLastPageResponseHasNoMessage() {
+        let interactor = SpyPostDetailInteractor()
+        let router = SpyPostDetailRouter()
+        let view = SpyPostDetailView()
+        let presenter = PostDetailPresenter(interactor: interactor, router: router)
+        presenter.setView(view)
+        presenter.didLoadPostDetail(PostDetailResponse(detail: PostDetail(
+            id: "706958",
+            title: "标题",
+            authorName: "mist",
+            avatarURL: nil,
+            metadataText: nil,
+            contentHTML: "<p>正文</p>",
+            comments: [],
+            replyForm: nil,
+            isLastPage: true
+        )))
+
+        presenter.didTapSendReply(content: "测试回复")
+        presenter.didSubmitReply(CommentSubmitResponse(message: nil))
+
+        #expect(interactor.loadPostDetailCount == 1)
+        #expect(view.toasts == ["评论已发布"])
+    }
+
+    @Test func sendReplySuccessShowsLastPageHintWhenCurrentDetailIsNotLastPage() {
+        let interactor = SpyPostDetailInteractor()
+        let router = SpyPostDetailRouter()
+        let view = SpyPostDetailView()
+        let presenter = PostDetailPresenter(interactor: interactor, router: router)
+        presenter.setView(view)
+        presenter.didLoadPostDetail(PostDetailResponse(detail: PostDetail(
+            id: "706958",
+            title: "标题",
+            authorName: "mist",
+            avatarURL: nil,
+            metadataText: nil,
+            contentHTML: "<p>正文</p>",
+            comments: [],
+            replyForm: nil,
+            isLastPage: false
+        )))
+
+        presenter.didTapSendReply(content: "测试回复")
+        presenter.didSubmitReply(CommentSubmitResponse(message: "已发布"))
+
+        #expect(interactor.loadPostDetailCount == 0)
+        #expect(view.finishReplySubmissionCount == 1)
+        #expect(view.toasts == ["评论已发布，可到最后一页查看"])
     }
 
     @Test func emptyReplyShowsErrorWithoutSubmitting() {
@@ -117,6 +169,7 @@ private final class SpyPostDetailRouter: PostDetailRouterProtocol {
 private final class SpyPostDetailView: PostDetailViewProtocol {
     private(set) var submittingStates: [Bool] = []
     private(set) var errors: [String] = []
+    private(set) var toasts: [String] = []
     private(set) var finishReplySubmissionCount = 0
 
     func showLoading() {}
@@ -124,6 +177,10 @@ private final class SpyPostDetailView: PostDetailViewProtocol {
 
     func showError(message: String) {
         errors.append(message)
+    }
+
+    func showToast(message: String) {
+        toasts.append(message)
     }
 
     func setReplySubmitting(_ isSubmitting: Bool) {
