@@ -97,6 +97,97 @@ struct PostDetailInteractorTests {
         #expect(presenter.errorMessage == nil)
         #expect(presenter.loginRequiredMessage == "本帖需要注册用户才能查看😭")
     }
+
+    @Test func submitReplyUsesCommentSubmitterAndReportsSuccess() async throws {
+        let automation = SpyCommentSubmissionAutomation(response: CommentAutomationResponse(
+            ok: true,
+            statusCode: 200,
+            message: "已发布",
+            reason: "submitted"
+        ))
+        let presenter = SpyPostDetailInteractorOutput()
+        let post = Self.makePost()
+        let interactor = PostDetailInteractor(
+            post: post,
+            service: Self.makeUnusedService(),
+            commentSubmitter: NodeSeekCommentSubmitter(automation: automation),
+            sessionStore: NodeSeekSessionStore()
+        )
+        interactor.presenter = presenter
+
+        interactor.submitReply(content: "  测试评论  ")
+        await waitForInteractorCallbacks()
+
+        #expect(automation.submittedPostID == 703863)
+        #expect(automation.submittedContent == "测试评论")
+        #expect(automation.submittedReferer == post.url)
+        #expect(presenter.didSubmitReplyCount == 1)
+        #expect(presenter.submitReplyErrorMessage == nil)
+    }
+
+    @Test func submitReplyReportsMissingPost() async throws {
+        let presenter = SpyPostDetailInteractorOutput()
+        let interactor = PostDetailInteractor(
+            post: nil,
+            service: Self.makeUnusedService(),
+            sessionStore: NodeSeekSessionStore()
+        )
+        interactor.presenter = presenter
+
+        interactor.submitReply(content: "测试评论")
+
+        #expect(presenter.didSubmitReplyCount == 0)
+        #expect(presenter.submitReplyErrorMessage == "缺少帖子信息，无法发表评论。")
+    }
+
+    @Test func submitReplyReportsSubmitterFailureMessage() async throws {
+        let automation = SpyCommentSubmissionAutomation(response: CommentAutomationResponse(
+            ok: false,
+            statusCode: 400,
+            message: "评论内容太短",
+            reason: "server_error"
+        ))
+        let presenter = SpyPostDetailInteractorOutput()
+        let interactor = PostDetailInteractor(
+            post: Self.makePost(),
+            service: Self.makeUnusedService(),
+            commentSubmitter: NodeSeekCommentSubmitter(automation: automation),
+            sessionStore: NodeSeekSessionStore()
+        )
+        interactor.presenter = presenter
+
+        interactor.submitReply(content: "短")
+        await waitForInteractorCallbacks()
+
+        #expect(presenter.didSubmitReplyCount == 0)
+        #expect(presenter.submitReplyErrorMessage == "评论内容太短")
+    }
+
+    private static func makePost() -> PostSummary {
+        PostSummary(
+            id: "703863",
+            title: "标题",
+            url: URL(string: "https://www.nodeseek.com/post-703863-1")!,
+            authorName: "mist",
+            nodeName: "日常",
+            replyCount: 0,
+            lastActivityText: "刚刚"
+        )
+    }
+
+    private static func makeUnusedService() -> NodeSeekService {
+        let url = URL(string: "https://www.nodeseek.com/")!
+        return NodeSeekService(
+            baseURL: url,
+            htmlClient: URLCapturingHTMLClient(response: HTMLResponse(
+                statusCode: 200,
+                headers: [:],
+                finalURL: url,
+                html: ""
+            )),
+            parser: KannaNodeSeekParser(baseURL: url)
+        )
+    }
 }
 
 @MainActor
@@ -156,5 +247,24 @@ private actor URLCapturingHTMLClient: HTMLClient {
 
     func requestedURLs() -> [URL] {
         urls
+    }
+}
+
+@MainActor
+private final class SpyCommentSubmissionAutomation: CommentSubmissionAutomating {
+    private let response: CommentAutomationResponse
+    private(set) var submittedPostID: Int?
+    private(set) var submittedContent: String?
+    private(set) var submittedReferer: URL?
+
+    init(response: CommentAutomationResponse) {
+        self.response = response
+    }
+
+    func submitComment(postID: Int, content: String, referer: URL) async throws -> CommentAutomationResponse {
+        submittedPostID = postID
+        submittedContent = content
+        submittedReferer = referer
+        return response
     }
 }

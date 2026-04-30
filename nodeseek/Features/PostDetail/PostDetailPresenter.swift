@@ -13,6 +13,8 @@ class PostDetailPresenter: PostDetailPresenterProtocol {
     private weak var view: PostDetailViewProtocol?
     private let interactor: PostDetailInteractorInput
     private let router: PostDetailRouterProtocol
+    private var currentDetail: PostDetail?
+    private var isSubmittingReply = false
     
     // MARK: - Initialization
     init(
@@ -41,9 +43,18 @@ class PostDetailPresenter: PostDetailPresenterProtocol {
         }
     }
 
-    func didTapSendReply(content: String, form: ReplyForm) {
+    func didTapSendReply(content: String) {
+        guard isSubmittingReply == false else { return }
+
+        let normalizedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalizedContent.isEmpty == false else {
+            view?.showError(message: "回复内容不能为空。")
+            return
+        }
+
+        isSubmittingReply = true
         view?.setReplySubmitting(true)
-        interactor.submitReply(content: content, form: form)
+        interactor.submitReply(content: normalizedContent)
     }
 }
 
@@ -51,6 +62,7 @@ class PostDetailPresenter: PostDetailPresenterProtocol {
 extension PostDetailPresenter: PostDetailInteractorOutput {
     
     func didLoadPostDetail(_ response: PostDetailResponse) {
+        currentDetail = response.detail
         view?.hideLoading()
         view?.render(detail: response.detail)
     }
@@ -66,13 +78,17 @@ extension PostDetailPresenter: PostDetailInteractorOutput {
     }
 
     func didSubmitReply() {
+        isSubmittingReply = false
         view?.setReplySubmitting(false)
         view?.finishReplySubmission()
-        view?.showLoading()
-        interactor.loadPostDetail()
+        if currentDetail?.isLastPage == true {
+            view?.showLoading()
+            interactor.loadPostDetail()
+        }
     }
 
     func didFailSubmitReply(error: String) {
+        isSubmittingReply = false
         view?.setReplySubmitting(false)
         view?.showError(message: error)
     }

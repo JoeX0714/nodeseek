@@ -23,13 +23,13 @@ protocol PostDetailViewProtocol: AnyObject {
 protocol PostDetailPresenterProtocol: AnyObject {
     func viewDidLoad()
     func didTapLogin()
-    func didTapSendReply(content: String, form: ReplyForm)
+    func didTapSendReply(content: String)
 }
 
 // MARK: - Interactor Input (Presenter -> Interactor)
 protocol PostDetailInteractorInput: AnyObject {
     func loadPostDetail()
-    func submitReply(content: String, form: ReplyForm)
+    func submitReply(content: String)
 }
 
 // MARK: - Interactor Output (Interactor -> Presenter)

@@ -133,7 +133,7 @@ class PostDetailViewController: UIViewController {
     private var displayMode: DisplayMode = .skeleton
     private var hasRenderedDetailContent = false
     private var showsReplyEntry = false
-    private var currentReplyForm: ReplyForm?
+    private var replyComposerMode: CommentComposerMode = .plain
     private var replyContextBarHeightConstraint: NSLayoutConstraint?
     private let skeletonCommentRowCount = 4
     private let renderQueue = DispatchQueue(
@@ -547,16 +547,17 @@ class PostDetailViewController: UIViewController {
 
     @objc
     private func replyButtonTapped() {
-        presentReplyEditor(contextText: nil)
+        presentReplyEditor(mode: .plain)
     }
 
     private func updateReplyButtonVisibility() {
         replyButton.isHidden = showsReplyEntry == false || displayMode != .content || replyEditorContainer.isHidden == false
     }
 
-    private func presentReplyEditor(contextText: String?) {
+    private func presentReplyEditor(mode: CommentComposerMode) {
         guard showsReplyEntry, displayMode == .content else { return }
-        updateReplyContext(contextText)
+        replyComposerMode = mode
+        updateReplyContext(for: mode)
         replyEditorBackdrop.isHidden = false
         replyEditorContainer.isHidden = false
         view.bringSubviewToFront(replyEditorBackdrop)
@@ -570,14 +571,7 @@ class PostDetailViewController: UIViewController {
     }
 
     private func presentReplyEditor(action: String, for comment: Comment) {
-        let authorName = AuthorDisplayPolicy.displayName(from: comment.authorName) ?? comment.authorName
-        let contextParts = [
-            action,
-            Self.trimmedNonEmpty(authorName),
-            comment.floorText.flatMap(Self.trimmedNonEmpty)
-        ]
-            .compactMap(\.self)
-        presentReplyEditor(contextText: contextParts.joined(separator: " "))
+        presentReplyEditor(mode: action == "引用" ? .quote(comment) : .reply(comment))
     }
 
     nonisolated private static func trimmedNonEmpty(_ text: String) -> String? {
@@ -585,7 +579,17 @@ class PostDetailViewController: UIViewController {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    private func updateReplyContext(_ contextText: String?) {
+    private func updateReplyContext(for mode: CommentComposerMode) {
+        let contextText: String?
+        switch mode {
+        case .plain:
+            contextText = nil
+        case .reply(let comment):
+            contextText = replyContextText(action: "回复", comment: comment)
+        case .quote(let comment):
+            contextText = replyContextText(action: "引用", comment: comment)
+        }
+
         if let contextText, contextText.isEmpty == false {
             replyContextLabel.text = contextText
             replyContextBar.isHidden = false
@@ -597,18 +601,31 @@ class PostDetailViewController: UIViewController {
         }
     }
 
+    private func replyContextText(action: String, comment: Comment) -> String {
+        let authorName = AuthorDisplayPolicy.displayName(from: comment.authorName) ?? comment.authorName
+        let contextParts = [
+            action,
+            Self.trimmedNonEmpty(authorName),
+            comment.floorText.flatMap(Self.trimmedNonEmpty)
+        ]
+            .compactMap(\.self)
+        return contextParts.joined(separator: " ")
+    }
+
     @objc
     private func dismissReplyEditor() {
         replyTextView.resignFirstResponder()
         replyEditorBackdrop.isHidden = true
         replyEditorContainer.isHidden = true
-        updateReplyContext(nil)
+        replyComposerMode = .plain
+        updateReplyContext(for: .plain)
         updateReplyButtonVisibility()
     }
 
     @objc
     private func clearReplyContext() {
-        updateReplyContext(nil)
+        replyComposerMode = .plain
+        updateReplyContext(for: .plain)
     }
 
     @objc
@@ -618,12 +635,15 @@ class PostDetailViewController: UIViewController {
             return
         }
 
-        guard let replyForm = currentReplyForm ?? fallbackReplyForm() else {
-            showError(message: "当前页面没有可用的回复入口，请刷新或重新登录后再试。")
-            return
-        }
+        presenter.didTapSendReply(content: resolvedReplyContent(from: content))
+    }
 
-        presenter.didTapSendReply(content: content, form: replyForm)
+    private func resolvedReplyContent(from text: String) -> String {
+        CommentComposerContentBuilder.content(
+            text: text,
+            mode: replyComposerMode,
+            postURL: resolvedDetailURL() ?? baseURL
+        )
     }
 
     @objc
@@ -725,16 +745,6 @@ class PostDetailViewController: UIViewController {
         return URL(string: "https://www.nodeseek.com/post-\(postID)-\(currentPage)")
     }
 
-    private func fallbackReplyForm() -> ReplyForm? {
-        guard let actionURL = resolvedDetailURL() else { return nil }
-        return ReplyForm(
-            actionURL: actionURL,
-            method: "POST",
-            textFieldName: "content",
-            hiddenFields: [:]
-        )
-    }
-
     private func isNodeSeekHost(_ url: URL) -> Bool {
         guard let host = url.host?.lowercased() else { return false }
         return host == "nodeseek.com" || host.hasSuffix(".nodeseek.com")
@@ -810,6 +820,7 @@ extension PostDetailViewController: PostDetailViewProtocol {
 
     func finishReplySubmission() {
         replyTextView.text = nil
+        replyComposerMode = .plain
         dismissReplyEditor()
     }
 
@@ -824,7 +835,6 @@ extension PostDetailViewController: PostDetailViewProtocol {
         title = "详情"
         loginButton.isHidden = true
         showsReplyEntry = true
-        currentReplyForm = detail.replyForm
         renderGeneration += 1
         hasRenderedDetailContent = true
         displayMode = .content
@@ -844,7 +854,7 @@ extension PostDetailViewController: PostDetailViewProtocol {
         title = "详情"
         loginButton.isHidden = false
         showsReplyEntry = false
-        currentReplyForm = nil
+        replyComposerMode = .plain
         dismissReplyEditor()
         updateReplyButtonVisibility()
         renderGeneration += 1
@@ -874,7 +884,6 @@ extension PostDetailViewController: PostDetailViewProtocol {
 extension PostDetailViewController {
     func showReplyEditorForTesting(action: String, authorName: String, floorText: String?) {
         showsReplyEntry = true
-        displayMode = .content
         let comment = Comment(
             id: "reply-editor-test-comment",
             authorName: authorName,
@@ -883,7 +892,12 @@ extension PostDetailViewController {
             createdAtText: nil,
             contentHTML: ""
         )
-        presentReplyEditor(action: action, for: comment)
+        replyComposerMode = action == "引用" ? .quote(comment) : .reply(comment)
+        updateReplyContext(for: replyComposerMode)
+        replyEditorBackdrop.isHidden = false
+        replyEditorContainer.isHidden = false
+        view.bringSubviewToFront(replyEditorBackdrop)
+        view.bringSubviewToFront(replyEditorContainer)
     }
 }
 #endif

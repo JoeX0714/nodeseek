@@ -242,39 +242,6 @@ struct NodeSeekServiceTests {
         #expect(requestedURLs.first?.pathExtension.isEmpty == true)
     }
 
-    @Test func submitReplyPostsHiddenFieldsAndReplyContent() async throws {
-        let html = try FixtureLoader.html(named: "post-703863-1")
-        let baseURL = URL(string: "https://www.nodeseek.com/")!
-        let actionURL = URL(string: "https://www.nodeseek.com/post-703863-1")!
-        let htmlClient = URLCapturingHTMLClient(response: HTMLResponse(
-            statusCode: 200,
-            headers: [:],
-            finalURL: actionURL,
-            html: html
-        ))
-        let service = NodeSeekService(
-            baseURL: baseURL,
-            htmlClient: htmlClient,
-            parser: KannaNodeSeekParser(baseURL: baseURL)
-        )
-        let form = ReplyForm(
-            actionURL: actionURL,
-            method: "POST",
-            textFieldName: "content",
-            hiddenFields: ["once": "token"]
-        )
-
-        let result = try await service.submitReply(form: form, content: "测试回复")
-        let requestedURLs = await htmlClient.requestedURLs()
-        let postedFields = await htmlClient.postedFields()
-
-        #expect(requestedURLs == [actionURL])
-        #expect(postedFields == [["once": "token", "content": "测试回复"]])
-        if case .challenge = result {
-            Issue.record("正常回复提交不应返回 challenge")
-        }
-    }
-
     @Test func returnsLoginRequiredWhenPostDetailIsRestrictedToRegisteredUsers() async throws {
         let html = try FixtureLoader.html(named: "post-login-required")
         let finalURL = URL(string: "https://www.nodeseek.com/post-704286-1")!
@@ -313,7 +280,6 @@ private struct StaticHTMLClient: HTMLClient {
 
 private actor URLCapturingHTMLClient: HTMLClient {
     private var urls: [URL] = []
-    private var posts: [[String: String]] = []
     private let response: HTMLResponse
 
     init(response: HTMLResponse) {
@@ -327,15 +293,10 @@ private actor URLCapturingHTMLClient: HTMLClient {
 
     func post(_ url: URL, formFields: [String : String]) async throws -> HTMLResponse {
         urls.append(url)
-        posts.append(formFields)
         return response
     }
 
     func requestedURLs() -> [URL] {
         urls
-    }
-
-    func postedFields() -> [[String: String]] {
-        posts
     }
 }

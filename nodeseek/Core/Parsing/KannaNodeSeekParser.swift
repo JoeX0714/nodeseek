@@ -187,36 +187,13 @@ struct KannaNodeSeekParser: NodeSeekParser {
             metadataText: metadataText,
             contentHTML: contentHTML,
             comments: comments,
-            replyForm: try? parseReplyForm(html: html, pageURL: url)
+            replyForm: nil,
+            isLastPage: isLastPostPage(in: document, currentURL: url)
         )
     }
 
     func parseReplyForm(html: String, pageURL: URL) throws -> ReplyForm {
-        let document = try HTML(html: html, encoding: .utf8)
-        guard let form = document.xpath("//form").first(where: Self.isReplyForm) else {
-            throw NodeSeekParserError.notImplemented
-        }
-
-        let textFieldName = form.at_xpath(".//textarea[@name]")?["name"]?.trimmedNonEmpty
-            ?? form.at_xpath(".//*[@name='content']")?["name"]?.trimmedNonEmpty
-            ?? "content"
-        let actionURL = form["action"]?
-            .trimmedNonEmpty
-            .flatMap { URL(string: $0, relativeTo: pageURL)?.absoluteURL }
-            ?? pageURL
-        let method = form["method"]?.trimmedNonEmpty?.uppercased() ?? "POST"
-        var hiddenFields: [String: String] = [:]
-        for input in form.xpath(".//input[@type='hidden' and @name]") {
-            guard let name = input["name"]?.trimmedNonEmpty else { continue }
-            hiddenFields[name] = input["value"] ?? ""
-        }
-
-        return ReplyForm(
-            actionURL: actionURL,
-            method: method,
-            textFieldName: textFieldName,
-            hiddenFields: hiddenFields
-        )
+        throw NodeSeekParserError.notImplemented
     }
 
     func parseCheckInState(html: String, pageURL: URL) throws -> CheckInState {
@@ -263,11 +240,6 @@ struct KannaNodeSeekParser: NodeSeekParser {
         return firstInteger(in: text)
     }
 
-    nonisolated private static func isReplyForm(_ form: XMLElement) -> Bool {
-        form.at_xpath(".//textarea[@name]") != nil
-            || form.at_xpath(".//*[@name='content']") != nil
-    }
-
     private func parseComment(_ item: XMLElement) -> Comment? {
         guard let authorName = firstText(in: item, xpaths: [XPathRules.contentAuthor]) else {
             return nil
@@ -289,8 +261,38 @@ struct KannaNodeSeekParser: NodeSeekParser {
             avatarURL: avatarURL,
             floorText: firstText(in: item, xpaths: [XPathRules.contentFloor]),
             createdAtText: firstText(in: item, xpaths: [XPathRules.contentCreatedAt]),
+            createdAtTitleText: firstAttribute(
+                in: item,
+                xpaths: [XPathRules.contentCreatedAt],
+                attribute: "title"
+            ),
             contentHTML: item.at_xpath(XPathRules.contentArticle)?.innerHTML?.trimmedNonEmpty ?? ""
         )
+    }
+
+    private func isLastPostPage(in document: HTMLDocument, currentURL: URL) -> Bool {
+        guard let currentPostID = Self.postID(from: currentURL) else { return true }
+        let currentPage = currentPostPage(from: currentURL)
+        let nextLinks = document.xpath("//a[@rel='next' and contains(@href, '/post-')]")
+
+        return nextLinks.contains { link in
+            guard let href = link["href"],
+                  let url = URL(string: href, relativeTo: baseURL)?.absoluteURL,
+                  Self.postID(from: url) == currentPostID else {
+                return false
+            }
+
+            return currentPostPage(from: url) > currentPage
+        } == false
+    }
+
+    private func currentPostPage(from url: URL) -> Int {
+        let path = url.path
+        guard let range = path.range(of: #"post[-/]\d+[-/](\d+)"#, options: .regularExpression) else {
+            return 1
+        }
+
+        return Int(String(path[range]).components(separatedBy: CharacterSet.decimalDigits.inverted).last ?? "") ?? 1
     }
 }
 

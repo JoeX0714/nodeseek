@@ -14,6 +14,7 @@ class PostDetailInteractor: PostDetailInteractorInput {
     weak var presenter: PostDetailInteractorOutput?
     private let post: PostSummary?
     private let service: NodeSeekService
+    private let commentSubmitter: NodeSeekCommentSubmitter
     private let page: Int
     private let sessionStore: NodeSeekSessionStore
     private let logger = Logger(subsystem: "com.nodeseek.app", category: "PostDetailInteractor")
@@ -22,11 +23,13 @@ class PostDetailInteractor: PostDetailInteractorInput {
     init(
         post: PostSummary? = nil,
         service: NodeSeekService = NodeSeekService(),
+        commentSubmitter: NodeSeekCommentSubmitter = NodeSeekCommentSubmitter(),
         page: Int = 1,
         sessionStore: NodeSeekSessionStore = .shared
     ) {
         self.post = post
         self.service = service
+        self.commentSubmitter = commentSubmitter
         self.page = max(1, page)
         self.sessionStore = sessionStore
     }
@@ -57,27 +60,29 @@ class PostDetailInteractor: PostDetailInteractorInput {
         }
     }
 
-    func submitReply(content: String, form: ReplyForm) {
+    func submitReply(content: String) {
         let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmedContent.isEmpty == false else {
             presenter?.didFailSubmitReply(error: "回复内容不能为空。")
             return
         }
 
+        guard let post else {
+            presenter?.didFailSubmitReply(error: PostDetailSubmitError.missingPost.localizedDescription)
+            return
+        }
+
         Task {
-            logger.info("开始提交回复，postID=\(self.post?.id ?? "unknown", privacy: .public)")
+            logger.info("开始通过 WebView 提交回复，postID=\(post.id, privacy: .public)")
             do {
-                let result = try await service.submitReply(form: form, content: trimmedContent)
-                switch result {
-                case .value:
-                    await sessionStore.recordSuccess()
-                    await MainActor.run {
-                        presenter?.didSubmitReply()
-                    }
-                case .challenge(let challenge):
-                    logger.warning("回复提交命中验证: \(challenge.logDescription)")
-                    let message = await sessionStore.recordChallenge(challenge)
-                    throw PostDetailSubmitError.challengeRequired(message)
+                _ = try await commentSubmitter.submitComment(
+                    postID: post.id,
+                    content: trimmedContent,
+                    referer: post.url
+                )
+                await sessionStore.recordSuccess()
+                await MainActor.run {
+                    presenter?.didSubmitReply()
                 }
             } catch {
                 logger.error("回复提交失败: \(error.localizedDescription)")
@@ -125,11 +130,14 @@ private enum PostDetailLoadError: LocalizedError {
 
 private enum PostDetailSubmitError: LocalizedError {
     case challengeRequired(String)
+    case missingPost
 
     var errorDescription: String? {
         switch self {
         case .challengeRequired(let message):
             return message
+        case .missingPost:
+            return "缺少帖子信息，无法发表评论。"
         }
     }
 }
