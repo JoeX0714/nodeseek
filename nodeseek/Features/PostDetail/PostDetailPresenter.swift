@@ -77,7 +77,7 @@ extension PostDetailPresenter: PostDetailInteractorOutput {
         view?.showError(message: error)
     }
 
-    func didSubmitReply(_ response: CommentSubmitResponse) {
+    func didSubmitReply(_ response: PostDetailSubmitReplyResponse) {
         isSubmittingReply = false
         view?.setReplySubmitting(false)
         view?.finishReplySubmission()

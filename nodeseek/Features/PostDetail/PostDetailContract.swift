@@ -38,7 +38,7 @@ protocol PostDetailInteractorOutput: AnyObject {
     func didLoadPostDetail(_ response: PostDetailResponse)
     func didRequireLogin(message: String)
     func didFailLoadPostDetail(error: String)
-    func didSubmitReply(_ response: CommentSubmitResponse)
+    func didSubmitReply(_ response: PostDetailSubmitReplyResponse)
     func didFailSubmitReply(error: String)
 }
 

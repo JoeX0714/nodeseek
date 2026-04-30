@@ -272,10 +272,6 @@ private struct StaticHTMLClient: HTMLClient {
     func get(_ url: URL) async throws -> HTMLResponse {
         response
     }
-
-    func post(_ url: URL, formFields: [String: String]) async throws -> HTMLResponse {
-        response
-    }
 }
 
 private actor URLCapturingHTMLClient: HTMLClient {
@@ -287,11 +283,6 @@ private actor URLCapturingHTMLClient: HTMLClient {
     }
 
     func get(_ url: URL) async throws -> HTMLResponse {
-        urls.append(url)
-        return response
-    }
-
-    func post(_ url: URL, formFields: [String : String]) async throws -> HTMLResponse {
         urls.append(url)
         return response
     }

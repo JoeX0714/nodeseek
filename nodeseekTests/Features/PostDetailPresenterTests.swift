@@ -50,12 +50,11 @@ struct PostDetailPresenterTests {
             metadataText: nil,
             contentHTML: "<p>正文</p>",
             comments: [],
-            replyForm: nil,
             isLastPage: true
         )))
 
         presenter.didTapSendReply(content: "测试回复")
-        presenter.didSubmitReply(CommentSubmitResponse(message: "已发布"))
+        presenter.didSubmitReply(PostDetailSubmitReplyResponse(message: "已发布"))
 
         #expect(interactor.loadPostDetailCount == 1)
         #expect(view.finishReplySubmissionCount == 1)
@@ -77,12 +76,11 @@ struct PostDetailPresenterTests {
             metadataText: nil,
             contentHTML: "<p>正文</p>",
             comments: [],
-            replyForm: nil,
             isLastPage: true
         )))
 
         presenter.didTapSendReply(content: "测试回复")
-        presenter.didSubmitReply(CommentSubmitResponse(message: nil))
+        presenter.didSubmitReply(PostDetailSubmitReplyResponse(message: nil))
 
         #expect(interactor.loadPostDetailCount == 1)
         #expect(view.toasts == ["评论已发布"])
@@ -102,12 +100,11 @@ struct PostDetailPresenterTests {
             metadataText: nil,
             contentHTML: "<p>正文</p>",
             comments: [],
-            replyForm: nil,
             isLastPage: false
         )))
 
         presenter.didTapSendReply(content: "测试回复")
-        presenter.didSubmitReply(CommentSubmitResponse(message: "已发布"))
+        presenter.didSubmitReply(PostDetailSubmitReplyResponse(message: "已发布"))
 
         #expect(interactor.loadPostDetailCount == 0)
         #expect(view.finishReplySubmissionCount == 1)

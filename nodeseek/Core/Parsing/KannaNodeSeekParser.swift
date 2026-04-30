@@ -187,13 +187,8 @@ struct KannaNodeSeekParser: NodeSeekParser {
             metadataText: metadataText,
             contentHTML: contentHTML,
             comments: comments,
-            replyForm: nil,
             isLastPage: isLastPostPage(in: document, currentURL: url)
         )
-    }
-
-    func parseReplyForm(html: String, pageURL: URL) throws -> ReplyForm {
-        throw NodeSeekParserError.notImplemented
     }
 
     func parseCheckInState(html: String, pageURL: URL) throws -> CheckInState {

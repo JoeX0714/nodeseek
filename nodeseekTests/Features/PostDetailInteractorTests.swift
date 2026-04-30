@@ -122,7 +122,7 @@ struct PostDetailInteractorTests {
         #expect(automation.submittedContent == "测试评论")
         #expect(automation.submittedReferer == post.url)
         #expect(presenter.didSubmitReplyCount == 1)
-        #expect(presenter.submitReplyResponse == CommentSubmitResponse(message: "已发布"))
+        #expect(presenter.submitReplyResponse == PostDetailSubmitReplyResponse(message: "已发布"))
         #expect(presenter.submitReplyErrorMessage == nil)
     }
 
@@ -197,7 +197,7 @@ private final class SpyPostDetailInteractorOutput: PostDetailInteractorOutput {
     var loginRequiredMessage: String?
     var errorMessage: String?
     var didSubmitReplyCount = 0
-    var submitReplyResponse: CommentSubmitResponse?
+    var submitReplyResponse: PostDetailSubmitReplyResponse?
     var submitReplyErrorMessage: String?
 
     func didLoadPostDetail(_ response: PostDetailResponse) {
@@ -212,7 +212,7 @@ private final class SpyPostDetailInteractorOutput: PostDetailInteractorOutput {
         errorMessage = error
     }
 
-    func didSubmitReply(_ response: CommentSubmitResponse) {
+    func didSubmitReply(_ response: PostDetailSubmitReplyResponse) {
         didSubmitReplyCount += 1
         submitReplyResponse = response
     }
@@ -239,11 +239,6 @@ private actor URLCapturingHTMLClient: HTMLClient {
     }
 
     func get(_ url: URL) async throws -> HTMLResponse {
-        urls.append(url)
-        return response
-    }
-
-    func post(_ url: URL, formFields: [String : String]) async throws -> HTMLResponse {
         urls.append(url)
         return response
     }

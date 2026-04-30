@@ -82,7 +82,7 @@ class PostDetailInteractor: PostDetailInteractorInput {
                 )
                 await sessionStore.recordSuccess()
                 await MainActor.run {
-                    presenter?.didSubmitReply(response)
+                    presenter?.didSubmitReply(PostDetailSubmitReplyResponse(message: response.message))
                 }
             } catch {
                 logger.error("回复提交失败: \(error.localizedDescription)")

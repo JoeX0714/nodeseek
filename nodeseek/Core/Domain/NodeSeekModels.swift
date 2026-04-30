@@ -55,7 +55,6 @@ struct PostDetail: Equatable, Sendable {
     let metadataText: String?
     let contentHTML: String
     let comments: [Comment]
-    let replyForm: ReplyForm?
     let isLastPage: Bool
 
     init(
@@ -66,7 +65,6 @@ struct PostDetail: Equatable, Sendable {
         metadataText: String?,
         contentHTML: String,
         comments: [Comment],
-        replyForm: ReplyForm?,
         isLastPage: Bool = true
     ) {
         self.id = id
@@ -76,7 +74,6 @@ struct PostDetail: Equatable, Sendable {
         self.metadataText = metadataText
         self.contentHTML = contentHTML
         self.comments = comments
-        self.replyForm = replyForm
         self.isLastPage = isLastPage
     }
 }
@@ -110,13 +107,6 @@ struct Comment: Equatable, Sendable {
         self.createdAtTitleText = createdAtTitleText
         self.contentHTML = contentHTML
     }
-}
-
-struct ReplyForm: Equatable, Sendable {
-    let actionURL: URL
-    let method: String
-    let textFieldName: String
-    let hiddenFields: [String: String]
 }
 
 struct CheckInState: Equatable, Sendable {

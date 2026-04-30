@@ -135,7 +135,6 @@ class PostDetailViewController: UIViewController {
     private var showsReplyEntry = false
     private var replyComposerMode: CommentComposerMode = .plain
     private var replyContextBarHeightConstraint: NSLayoutConstraint?
-    private var toastHideWorkItem: DispatchWorkItem?
     private let skeletonCommentRowCount = 4
     private let renderQueue = DispatchQueue(
         label: "com.nodeseek.app.postdetail.render",
@@ -270,40 +269,7 @@ class PostDetailViewController: UIViewController {
         return button
     }()
 
-    private let toastContainerView: UIView = {
-        let view = UIView()
-        view.backgroundColor = UIColor.label.withAlphaComponent(0.92)
-        view.layer.cornerRadius = 14
-        view.layer.cornerCurve = .continuous
-        view.layer.shadowColor = UIColor.black.cgColor
-        view.layer.shadowOpacity = 0.18
-        view.layer.shadowRadius = 14
-        view.layer.shadowOffset = CGSize(width: 0, height: 8)
-        view.isHidden = true
-        view.alpha = 0
-        view.translatesAutoresizingMaskIntoConstraints = false
-        return view
-    }()
-
-    private let toastIconView: UIImageView = {
-        let imageView = UIImageView(image: UIImage(systemName: "checkmark.circle.fill"))
-        imageView.tintColor = .systemGreen
-        imageView.contentMode = .scaleAspectFit
-        imageView.translatesAutoresizingMaskIntoConstraints = false
-        return imageView
-    }()
-
-    private let toastLabel: UILabel = {
-        let label = UILabel()
-        label.font = .preferredFont(forTextStyle: .footnote)
-        label.textColor = .systemBackground
-        label.backgroundColor = .clear
-        label.textAlignment = .natural
-        label.numberOfLines = 0
-        label.accessibilityIdentifier = "post-detail-toast-label"
-        label.translatesAutoresizingMaskIntoConstraints = false
-        return label
-    }()
+    private let toastView = PostDetailToastView()
 
     init(
         presenter: PostDetailPresenterProtocol,
@@ -330,7 +296,6 @@ class PostDetailViewController: UIViewController {
     deinit {
         attachmentLayoutRefreshWorkItem?.cancel()
         tableReloadWorkItem?.cancel()
-        toastHideWorkItem?.cancel()
         NotificationCenter.default.removeObserver(self)
     }
 
@@ -385,9 +350,7 @@ class PostDetailViewController: UIViewController {
         replyEditorContainer.addSubview(replyTextView)
         replyEditorContainer.addSubview(inlineReplySendButton)
         view.addSubview(replyEditorContainer)
-        toastContainerView.addSubview(toastIconView)
-        toastContainerView.addSubview(toastLabel)
-        view.addSubview(toastContainerView)
+        view.addSubview(toastView)
 
         let replyEditorBottomConstraint = replyEditorContainer.bottomAnchor.constraint(
             equalTo: view.keyboardLayoutGuide.topAnchor,
@@ -448,20 +411,10 @@ class PostDetailViewController: UIViewController {
             inlineReplySendButton.widthAnchor.constraint(equalToConstant: 40),
             inlineReplySendButton.heightAnchor.constraint(equalToConstant: 40),
 
-            toastContainerView.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 24),
-            toastContainerView.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -24),
-            toastContainerView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            toastContainerView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -88),
-
-            toastIconView.leadingAnchor.constraint(equalTo: toastContainerView.leadingAnchor, constant: 12),
-            toastIconView.centerYAnchor.constraint(equalTo: toastContainerView.centerYAnchor),
-            toastIconView.widthAnchor.constraint(equalToConstant: 18),
-            toastIconView.heightAnchor.constraint(equalToConstant: 18),
-
-            toastLabel.leadingAnchor.constraint(equalTo: toastIconView.trailingAnchor, constant: 8),
-            toastLabel.trailingAnchor.constraint(equalTo: toastContainerView.trailingAnchor, constant: -14),
-            toastLabel.topAnchor.constraint(equalTo: toastContainerView.topAnchor, constant: 10),
-            toastLabel.bottomAnchor.constraint(equalTo: toastContainerView.bottomAnchor, constant: -10)
+            toastView.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 24),
+            toastView.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -24),
+            toastView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            toastView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -88)
         ])
 
         reloadTableData()
@@ -887,34 +840,8 @@ extension PostDetailViewController: PostDetailViewProtocol {
     }
 
     func showToast(message: String) {
-        toastHideWorkItem?.cancel()
-        toastLabel.text = message
-        toastContainerView.isHidden = false
-        toastContainerView.alpha = 0
-        toastContainerView.transform = CGAffineTransform(translationX: 0, y: 8)
-        view.bringSubviewToFront(toastContainerView)
-
-        UIView.animate(withDuration: 0.22, delay: 0, options: [.curveEaseOut, .allowUserInteraction]) {
-            self.toastContainerView.alpha = 1
-            self.toastContainerView.transform = .identity
-        }
-
-        let workItem = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            UIView.animate(
-                withDuration: 0.2,
-                delay: 0,
-                options: [.curveEaseIn, .allowUserInteraction]
-            ) {
-                self.toastContainerView.alpha = 0
-                self.toastContainerView.transform = CGAffineTransform(translationX: 0, y: 8)
-            } completion: { _ in
-                self.toastContainerView.isHidden = true
-                self.toastContainerView.transform = .identity
-            }
-        }
-        toastHideWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: workItem)
+        toastView.show(message: message)
+        view.bringSubviewToFront(toastView)
     }
 
     func showError(message: String) {
@@ -994,6 +921,101 @@ extension PostDetailViewController {
     }
 }
 #endif
+
+private final class PostDetailToastView: UIView {
+    private var hideWorkItem: DispatchWorkItem?
+
+    private let iconView: UIImageView = {
+        let imageView = UIImageView(image: UIImage(systemName: "checkmark.circle.fill"))
+        imageView.tintColor = .systemGreen
+        imageView.contentMode = .scaleAspectFit
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        return imageView
+    }()
+
+    private let messageLabel: UILabel = {
+        let label = UILabel()
+        label.font = .preferredFont(forTextStyle: .footnote)
+        label.textColor = .systemBackground
+        label.backgroundColor = .clear
+        label.textAlignment = .natural
+        label.numberOfLines = 0
+        label.accessibilityIdentifier = "post-detail-toast-label"
+        label.translatesAutoresizingMaskIntoConstraints = false
+        return label
+    }()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        configure()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        hideWorkItem?.cancel()
+    }
+
+    func show(message: String) {
+        hideWorkItem?.cancel()
+        messageLabel.text = message
+        isHidden = false
+        alpha = 0
+        transform = CGAffineTransform(translationX: 0, y: 8)
+
+        UIView.animate(withDuration: 0.22, delay: 0, options: [.curveEaseOut, .allowUserInteraction]) {
+            self.alpha = 1
+            self.transform = .identity
+        }
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            UIView.animate(
+                withDuration: 0.2,
+                delay: 0,
+                options: [.curveEaseIn, .allowUserInteraction]
+            ) {
+                self.alpha = 0
+                self.transform = CGAffineTransform(translationX: 0, y: 8)
+            } completion: { _ in
+                self.isHidden = true
+                self.transform = .identity
+            }
+        }
+        hideWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: workItem)
+    }
+
+    private func configure() {
+        backgroundColor = UIColor.label.withAlphaComponent(0.92)
+        layer.cornerRadius = 14
+        layer.cornerCurve = .continuous
+        layer.shadowColor = UIColor.black.cgColor
+        layer.shadowOpacity = 0.18
+        layer.shadowRadius = 14
+        layer.shadowOffset = CGSize(width: 0, height: 8)
+        isHidden = true
+        alpha = 0
+        translatesAutoresizingMaskIntoConstraints = false
+
+        addSubview(iconView)
+        addSubview(messageLabel)
+
+        NSLayoutConstraint.activate([
+            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            iconView.widthAnchor.constraint(equalToConstant: 18),
+            iconView.heightAnchor.constraint(equalToConstant: 18),
+
+            messageLabel.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 8),
+            messageLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            messageLabel.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+            messageLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10)
+        ])
+    }
+}
 
 private final class CookieSharedWebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
     private let url: URL

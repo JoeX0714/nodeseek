@@ -92,24 +92,6 @@ struct HiddenWebViewHTMLClient: HTMLClient {
         return try await load(request: request)
     }
 
-    func post(_ url: URL, formFields: [String: String]) async throws -> HTMLResponse {
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = timeoutInterval
-        request.cachePolicy = WebViewCachePolicy.postRequestPolicy
-        WebRequestFingerprint.applyHTMLHeaders(to: &request)
-        request.setValue("application/x-www-form-urlencoded; charset=utf-8", forHTTPHeaderField: "Content-Type")
-        request.httpBody = formFields
-            .map { key, value in "\(Self.urlEncode(key))=\(Self.urlEncode(value))" }
-            .joined(separator: "&")
-            .data(using: .utf8)
-        return try await load(request: request)
-    }
-
-    private static func urlEncode(_ value: String) -> String {
-        FormURLEncoder.encode(value)
-    }
-
     private func load(request: URLRequest) async throws -> HTMLResponse {
         let requestLock = HiddenWebViewRequestLock.shared
         await requestLock.acquire()

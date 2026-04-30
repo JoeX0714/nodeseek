@@ -47,8 +47,7 @@ struct PostDetailViewControllerTests {
             comments: [
                 Comment(id: "1", authorName: "a", avatarURL: nil, floorText: "#1", createdAtText: "1min ago", contentHTML: "<p>评论一</p>"),
                 Comment(id: "2", authorName: "b", avatarURL: nil, floorText: "#2", createdAtText: "2min ago", contentHTML: "<p>评论二</p>")
-            ],
-            replyForm: nil
+            ]
         ))
 
         #expect(tableView.numberOfRows(inSection: 0) == 3)
@@ -71,8 +70,7 @@ struct PostDetailViewControllerTests {
             avatarURL: nil,
             metadataText: "刚刚",
             contentHTML: "<p>正文</p>",
-            comments: [],
-            replyForm: nil
+            comments: []
         ))
         #expect(tableView.numberOfRows(inSection: 0) == 1)
     }
@@ -480,8 +478,7 @@ struct PostDetailLoginViewControllerTests {
             avatarURL: nil,
             metadataText: "刚刚",
             contentHTML: "<p>正文</p>",
-            comments: [],
-            replyForm: nil
+            comments: []
         ))
 
         let button = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-login-button"))
@@ -500,8 +497,7 @@ struct PostDetailLoginViewControllerTests {
             avatarURL: nil,
             metadataText: "刚刚",
             contentHTML: "<p>正文</p>",
-            comments: [],
-            replyForm: nil
+            comments: []
         ))
 
         let button = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-reply-button"))
@@ -523,7 +519,7 @@ struct PostDetailLoginViewControllerTests {
         #expect(viewController.presentedViewController == nil)
     }
 
-    @Test func replyButtonShowsForLoadedDetailEvenWithoutParsedReplyForm() throws {
+    @Test func replyButtonShowsForLoadedDetail() throws {
         let presenter = SpyPostDetailPresenter()
         let viewController = PostDetailViewController(presenter: presenter)
 
@@ -535,8 +531,7 @@ struct PostDetailLoginViewControllerTests {
             avatarURL: nil,
             metadataText: "刚刚",
             contentHTML: "<p>正文</p>",
-            comments: [],
-            replyForm: nil
+            comments: []
         ))
 
         let button = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-reply-button"))
@@ -555,8 +550,7 @@ struct PostDetailLoginViewControllerTests {
             avatarURL: nil,
             metadataText: "刚刚",
             contentHTML: "<p>正文</p>",
-            comments: [],
-            replyForm: nil
+            comments: []
         ))
 
         let replyButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-reply-button"))
@@ -614,8 +608,7 @@ struct PostDetailLoginViewControllerTests {
             avatarURL: nil,
             metadataText: "刚刚",
             contentHTML: "<p>正文</p>",
-            comments: [],
-            replyForm: nil
+            comments: []
         ))
 
         let replyButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-reply-button"))
@@ -643,8 +636,7 @@ struct PostDetailLoginViewControllerTests {
             avatarURL: nil,
             metadataText: "刚刚",
             contentHTML: "<p>正文</p>",
-            comments: [],
-            replyForm: nil
+            comments: []
         ))
 
         let replyButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-reply-button"))
@@ -695,8 +687,7 @@ struct PostDetailLoginViewControllerTests {
             avatarURL: nil,
             metadataText: "刚刚",
             contentHTML: "<p>正文</p>",
-            comments: [],
-            replyForm: nil
+            comments: []
         ))
 
         let replyButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-reply-button"))
