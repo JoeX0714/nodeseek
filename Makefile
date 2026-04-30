@@ -16,7 +16,7 @@ CORE_TEST_CLASSES := \
 	NodeSeekCommentSubmitterTests \
 	CommentComposerContentBuilderTests
 
-XCODEBUILD_BASE = xcodebuild \
+XCODE_COMMON = \
 	-project "$(PROJECT)" \
 	-scheme "$(SCHEME)" \
 	-configuration "$(CONFIGURATION)" \
@@ -43,14 +43,14 @@ spm-test:
 	swift test
 
 xcode-build-tests:
-	$(XCODEBUILD_BASE) build-for-testing
+	xcodebuild -quiet build-for-testing $(XCODE_COMMON)
 
-xcode-test-core:
-	$(XCODEBUILD_BASE) test $(addprefix -only-testing:nodeseekTests/,$(CORE_TEST_CLASSES))
+xcode-test-core: xcode-build-tests
+	xcodebuild -quiet test-without-building $(XCODE_COMMON) $(addprefix -only-testing:nodeseekTests/,$(CORE_TEST_CLASSES))
 
-xcode-test-class:
+xcode-test-class: xcode-build-tests
 	@test -n "$(TEST)" || { echo "Usage: make xcode-test-class TEST=KannaNodeSeekParserTests" >&2; exit 2; }
-	$(XCODEBUILD_BASE) test -only-testing:nodeseekTests/$(TEST)
+	TEST="$(TEST)"; xcodebuild -quiet test-without-building $(XCODE_COMMON) -only-testing:nodeseekTests/$$TEST
 
 xcode-test-full:
-	$(XCODEBUILD_BASE) test
+	xcodebuild -quiet test $(XCODE_COMMON)
