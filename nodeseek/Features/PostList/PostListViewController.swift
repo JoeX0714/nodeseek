@@ -438,11 +438,6 @@ extension PostListViewController: PostListViewProtocol {
             sortToggleWidthConstraint?.constant = SortToggleLayout.expandedWidth(for: sortMode.accessibilityTitle)
         }
     }
-
-    func renderAccount(_ account: AccountResponse) {
-        sideMenuViewController.renderAccount(account)
-    }
-    
     func render(posts: [PostSummary]) {
         pageContainerView.setPosts(posts, for: selectedCategory)
     }

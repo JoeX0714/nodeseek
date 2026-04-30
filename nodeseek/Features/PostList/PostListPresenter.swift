@@ -46,7 +46,6 @@ class PostListPresenter: PostListPresenterProtocol {
     func viewDidLoad() {
         view?.renderCategories(categories, selected: currentCategory)
         view?.renderSortMode(currentSortMode)
-        interactor.loadAccount()
         presentCurrentCategory(useCache: true)
     }
 
@@ -66,7 +65,6 @@ class PostListPresenter: PostListPresenterProtocol {
 
     func didTapLogin() {
         router.navigateToLogin { [weak self] in
-            self?.interactor.loadAccount()
             self?.presentCurrentCategory(useCache: false)
         }
     }
@@ -176,14 +174,6 @@ class PostListPresenter: PostListPresenterProtocol {
 
 // MARK: - Interactor Output
 extension PostListPresenter: PostListInteractorOutput {
-    func didLoadAccount(_ account: AccountResponse) {
-        view?.renderAccount(account)
-    }
-
-    func didFailLoadAccount(error: String) {
-        view?.renderAccount(AccountResponse(displayName: "游客", isLoggedIn: false))
-    }
-    
     func didLoadPosts(
         _ posts: [PostSummary],
         category: PostListCategory,

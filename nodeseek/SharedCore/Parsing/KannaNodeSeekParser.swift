@@ -18,8 +18,19 @@ struct KannaNodeSeekParser: NodeSeekParser {
 
     func parseAccount(html: String) throws -> AccountResponse {
         let document = try HTML(html: html, encoding: .utf8)
+        if let account = parseAccountFromUserCard(document)
+            ?? parseAccountFromTempScript(document)
+            ?? parseAccountFromCapturedConfig(document) {
+            return account
+        }
+
+        postAccountParserDebug("parser: account user-card/config missing or decode failed")
+        return AccountResponse(displayName: "游客", isLoggedIn: false)
+    }
+
+    private func parseAccountFromUserCard(_ document: HTMLDocument) -> AccountResponse? {
         guard let userCard = document.at_xpath(XPathRules.accountUserCard) else {
-            return AccountResponse(displayName: "游客", isLoggedIn: false)
+            return nil
         }
 
         let usernameNode = userCard.at_xpath(XPathRules.accountUsername)
@@ -50,6 +61,112 @@ struct KannaNodeSeekParser: NodeSeekParser {
             profileURL: profileURL,
             stats: Array(stats.prefix(6))
         )
+    }
+
+    private func parseAccountFromTempScript(_ document: HTMLDocument) -> AccountResponse? {
+        guard let script = document.at_xpath(XPathRules.accountTempScript) else {
+            return nil
+        }
+        guard
+            let payload = script.text?.trimmedNonEmpty,
+            let data = Data(base64Encoded: payload, options: [.ignoreUnknownCharacters]),
+            let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            postAccountParserDebug("parser: temp-script decode failed")
+            return nil
+        }
+
+        return parseAccountFromConfiguration(root: root, source: "temp-script")
+    }
+
+    private func parseAccountFromCapturedConfig(_ document: HTMLDocument) -> AccountResponse? {
+        guard let script = document.at_xpath(XPathRules.accountCapturedConfig) else {
+            return nil
+        }
+        guard
+            let payload = script.text?.trimmedNonEmpty,
+            let data = payload.data(using: .utf8),
+            let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            postAccountParserDebug("parser: captured-config decode failed")
+            return nil
+        }
+
+        return parseAccountFromConfiguration(root: root, source: "captured-config")
+    }
+
+    private func parseAccountFromConfiguration(root: [String: Any], source: String) -> AccountResponse? {
+        let user = tempScriptUserDictionary(from: root)
+        guard
+            let memberID = intValue(in: user, keys: ["member_id", "memberID", "uid", "id"]),
+            let displayName = stringValue(in: user, keys: ["member_name", "memberName", "name", "username"])
+        else {
+            postAccountParserDebug("parser: \(source) user keys=\(user.keys.sorted().joined(separator: ","))")
+            return nil
+        }
+
+        postAccountParserDebug("parser: \(source) user id=\(memberID) name=\(displayName)")
+        let avatarPath = stringValue(in: user, keys: ["avatar"]) ?? "/avatar/\(memberID).png"
+        let profilePath = stringValue(in: user, keys: ["profile"]) ?? "/space/\(memberID)"
+        let avatarURL = URL(string: avatarPath, relativeTo: baseURL)?.absoluteURL
+        let profileURL = URL(string: profilePath, relativeTo: baseURL)?.absoluteURL
+        let stats = [
+            intValue(in: user, keys: ["rank"]).map { "等级 Lv \($0)" },
+            intValue(in: user, keys: ["coin"]).map { "鸡腿 \($0)" },
+            intValue(in: user, keys: ["stardust"]).map { "星辰 \($0)" }
+        ].compactMap(\.self)
+
+        return AccountResponse(
+            displayName: displayName,
+            isLoggedIn: true,
+            avatarURL: avatarURL,
+            profileURL: profileURL,
+            stats: stats
+        )
+    }
+
+    private func postAccountParserDebug(_ message: String) {
+        #if SWIFT_PACKAGE
+        return
+        #else
+        CurrentAccountDebugLog.post(message)
+        #endif
+    }
+
+    private func tempScriptUserDictionary(from root: [String: Any]) -> [String: Any] {
+        for key in ["user", "currentUser", "current_user", "member"] {
+            if let dictionary = root[key] as? [String: Any] {
+                return dictionary
+            }
+        }
+        return root
+    }
+
+    private func intValue(in dictionary: [String: Any], keys: [String]) -> Int? {
+        for key in keys {
+            switch dictionary[key] {
+            case let value as Int:
+                return value
+            case let value as Double:
+                return Int(value)
+            case let value as String:
+                if let intValue = Int(value.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                    return intValue
+                }
+            default:
+                continue
+            }
+        }
+        return nil
+    }
+
+    private func stringValue(in dictionary: [String: Any], keys: [String]) -> String? {
+        for key in keys {
+            if let value = dictionary[key] as? String, let trimmedValue = value.trimmedNonEmpty {
+                return trimmedValue
+            }
+        }
+        return nil
     }
 
     func parsePostList(html: String) throws -> [PostSummary] {

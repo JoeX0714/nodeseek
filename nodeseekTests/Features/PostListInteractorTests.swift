@@ -51,13 +51,6 @@ private final class SpyPostListInteractorOutput: PostListInteractorOutput {
     var loadedPosts: [PostSummary]?
     var errorMessage: String?
 
-    func didLoadAccount(_ account: AccountResponse) {
-    }
-
-    func didFailLoadAccount(error: String) {
-        errorMessage = error
-    }
-
     func didLoadPosts(_ posts: [PostSummary], category: PostListCategory, sortMode: PostListSortMode) {
         loadedPosts = posts
     }

@@ -168,6 +168,7 @@ final class LoginWebViewController: UIViewController, WKNavigationDelegate, WKUI
         Task { @MainActor [weak self] in
             guard let self else { return }
             await cookieSynchronizer.syncWebViewCookiesToURLSession()
+            NotificationCenter.default.post(name: .nodeSeekLoginSessionDidClose, object: nil)
             onClose()
             closeSelf()
         }

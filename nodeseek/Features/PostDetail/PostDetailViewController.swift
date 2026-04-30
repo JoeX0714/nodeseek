@@ -109,6 +109,7 @@ class PostDetailViewController: UIViewController {
 
     enum Layout {
         static let horizontalInset: CGFloat = PostDetailContentLayout.horizontalInset
+        static let bottomContentPadding: CGFloat = 96
     }
 
     let presenter: PostDetailPresenterProtocol
@@ -397,6 +398,8 @@ class PostDetailViewController: UIViewController {
         tableNode.view.backgroundColor = .systemBackground
         tableNode.view.separatorStyle = .none
         tableNode.view.showsVerticalScrollIndicator = true
+        tableNode.contentInset = UIEdgeInsets(top: 0, left: 0, bottom: Layout.bottomContentPadding, right: 0)
+        tableNode.view.verticalScrollIndicatorInsets.bottom = Layout.bottomContentPadding
         tableNode.view.translatesAutoresizingMaskIntoConstraints = false
 
         view.addSubview(tableNode.view)
@@ -420,7 +423,7 @@ class PostDetailViewController: UIViewController {
             tableNode.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableNode.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tableNode.view.topAnchor.constraint(equalTo: view.topAnchor),
-            tableNode.view.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
+            tableNode.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
             pageScrubberView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: 12),
             pageScrubberView.topAnchor.constraint(equalTo: view.topAnchor),

@@ -50,16 +50,22 @@ struct NodeSeekService: Sendable {
     func loadAccount() async throws -> NodeSeekResult<AccountResponse> {
         let targetURL = baseURL
         logger.info("开始抓取 NodeSeek 账号信息: \(targetURL.absoluteString)")
+        CurrentAccountDebugLog.post("service: request \(targetURL.absoluteString)")
         let response = try await htmlClient.get(targetURL)
         logger.info("账号信息抓取返回 status=\(response.statusCode), htmlLength=\(response.html.count), finalURL=\(response.finalURL.absoluteString)")
+        CurrentAccountDebugLog.post(
+            "service: response status=\(response.statusCode) len=\(response.html.count) final=\(response.finalURL.path) userCard=\(response.html.contains("user-card")) usercardMe=\(response.html.contains("usercard-me")) tempScript=\(response.html.contains("temp-script")) capturedConfig=\(response.html.contains("nodeseek-captured-config")) memberID=\(response.html.contains("member_id"))"
+        )
 
         if let challenge = challengeDetector.detect(response: response) {
             logger.warning("检测到账号信息 challenge: \(challenge.logDescription)")
+            CurrentAccountDebugLog.post("service: challenge \(challenge.logDescription)")
             return .challenge(challenge)
         }
 
         let account = try parser.parseAccount(html: response.html)
         logger.info("账号信息解析完成，loggedIn=\(account.isLoggedIn, privacy: .public), displayName=\(account.displayName, privacy: .public)")
+        CurrentAccountDebugLog.post("service: parsed loggedIn=\(account.isLoggedIn) name=\(account.displayName) avatar=\(account.avatarURL?.path ?? "nil") profile=\(account.profileURL?.path ?? "nil") stats=\(account.stats.joined(separator: "|"))")
         return .value(account)
     }
 

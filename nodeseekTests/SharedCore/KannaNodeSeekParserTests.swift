@@ -73,6 +73,89 @@ struct KannaNodeSeekParserTests {
         #expect(account.stats.isEmpty)
     }
 
+    @Test func parsesAccountFromTempScriptWhenRightPanelIsSkeleton() throws {
+        let accountJSON = """
+        {
+          "user": {
+            "member_id": 31037,
+            "member_name": "缭雾",
+            "rank": 1,
+            "coin": 330,
+            "stardust": 2
+          }
+        }
+        """
+        let payload = Data(accountJSON.utf8).base64EncodedString()
+        let html = """
+        <div id="nsk-right-panel-container">
+            <div id="usercard-me" class="skeleton" style="height: 146px; margin-bottom: 10px"></div>
+        </div>
+        <script id="temp-script" type="application/json">\(payload)</script>
+        """
+        let parser = KannaNodeSeekParser(baseURL: URL(string: "https://www.nodeseek.com")!)
+
+        let account = try parser.parseAccount(html: html)
+
+        #expect(account.isLoggedIn)
+        #expect(account.displayName == "缭雾")
+        #expect(account.avatarURL?.absoluteString == "https://www.nodeseek.com/avatar/31037.png")
+        #expect(account.profileURL?.absoluteString == "https://www.nodeseek.com/space/31037")
+        #expect(account.stats == ["等级 Lv 1", "鸡腿 330", "星辰 2"])
+    }
+
+    @Test func parsesAccountFromTempScriptWithoutSkeletonUserCard() throws {
+        let accountJSON = """
+        {
+          "user": {
+            "member_id": 31037,
+            "member_name": "缭雾",
+            "rank": 1,
+            "coin": 330,
+            "stardust": 2
+          }
+        }
+        """
+        let payload = Data(accountJSON.utf8).base64EncodedString()
+        let html = """
+        <div id="nsk-right-panel-container"></div>
+        <script id="temp-script" type="application/json">\(payload)</script>
+        """
+        let parser = KannaNodeSeekParser(baseURL: URL(string: "https://www.nodeseek.com")!)
+
+        let account = try parser.parseAccount(html: html)
+
+        #expect(account.isLoggedIn)
+        #expect(account.displayName == "缭雾")
+        #expect(account.avatarURL?.absoluteString == "https://www.nodeseek.com/avatar/31037.png")
+        #expect(account.profileURL?.absoluteString == "https://www.nodeseek.com/space/31037")
+        #expect(account.stats == ["等级 Lv 1", "鸡腿 330", "星辰 2"])
+    }
+
+    @Test func parsesAccountFromCapturedWebViewConfig() throws {
+        let html = """
+        <script id="nodeseek-captured-config" type="application/json">
+        {
+          "user": {
+            "member_id": 31037,
+            "member_name": "缭雾",
+            "rank": 1,
+            "coin": 330,
+            "stardust": 2
+          }
+        }
+        </script>
+        """
+        let parser = KannaNodeSeekParser(baseURL: URL(string: "https://www.nodeseek.com")!)
+
+        let account = try parser.parseAccount(html: html)
+
+        #expect(account.isLoggedIn)
+        #expect(account.displayName == "缭雾")
+        #expect(account.avatarURL?.absoluteString == "https://www.nodeseek.com/avatar/31037.png")
+        #expect(account.profileURL?.absoluteString == "https://www.nodeseek.com/space/31037")
+        #expect(account.stats == ["等级 Lv 1", "鸡腿 330", "星辰 2"])
+    }
+
     @Test func parsesPostListFixture() throws {
         let html = try FixtureLoader.html(named: "post-list-basic")
         let parser = KannaNodeSeekParser(baseURL: URL(string: "https://www.nodeseek.com")!)

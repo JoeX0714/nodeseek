@@ -58,6 +58,50 @@ struct NodeSeekServiceTests {
         }
     }
 
+    @Test func loadAccountParsesCurrentUserFromTempScriptWhenRightPanelIsSkeleton() async throws {
+        let accountJSON = """
+        {
+          "user": {
+            "member_id": 31037,
+            "member_name": "缭雾",
+            "rank": 1,
+            "coin": 330,
+            "stardust": 2
+          }
+        }
+        """
+        let payload = Data(accountJSON.utf8).base64EncodedString()
+        let html = """
+        <div id="nsk-right-panel-container">
+            <div id="usercard-me" class="skeleton" style="height: 146px; margin-bottom: 10px"></div>
+        </div>
+        <script id="temp-script" type="application/json">\(payload)</script>
+        """
+        let url = URL(string: "https://www.nodeseek.com/")!
+        let service = NodeSeekService(
+            baseURL: url,
+            htmlClient: StaticHTMLClient(response: HTMLResponse(
+                statusCode: 200,
+                headers: [:],
+                finalURL: url,
+                html: html
+            )),
+            parser: KannaNodeSeekParser(baseURL: url)
+        )
+
+        let result = try await service.loadAccount()
+
+        switch result {
+        case .value(let account):
+            #expect(account.displayName == "缭雾")
+            #expect(account.avatarURL?.path == "/avatar/31037.png")
+            #expect(account.profileURL?.path == "/space/31037")
+            #expect(account.stats == ["等级 Lv 1", "鸡腿 330", "星辰 2"])
+        default:
+            Issue.record("skeleton 右栏 + temp-script 应解析为当前账号")
+        }
+    }
+
     @Test func returnsChallengeWhenPostListResponseIsCloudflare() async throws {
         let html = try FixtureLoader.html(named: "cloudflare-challenge")
         let url = URL(string: "https://www.nodeseek.com/")!

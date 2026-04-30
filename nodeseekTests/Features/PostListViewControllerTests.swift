@@ -152,31 +152,6 @@ struct PostListViewControllerTests {
         #expect(sideMenu.frame.maxX <= 0.5)
         #expect(backdrop.isHidden == true)
     }
-
-    @Test func renderAccountUpdatesSideMenuIdentityAndHidesLoginButton() throws {
-        let presenter = SpyPostListPresenter()
-        let viewController = PostListViewController(presenter: presenter)
-        viewController.loadViewIfNeeded()
-        viewController.view.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
-        viewController.view.layoutIfNeeded()
-
-        viewController.renderAccount(AccountResponse(
-            displayName: "缭雾",
-            isLoggedIn: true,
-            avatarURL: URL(string: "https://www.nodeseek.com/avatar/31037.png"),
-            profileURL: URL(string: "https://www.nodeseek.com/space/31037"),
-            stats: ["等级 Lv 1", "鸡腿 306"]
-        ))
-        viewController.view.layoutIfNeeded()
-
-        let nameLabel = try #require(viewController.view.firstLabel(accessibilityIdentifier: "post-list-side-menu-name-label"))
-        let statsLabel = try #require(viewController.view.firstLabel(accessibilityIdentifier: "post-list-side-menu-stats-label"))
-        let accountHeaderButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-list-side-menu-account-header-button"))
-
-        #expect(nameLabel.text == "缭雾")
-        #expect(statsLabel.text == "等级 Lv 1 · 鸡腿 306")
-        #expect(accountHeaderButton.accessibilityLabel == "账号信息")
-    }
 }
 
 private final class SpyPostListPresenter: PostListPresenterProtocol {

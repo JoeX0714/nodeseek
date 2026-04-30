@@ -75,12 +75,33 @@ actor HiddenWebViewRequestLock {
     }
 }
 
+enum HiddenWebViewChannel: Hashable, Sendable {
+    case shared
+    case isolated(UUID)
+}
+
 struct HiddenWebViewHTMLClient: HTMLClient {
     private let timeoutInterval: TimeInterval
+    private let requestLock: HiddenWebViewRequestLock
+    private let channel: HiddenWebViewChannel
     private let logger = Logger(subsystem: "com.nodeseek.app", category: "HiddenWebViewHTMLClient")
 
-    init(timeoutInterval: TimeInterval = 20) {
+    init(
+        timeoutInterval: TimeInterval = 20,
+        requestLock: HiddenWebViewRequestLock = .shared,
+        channel: HiddenWebViewChannel = .shared
+    ) {
         self.timeoutInterval = timeoutInterval
+        self.requestLock = requestLock
+        self.channel = channel
+    }
+
+    static func isolated(timeoutInterval: TimeInterval = 20) -> HiddenWebViewHTMLClient {
+        HiddenWebViewHTMLClient(
+            timeoutInterval: timeoutInterval,
+            requestLock: HiddenWebViewRequestLock(),
+            channel: .isolated(UUID())
+        )
     }
 
     func get(_ url: URL) async throws -> HTMLResponse {
@@ -89,7 +110,9 @@ struct HiddenWebViewHTMLClient: HTMLClient {
         request.timeoutInterval = timeoutInterval
         request.cachePolicy = WebViewCachePolicy.getRequestPolicy
         WebRequestFingerprint.applyHTMLHeaders(to: &request)
-        await NodeSeekWebViewPrewarmer.waitForPreloadIfNeeded(for: url)
+        if channel == .shared {
+            await NodeSeekWebViewPrewarmer.waitForPreloadIfNeeded(for: url)
+        }
         return try await load(request: request)
     }
 
@@ -112,12 +135,11 @@ struct HiddenWebViewHTMLClient: HTMLClient {
     }
 
     private func load(request: URLRequest) async throws -> HTMLResponse {
-        let requestLock = HiddenWebViewRequestLock.shared
         await requestLock.acquire()
         logger.info("准备通过隐藏 WebView 抓取 HTML: \(request.url?.absoluteString ?? "nil")")
         do {
             let loader = await MainActor.run {
-                HiddenWebViewLoader.shared
+                HiddenWebViewLoader.loader(for: channel)
             }
             let response = try await loader.load(request: request, timeoutInterval: timeoutInterval)
             await requestLock.release()
@@ -291,6 +313,21 @@ private final class HiddenWebViewPreloadLoader: NSObject, WKNavigationDelegate {
 @MainActor
 final class HiddenWebViewLoader: NSObject, WKNavigationDelegate {
     static let shared = HiddenWebViewLoader()
+    private static var isolatedLoaders: [UUID: HiddenWebViewLoader] = [:]
+
+    static func loader(for channel: HiddenWebViewChannel) -> HiddenWebViewLoader {
+        switch channel {
+        case .shared:
+            return shared
+        case .isolated(let id):
+            if let existing = isolatedLoaders[id] {
+                return existing
+            }
+            let loader = HiddenWebViewLoader()
+            isolatedLoaders[id] = loader
+            return loader
+        }
+    }
 
     private var timeoutInterval: TimeInterval = 20
     private let webView: WKWebView
@@ -334,8 +371,14 @@ final class HiddenWebViewLoader: NSObject, WKNavigationDelegate {
         initialURL = request.url
         updateDebugOverlayIfNeeded()
         logger.info("开始加载页面: \(request.url?.absoluteString ?? "nil"), timeout: \(Int(self.timeoutInterval))s")
+        await cookieBridge.syncWebViewCookiesToURLSession()
         await cookieBridge.syncURLSessionCookiesToWebView()
-        logger.info("已同步 URLSession Cookie 到 WebView")
+        let cookieNames = HTTPCookieStorage.shared
+            .cookies(for: request.url ?? URL(string: "https://www.nodeseek.com")!)?
+            .map(\.name)
+            .sorted() ?? []
+        logger.info("已同步 Cookie 到 WebView，cookieCount=\(cookieNames.count, privacy: .public)")
+        CurrentAccountDebugLog.post("webview: cookies count=\(cookieNames.count) names=\(cookieNames.joined(separator: ","))")
 
         return try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation
@@ -480,7 +523,22 @@ final class HiddenWebViewLoader: NSObject, WKNavigationDelegate {
     }
 
     private func readOuterHTML() async throws -> String {
-        let htmlAny = try await webView.evaluateJavaScript("document.documentElement.outerHTML")
+        let htmlAny = try await webView.evaluateJavaScript(
+            """
+            (() => {
+              const html = document.documentElement.outerHTML;
+              try {
+                if (!window.__config__) {
+                  return html;
+                }
+                const json = JSON.stringify(window.__config__).replace(/</g, '\\\\u003c');
+                return html + '\\n<script id="nodeseek-captured-config" type="application/json">' + json + '</script>';
+              } catch (error) {
+                return html;
+              }
+            })()
+            """
+        )
         return htmlAny as? String ?? ""
     }
 

@@ -8,13 +8,25 @@
 import UIKit
 
 final class PostListSideMenuViewController: UIViewController {
+    private static let guestAccount = AccountResponse(displayName: "游客", isLoggedIn: false)
+
     private var sideMenuLeadingConstraint: NSLayoutConstraint?
     private var isSideMenuVisible = false
     private var isAccountLoggedIn = false
+    private var shouldForceRefreshOnNextShow = false
+    private var refreshTask: Task<Void, Never>?
+    private var loginCloseObserver: NSObjectProtocol?
+    #if DEBUG
+    private var accountDebugObserver: NSObjectProtocol?
+    private var accountDebugLines: [String] = []
+    #endif
     var onLoginTapped: (() -> Void)?
     #if DEBUG
     var onDetailTestTapped: (() -> Void)?
     #endif
+    private let currentAccountStore: CurrentAccountStore
+    private let accountRefresher: any CurrentAccountRefreshing
+    private let refreshMaxAge: TimeInterval
     private let avatarLoader = AvatarImageLoader.shared
 
     private static let defaultAvatarImage: UIImage? = {
@@ -109,6 +121,38 @@ final class PostListSideMenuViewController: UIViewController {
     }()
 
     #if DEBUG
+    private let accountDebugTextView: UITextView = {
+        let textView = UITextView()
+        textView.text = "账号调试日志：等待侧栏刷新"
+        textView.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        textView.textColor = .secondaryLabel
+        textView.backgroundColor = .secondarySystemBackground
+        textView.layer.cornerRadius = 6
+        textView.layer.masksToBounds = true
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.isScrollEnabled = true
+        textView.textContainerInset = UIEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
+        textView.accessibilityIdentifier = "post-list-side-menu-account-debug-text-view"
+        textView.translatesAutoresizingMaskIntoConstraints = false
+        return textView
+    }()
+
+    private let accountDebugCopyButton: UIButton = {
+        let button = UIButton(type: .system)
+        var configuration = UIButton.Configuration.plain()
+        configuration.image = UIImage(systemName: "doc.on.doc")
+        configuration.imagePadding = 6
+        configuration.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8)
+        configuration.title = "复制日志"
+        button.configuration = configuration
+        button.accessibilityIdentifier = "post-list-side-menu-account-debug-copy-button"
+        button.translatesAutoresizingMaskIntoConstraints = false
+        return button
+    }()
+    #endif
+
+    #if DEBUG
     private let detailTestButton: UIButton = {
         let button = UIButton(type: .system)
         let symbolConfiguration = UIImage.SymbolConfiguration(pointSize: 18, weight: .semibold)
@@ -127,9 +171,38 @@ final class PostListSideMenuViewController: UIViewController {
     }()
     #endif
 
+    init(
+        currentAccountStore: CurrentAccountStore = .shared,
+        accountRefresher: (any CurrentAccountRefreshing)? = nil,
+        refreshMaxAge: TimeInterval = 60
+    ) {
+        self.currentAccountStore = currentAccountStore
+        self.accountRefresher = accountRefresher ?? CurrentAccountRefresher.shared
+        self.refreshMaxAge = refreshMaxAge
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        refreshTask?.cancel()
+        if let loginCloseObserver {
+            NotificationCenter.default.removeObserver(loginCloseObserver)
+        }
+        #if DEBUG
+        if let accountDebugObserver {
+            NotificationCenter.default.removeObserver(accountDebugObserver)
+        }
+        #endif
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         setupUI()
+        observeSessionChanges()
+        loadStoredAccount()
     }
 
     override func viewDidLayoutSubviews() {
@@ -138,6 +211,7 @@ final class PostListSideMenuViewController: UIViewController {
     }
 
     func show(animated: Bool) {
+        refreshAccountIfNeeded()
         setVisible(true, animated: animated)
     }
 
@@ -145,7 +219,8 @@ final class PostListSideMenuViewController: UIViewController {
         setVisible(false, animated: animated)
     }
 
-    func renderAccount(_ account: AccountResponse) {
+    private func renderAccount(_ account: AccountResponse) {
+        appendAccountDebug("ui: render loggedIn=\(account.isLoggedIn) name=\(account.displayName)")
         isAccountLoggedIn = account.isLoggedIn
         nameLabel.text = account.isLoggedIn ? account.displayName : "未登录"
         statsLabel.text = account.isLoggedIn
@@ -167,12 +242,108 @@ final class PostListSideMenuViewController: UIViewController {
         }
     }
 
+    private func observeSessionChanges() {
+        loginCloseObserver = NotificationCenter.default.addObserver(
+            forName: .nodeSeekLoginSessionDidClose,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.appendAccountDebug("ui: login session closed, mark stale")
+            self.shouldForceRefreshOnNextShow = true
+            Task {
+                await self.currentAccountStore.markStale()
+            }
+            if self.isSideMenuVisible {
+                self.refreshAccountIfNeeded(force: true)
+            }
+        }
+
+        #if DEBUG
+        accountDebugObserver = NotificationCenter.default.addObserver(
+            forName: .nodeSeekCurrentAccountDebugMessage,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard
+                let self,
+                let message = notification.userInfo?[CurrentAccountDebugLog.messageKey] as? String
+            else {
+                return
+            }
+            self.appendAccountDebug(message)
+        }
+        #endif
+    }
+
+    private func loadStoredAccount() {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let snapshot = await currentAccountStore.snapshot()
+            if let snapshot {
+                appendAccountDebug("ui: stored loggedIn=\(snapshot.account.isLoggedIn) name=\(snapshot.account.displayName) age=\(Int(Date().timeIntervalSince(snapshot.updatedAt)))s")
+            } else {
+                appendAccountDebug("ui: stored nil")
+            }
+            renderAccount(snapshot?.account ?? Self.guestAccount)
+        }
+    }
+
+    private func refreshAccountIfNeeded(force: Bool = false) {
+        // 单元测试里一般不会把 VC 挂到 window 上，避免测试时触发真实 WebView 抓取。
+        guard view.window != nil else {
+            appendAccountDebug("ui: refresh skipped, no window")
+            return
+        }
+        guard refreshTask == nil else {
+            appendAccountDebug("ui: refresh skipped, task running")
+            return
+        }
+        let effectiveForce = force || shouldForceRefreshOnNextShow
+        appendAccountDebug("ui: refresh requested force=\(effectiveForce)")
+        shouldForceRefreshOnNextShow = false
+        refreshTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { refreshTask = nil }
+            let account = await accountRefresher.refreshIfNeeded(
+                force: effectiveForce,
+                maxAge: refreshMaxAge
+            )
+            guard !Task.isCancelled else { return }
+            if let account {
+                appendAccountDebug("ui: refresh result loggedIn=\(account.isLoggedIn) name=\(account.displayName)")
+                renderAccount(account)
+                return
+            }
+            let snapshot = await currentAccountStore.snapshot()
+            appendAccountDebug("ui: refresh result nil, fallback stored=\(snapshot?.account.displayName ?? "nil")")
+            renderAccount(snapshot?.account ?? Self.guestAccount)
+        }
+    }
+
+    private func appendAccountDebug(_ message: String) {
+        #if DEBUG
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        accountDebugLines.append("\(formatter.string(from: Date())) \(message)")
+        accountDebugLines = Array(accountDebugLines.suffix(12))
+        accountDebugTextView.text = accountDebugText
+        #endif
+    }
+
+    #if DEBUG
+    private var accountDebugText: String {
+        "账号调试日志\n" + accountDebugLines.joined(separator: "\n")
+    }
+    #endif
+
     private func setupUI() {
         view.backgroundColor = .clear
         view.isHidden = true
         backdropView.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(backdropTapped)))
         accountHeaderButton.addTarget(self, action: #selector(accountHeaderTapped), for: .touchUpInside)
         #if DEBUG
+        accountDebugCopyButton.addTarget(self, action: #selector(copyAccountDebugLogTapped), for: .touchUpInside)
         if NodeSeekDebugConfig.enablePostDetailTestEntry {
             detailTestButton.addTarget(self, action: #selector(detailTestButtonTapped), for: .touchUpInside)
         }
@@ -185,6 +356,10 @@ final class PostListSideMenuViewController: UIViewController {
         sideMenuView.addSubview(nameLabel)
         sideMenuView.addSubview(statsLabel)
         sideMenuView.addSubview(accountHeaderButton)
+        #if DEBUG
+        sideMenuView.addSubview(accountDebugCopyButton)
+        sideMenuView.addSubview(accountDebugTextView)
+        #endif
         #if DEBUG
         if NodeSeekDebugConfig.enablePostDetailTestEntry {
             sideMenuView.addSubview(detailTestButton)
@@ -234,12 +409,27 @@ final class PostListSideMenuViewController: UIViewController {
         ])
 
         #if DEBUG
+        NSLayoutConstraint.activate([
+            accountDebugCopyButton.trailingAnchor.constraint(equalTo: sideMenuView.trailingAnchor, constant: -SideMenuLayout.horizontalInset),
+            accountDebugCopyButton.topAnchor.constraint(equalTo: accountHeaderButton.bottomAnchor, constant: 14),
+            accountDebugCopyButton.heightAnchor.constraint(equalToConstant: 32),
+
+            accountDebugTextView.leadingAnchor.constraint(equalTo: sideMenuView.leadingAnchor, constant: SideMenuLayout.horizontalInset),
+            accountDebugTextView.trailingAnchor.constraint(equalTo: sideMenuView.trailingAnchor, constant: -SideMenuLayout.horizontalInset),
+            accountDebugTextView.topAnchor.constraint(equalTo: accountDebugCopyButton.bottomAnchor, constant: 6),
+            accountDebugTextView.heightAnchor.constraint(greaterThanOrEqualToConstant: 120),
+            accountDebugTextView.bottomAnchor.constraint(lessThanOrEqualTo: settingsButton.topAnchor, constant: -12)
+        ])
+        #endif
+
+        #if DEBUG
         if NodeSeekDebugConfig.enablePostDetailTestEntry {
             NSLayoutConstraint.activate([
                 detailTestButton.leadingAnchor.constraint(equalTo: sideMenuView.leadingAnchor, constant: SideMenuLayout.horizontalInset),
                 detailTestButton.trailingAnchor.constraint(equalTo: sideMenuView.trailingAnchor, constant: -SideMenuLayout.horizontalInset),
                 detailTestButton.bottomAnchor.constraint(equalTo: settingsButton.topAnchor, constant: -8),
-                detailTestButton.heightAnchor.constraint(equalToConstant: 48)
+                detailTestButton.heightAnchor.constraint(equalToConstant: 48),
+                accountDebugTextView.bottomAnchor.constraint(lessThanOrEqualTo: detailTestButton.topAnchor, constant: -12)
             ])
         }
         #endif
@@ -256,6 +446,14 @@ final class PostListSideMenuViewController: UIViewController {
     }
 
     #if DEBUG
+    @objc private func copyAccountDebugLogTapped() {
+        UIPasteboard.general.string = accountDebugTextView.text
+        accountDebugCopyButton.configuration?.title = "已复制"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+            self?.accountDebugCopyButton.configuration?.title = "复制日志"
+        }
+    }
+
     @objc private func detailTestButtonTapped() {
         hide(animated: true)
         onDetailTestTapped?()
