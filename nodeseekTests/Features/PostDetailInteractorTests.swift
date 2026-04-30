@@ -104,6 +104,8 @@ private final class SpyPostDetailInteractorOutput: PostDetailInteractorOutput {
     var loadedResponse: PostDetailResponse?
     var loginRequiredMessage: String?
     var errorMessage: String?
+    var didSubmitReplyCount = 0
+    var submitReplyErrorMessage: String?
 
     func didLoadPostDetail(_ response: PostDetailResponse) {
         loadedResponse = response
@@ -115,6 +117,14 @@ private final class SpyPostDetailInteractorOutput: PostDetailInteractorOutput {
 
     func didFailLoadPostDetail(error: String) {
         errorMessage = error
+    }
+
+    func didSubmitReply() {
+        didSubmitReplyCount += 1
+    }
+
+    func didFailSubmitReply(error: String) {
+        submitReplyErrorMessage = error
     }
 }
 

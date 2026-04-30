@@ -187,12 +187,36 @@ struct KannaNodeSeekParser: NodeSeekParser {
             metadataText: metadataText,
             contentHTML: contentHTML,
             comments: comments,
-            replyForm: nil
+            replyForm: try? parseReplyForm(html: html, pageURL: url)
         )
     }
 
     func parseReplyForm(html: String, pageURL: URL) throws -> ReplyForm {
-        throw NodeSeekParserError.notImplemented
+        let document = try HTML(html: html, encoding: .utf8)
+        guard let form = document.xpath("//form").first(where: Self.isReplyForm) else {
+            throw NodeSeekParserError.notImplemented
+        }
+
+        let textFieldName = form.at_xpath(".//textarea[@name]")?["name"]?.trimmedNonEmpty
+            ?? form.at_xpath(".//*[@name='content']")?["name"]?.trimmedNonEmpty
+            ?? "content"
+        let actionURL = form["action"]?
+            .trimmedNonEmpty
+            .flatMap { URL(string: $0, relativeTo: pageURL)?.absoluteURL }
+            ?? pageURL
+        let method = form["method"]?.trimmedNonEmpty?.uppercased() ?? "POST"
+        var hiddenFields: [String: String] = [:]
+        for input in form.xpath(".//input[@type='hidden' and @name]") {
+            guard let name = input["name"]?.trimmedNonEmpty else { continue }
+            hiddenFields[name] = input["value"] ?? ""
+        }
+
+        return ReplyForm(
+            actionURL: actionURL,
+            method: method,
+            textFieldName: textFieldName,
+            hiddenFields: hiddenFields
+        )
     }
 
     func parseCheckInState(html: String, pageURL: URL) throws -> CheckInState {
@@ -237,6 +261,11 @@ struct KannaNodeSeekParser: NodeSeekParser {
         }
 
         return firstInteger(in: text)
+    }
+
+    nonisolated private static func isReplyForm(_ form: XMLElement) -> Bool {
+        form.at_xpath(".//textarea[@name]") != nil
+            || form.at_xpath(".//*[@name='content']") != nil
     }
 
     private func parseComment(_ item: XMLElement) -> Comment? {

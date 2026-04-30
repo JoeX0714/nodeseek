@@ -57,6 +57,37 @@ class PostDetailInteractor: PostDetailInteractorInput {
         }
     }
 
+    func submitReply(content: String, form: ReplyForm) {
+        let trimmedContent = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedContent.isEmpty == false else {
+            presenter?.didFailSubmitReply(error: "回复内容不能为空。")
+            return
+        }
+
+        Task {
+            logger.info("开始提交回复，postID=\(self.post?.id ?? "unknown", privacy: .public)")
+            do {
+                let result = try await service.submitReply(form: form, content: trimmedContent)
+                switch result {
+                case .value:
+                    await sessionStore.recordSuccess()
+                    await MainActor.run {
+                        presenter?.didSubmitReply()
+                    }
+                case .challenge(let challenge):
+                    logger.warning("回复提交命中验证: \(challenge.logDescription)")
+                    let message = await sessionStore.recordChallenge(challenge)
+                    throw PostDetailSubmitError.challengeRequired(message)
+                }
+            } catch {
+                logger.error("回复提交失败: \(error.localizedDescription)")
+                await MainActor.run {
+                    presenter?.didFailSubmitReply(error: error.localizedDescription)
+                }
+            }
+        }
+    }
+
     private func loadDetail(postID: String) async throws -> PostDetail? {
         logger.info("详情请求开始，postID=\(postID, privacy: .public), page=\(self.page)")
         let result = try await service.loadPostDetail(postID: postID, page: self.page)
@@ -88,6 +119,17 @@ private enum PostDetailLoadError: LocalizedError {
             return message
         case .unknown:
             return "详情加载失败，请稍后重试。"
+        }
+    }
+}
+
+private enum PostDetailSubmitError: LocalizedError {
+    case challengeRequired(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .challengeRequired(let message):
+            return message
         }
     }
 }

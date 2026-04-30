@@ -133,6 +133,7 @@ class PostDetailViewController: UIViewController {
     private var displayMode: DisplayMode = .skeleton
     private var hasRenderedDetailContent = false
     private var showsReplyEntry = false
+    private var currentReplyForm: ReplyForm?
     private var replyContextBarHeightConstraint: NSLayoutConstraint?
     private let skeletonCommentRowCount = 4
     private let renderQueue = DispatchQueue(
@@ -168,18 +169,18 @@ class PostDetailViewController: UIViewController {
 
     private let replyButton: UIButton = {
         let button = UIButton(type: .system)
-        var configuration = UIButton.Configuration.filled()
+        var configuration = UIButton.Configuration.plain()
         configuration.image = UIImage(systemName: "text.bubble.fill")
-        configuration.baseBackgroundColor = .label
         configuration.baseForegroundColor = .systemBackground
-        configuration.cornerStyle = .fixed
-        configuration.background.cornerRadius = 0
+        configuration.background.backgroundColor = .clear
         configuration.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 14)
         button.configuration = configuration
+        button.backgroundColor = .label
         button.accessibilityIdentifier = "post-detail-reply-button"
         button.accessibilityLabel = "评论"
         button.isHidden = true
         button.layer.cornerRadius = 24
+        button.layer.cornerCurve = .continuous
         button.layer.maskedCorners = [.layerMinXMinYCorner, .layerMinXMaxYCorner]
         button.clipsToBounds = true
         button.translatesAutoresizingMaskIntoConstraints = false
@@ -612,7 +613,17 @@ class PostDetailViewController: UIViewController {
 
     @objc
     private func sendReplyTapped() {
-        replyTextView.resignFirstResponder()
+        guard let content = Self.trimmedNonEmpty(replyTextView.text) else {
+            showError(message: "回复内容不能为空。")
+            return
+        }
+
+        guard let replyForm = currentReplyForm ?? fallbackReplyForm() else {
+            showError(message: "当前页面没有可用的回复入口，请刷新或重新登录后再试。")
+            return
+        }
+
+        presenter.didTapSendReply(content: content, form: replyForm)
     }
 
     @objc
@@ -711,7 +722,17 @@ class PostDetailViewController: UIViewController {
         }
 
         guard let postID = currentHeaderContent?.postID, postID.isEmpty == false else { return nil }
-        return URL(string: "https://www.nodeseek.com/post-\(postID)-1")
+        return URL(string: "https://www.nodeseek.com/post-\(postID)-\(currentPage)")
+    }
+
+    private func fallbackReplyForm() -> ReplyForm? {
+        guard let actionURL = resolvedDetailURL() else { return nil }
+        return ReplyForm(
+            actionURL: actionURL,
+            method: "POST",
+            textFieldName: "content",
+            hiddenFields: [:]
+        )
     }
 
     private func isNodeSeekHost(_ url: URL) -> Bool {
@@ -780,6 +801,18 @@ extension PostDetailViewController: PostDetailViewProtocol {
         updateReplyButtonVisibility()
     }
 
+    func setReplySubmitting(_ isSubmitting: Bool) {
+        replyTextView.isEditable = !isSubmitting
+        inlineReplySendButton.isEnabled = !isSubmitting
+        replyContextCloseButton.isEnabled = !isSubmitting
+        inlineReplySendButton.alpha = isSubmitting ? 0.35 : 1
+    }
+
+    func finishReplySubmission() {
+        replyTextView.text = nil
+        dismissReplyEditor()
+    }
+
     func showError(message: String) {
         hideLoadingSkeleton()
         let alert = UIAlertController(title: "错误", message: message, preferredStyle: .alert)
@@ -791,6 +824,7 @@ extension PostDetailViewController: PostDetailViewProtocol {
         title = "详情"
         loginButton.isHidden = true
         showsReplyEntry = true
+        currentReplyForm = detail.replyForm
         renderGeneration += 1
         hasRenderedDetailContent = true
         displayMode = .content
@@ -810,6 +844,7 @@ extension PostDetailViewController: PostDetailViewProtocol {
         title = "详情"
         loginButton.isHidden = false
         showsReplyEntry = false
+        currentReplyForm = nil
         dismissReplyEditor()
         updateReplyButtonVisibility()
         renderGeneration += 1

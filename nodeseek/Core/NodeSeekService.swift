@@ -79,6 +79,22 @@ struct NodeSeekService: Sendable {
         return .value(detail)
     }
 
+    func submitReply(form: ReplyForm, content: String) async throws -> NodeSeekResult<Void> {
+        var formFields = form.hiddenFields
+        formFields[form.textFieldName] = content
+
+        logger.info("开始提交回复: \(form.actionURL.absoluteString)")
+        let response = try await htmlClient.post(form.actionURL, formFields: formFields)
+        logger.info("回复提交返回 status=\(response.statusCode), htmlLength=\(response.html.count), finalURL=\(response.finalURL.absoluteString)")
+
+        if let challenge = challengeDetector.detect(response: response) {
+            logger.warning("回复提交命中 challenge: \(challenge.logDescription)")
+            return .challenge(challenge)
+        }
+
+        return .value(())
+    }
+
     private func postListURL(page: Int, category: PostListCategory, sortMode: PostListSortMode) -> URL {
         let normalized = max(1, page)
         let url: URL

@@ -13,6 +13,8 @@ protocol PostDetailViewProtocol: AnyObject {
     func showLoading()
     func hideLoading()
     func showError(message: String)
+    func setReplySubmitting(_ isSubmitting: Bool)
+    func finishReplySubmission()
     func render(detail: PostDetail)
     func renderLoginRequired(message: String)
 }
@@ -21,11 +23,13 @@ protocol PostDetailViewProtocol: AnyObject {
 protocol PostDetailPresenterProtocol: AnyObject {
     func viewDidLoad()
     func didTapLogin()
+    func didTapSendReply(content: String, form: ReplyForm)
 }
 
 // MARK: - Interactor Input (Presenter -> Interactor)
 protocol PostDetailInteractorInput: AnyObject {
     func loadPostDetail()
+    func submitReply(content: String, form: ReplyForm)
 }
 
 // MARK: - Interactor Output (Interactor -> Presenter)
@@ -33,6 +37,8 @@ protocol PostDetailInteractorOutput: AnyObject {
     func didLoadPostDetail(_ response: PostDetailResponse)
     func didRequireLogin(message: String)
     func didFailLoadPostDetail(error: String)
+    func didSubmitReply()
+    func didFailSubmitReply(error: String)
 }
 
 // MARK: - Router Protocol (Presenter -> Router)

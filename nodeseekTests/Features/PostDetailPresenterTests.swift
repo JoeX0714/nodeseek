@@ -26,9 +26,16 @@ struct PostDetailPresenterTests {
 
 private final class SpyPostDetailInteractor: PostDetailInteractorInput {
     private(set) var loadPostDetailCount = 0
+    private(set) var submittedReplyContent: String?
+    private(set) var submittedReplyForm: ReplyForm?
 
     func loadPostDetail() {
         loadPostDetailCount += 1
+    }
+
+    func submitReply(content: String, form: ReplyForm) {
+        submittedReplyContent = content
+        submittedReplyForm = form
     }
 }
 

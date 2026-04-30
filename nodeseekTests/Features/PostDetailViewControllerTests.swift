@@ -513,7 +513,8 @@ struct PostDetailLoginViewControllerTests {
         #expect(button.isHidden == false)
         #expect(button.configuration?.image != nil)
         #expect(button.configuration?.title == nil)
-        #expect(button.configuration?.baseBackgroundColor == .label)
+        #expect(button.backgroundColor == .label)
+        #expect(button.configuration?.baseBackgroundColor == nil)
         #expect(button.configuration?.baseForegroundColor == .systemBackground)
         #expect(button.layer.maskedCorners == [.layerMinXMinYCorner, .layerMinXMaxYCorner])
 
@@ -574,6 +575,82 @@ struct PostDetailLoginViewControllerTests {
         #expect(button.configuration?.background.backgroundColor == .clear)
     }
 
+    @Test func inlineReplySendButtonSubmitsTextThroughPresenter() throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter)
+        let replyForm = ReplyForm(
+            actionURL: URL(string: "https://www.nodeseek.com/post-703863-1")!,
+            method: "POST",
+            textFieldName: "content",
+            hiddenFields: ["once": "token"]
+        )
+
+        viewController.loadViewIfNeeded()
+        viewController.render(detail: PostDetail(
+            id: "703863",
+            title: "详情标题",
+            authorName: "ipv4",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "<p>正文</p>",
+            comments: [],
+            replyForm: replyForm
+        ))
+
+        let replyButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-reply-button"))
+        replyButton.sendActions(for: .touchUpInside)
+        let textView = try #require(
+            viewController.view.firstSubview(accessibilityIdentifier: "post-detail-reply-text-view") as? UITextView
+        )
+        textView.text = "  发一条回复  "
+
+        let sendButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-reply-send-button"))
+        sendButton.sendActions(for: .touchUpInside)
+
+        #expect(presenter.sentReplyContent == "发一条回复")
+        #expect(presenter.sentReplyForm == replyForm)
+    }
+
+    @Test func inlineReplySendButtonUsesCurrentPostURLWhenFormIsNotParsed() throws {
+        let presenter = SpyPostDetailPresenter()
+        let postURL = URL(string: "https://www.nodeseek.com/post-703863-2")!
+        let viewController = PostDetailViewController(
+            presenter: presenter,
+            sourcePostURL: postURL,
+            currentPage: 2
+        )
+
+        viewController.loadViewIfNeeded()
+        viewController.render(detail: PostDetail(
+            id: "703863",
+            title: "详情标题",
+            authorName: "ipv4",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "<p>正文</p>",
+            comments: [],
+            replyForm: nil
+        ))
+
+        let replyButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-reply-button"))
+        replyButton.sendActions(for: .touchUpInside)
+        let textView = try #require(
+            viewController.view.firstSubview(accessibilityIdentifier: "post-detail-reply-text-view") as? UITextView
+        )
+        textView.text = "没有 form 也要提交"
+
+        let sendButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-reply-send-button"))
+        sendButton.sendActions(for: .touchUpInside)
+
+        #expect(presenter.sentReplyContent == "没有 form 也要提交")
+        #expect(presenter.sentReplyForm == ReplyForm(
+            actionURL: postURL,
+            method: "POST",
+            textFieldName: "content",
+            hiddenFields: [:]
+        ))
+    }
+
     @Test func inlineReplySendButtonAlignsWithTextViewCenterY() throws {
         let presenter = SpyPostDetailPresenter()
         let viewController = PostDetailViewController(presenter: presenter)
@@ -632,6 +709,8 @@ struct PostDetailLoginViewControllerTests {
 private final class SpyPostDetailPresenter: PostDetailPresenterProtocol {
     private(set) var loadCount = 0
     private(set) var didTapLoginCount = 0
+    private(set) var sentReplyContent: String?
+    private(set) var sentReplyForm: ReplyForm?
 
     func viewDidLoad() {
         loadCount += 1
@@ -639,6 +718,11 @@ private final class SpyPostDetailPresenter: PostDetailPresenterProtocol {
 
     func didTapLogin() {
         didTapLoginCount += 1
+    }
+
+    func didTapSendReply(content: String, form: ReplyForm) {
+        sentReplyContent = content
+        sentReplyForm = form
     }
 }
 
