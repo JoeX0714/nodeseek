@@ -25,11 +25,11 @@
 - `nodeseek/SharedCore/`：App 与 SwiftPM tests 共享的纯逻辑。允许 Foundation、CoreGraphics、Kanna 等 macOS SwiftPM 可运行依赖；不得依赖 UIKit、WebKit、Texture、DTCoreText、Kingfisher、SwiftDraw、App 生命周期或模拟器。
 - `nodeseek/SharedCore/Domain/`：纯数据模型、结果类型、跨 feature 共享的业务实体。
 - `nodeseek/SharedCore/Parsing/`：HTML 解析协议、Kanna parser 和解析规则。解析规则优先放在 `XPathRules.swift` 或 parser 内，不要散落到 ViewController。
-- `nodeseek/SharedCore/HTTP/`：网络协议、URLSession 客户端、表单编码、challenge 检测等可在 SwiftPM/macOS 测试进程运行的 HTTP 逻辑。
+- `nodeseek/SharedCore/HTTP/`：网络协议、表单编码、challenge 检测、请求指纹等不依赖 App host 的 HTTP 辅助逻辑。
 - `nodeseek/SharedCore/Composer/`：评论、发帖等内容构造和提交前的纯逻辑。
 - `nodeseek/SharedCore/Layout/`：渲染输入/输出模型、尺寸计算和布局纯函数。
 - `nodeseek/AppRuntime/`：需要 iOS App runtime 或第三方 UI/runtime 框架的基础设施。只走 Xcode 构建和 App-hosted 测试。
-- `nodeseek/AppRuntime/Web/`：WebKit、网页登录、页面加载和 Web 宿主相关逻辑。
+- `nodeseek/AppRuntime/Web/`：URLSession、WebKit、Cookie、网页登录、页面加载、发帖提交和 Web 宿主相关 runtime 网络实现。
 - `nodeseek/AppRuntime/Rendering/`：依赖 UIKit、Texture、DTCoreText 等 App runtime 的渲染实现。
 - `nodeseek/AppRuntime/Images/`：图片下载、预览、SVG/GIF、Kingfisher、SwiftDraw 等 runtime 相关图片能力。
 - `nodeseek/AppRuntime/UI/`：UIKit/Texture 共享控件和 UI 基础设施。

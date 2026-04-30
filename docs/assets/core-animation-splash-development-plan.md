@@ -12,7 +12,7 @@
 
 ## 现有上下文
 
-- 当前 App 生命周期是 UIKit Scene，入口文件是 `nodeseek/SceneDelegate.swift`。
+- 当前 App 生命周期是 UIKit Scene，入口文件是 `nodeseek/App/SceneDelegate.swift`。
 - 当前主界面由 `nodeseek/App/AppRouter.swift` 的 `makeRootViewController()` 创建。
 - 当前 `Info.plist` 使用 `UILaunchScreen` 字典，没有 storyboard 启动画面。
 - 动画矢量底稿已经生成在 `docs/assets/nodeseek-wordmark-traced.svg`。
@@ -26,9 +26,9 @@
   - 负责创建 Core Animation 层级、播放时间线、处理 Reduce Motion、触发完成回调。
 - Create: `nodeseek/App/Splash/NodeSeekSplashViewController.swift`
   - 负责承载 splash view，调用 animator，并在完成后通知外部切换主界面。
-- Modify: `nodeseek/SceneDelegate.swift`
+- Modify: `nodeseek/App/SceneDelegate.swift`
   - 启动时先设置 splash controller，再由完成回调切换为主 root。
-- Modify: `nodeseek/Assets.xcassets`
+- Modify: `nodeseek/Resources/Assets.xcassets`
   - 如果动画最终交叉淡入完整 PNG，需要新增一个 image set，例如 `SplashFinalLogo.imageset`，复用 `AppIcon.png` 的 1024 源图。
 - Create: `nodeseekTests/App/NodeSeekSplashAnimatorTests.swift`
   - 测试路径、图层创建、Reduce Motion 分支、完成回调。
@@ -558,8 +558,8 @@ Expected: test passes.
 ### Task 4: 接入 SceneDelegate
 
 **Files:**
-- Modify: `nodeseek/SceneDelegate.swift`
-- Modify: `nodeseekTests/ArchitectureSkeletonTests.swift`
+- Modify: `nodeseek/App/SceneDelegate.swift`
+- Modify: `nodeseekTests/App/ArchitectureSkeletonTests.swift`
 
 - [ ] **Step 1: 保留 AppRouter 测试**
 
@@ -573,7 +573,7 @@ Expected: existing architecture tests pass before changing startup flow.
 
 - [ ] **Step 2: 修改 SceneDelegate 启动流程**
 
-Replace `scene(_:willConnectTo:options:)` in `nodeseek/SceneDelegate.swift` with:
+Replace `scene(_:willConnectTo:options:)` in `nodeseek/App/SceneDelegate.swift` with:
 
 ```swift
 func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
@@ -635,23 +635,23 @@ Expected: tests still pass because `AppRouter` 行为没有变。
 ### Task 5: 准备最终帧 PNG 资源
 
 **Files:**
-- Create: `nodeseek/Assets.xcassets/SplashFinalLogo.imageset/Contents.json`
-- Copy: `nodeseek/Assets.xcassets/AppIcon.appiconset/AppIcon.png` to `nodeseek/Assets.xcassets/SplashFinalLogo.imageset/SplashFinalLogo.png`
+- Create: `nodeseek/Resources/Assets.xcassets/SplashFinalLogo.imageset/Contents.json`
+- Copy: `nodeseek/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png` to `nodeseek/Resources/Assets.xcassets/SplashFinalLogo.imageset/SplashFinalLogo.png`
 
 - [ ] **Step 1: 创建 image set**
 
 Run:
 
 ```bash
-mkdir -p nodeseek/Assets.xcassets/SplashFinalLogo.imageset
-cp nodeseek/Assets.xcassets/AppIcon.appiconset/AppIcon.png nodeseek/Assets.xcassets/SplashFinalLogo.imageset/SplashFinalLogo.png
+mkdir -p nodeseek/Resources/Assets.xcassets/SplashFinalLogo.imageset
+cp nodeseek/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png nodeseek/Resources/Assets.xcassets/SplashFinalLogo.imageset/SplashFinalLogo.png
 ```
 
-Expected: final logo PNG exists at `nodeseek/Assets.xcassets/SplashFinalLogo.imageset/SplashFinalLogo.png`。
+Expected: final logo PNG exists at `nodeseek/Resources/Assets.xcassets/SplashFinalLogo.imageset/SplashFinalLogo.png`。
 
 - [ ] **Step 2: 写 Contents.json**
 
-Create `nodeseek/Assets.xcassets/SplashFinalLogo.imageset/Contents.json`:
+Create `nodeseek/Resources/Assets.xcassets/SplashFinalLogo.imageset/Contents.json`:
 
 ```json
 {
