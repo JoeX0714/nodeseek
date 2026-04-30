@@ -500,6 +500,50 @@ struct PostDetailViewControllerTests {
         }
     }
 
+    @Test func postBodyCellRefreshAppearanceRebuildsHeaderTitleText() {
+        let header = PostDetailHeaderContent(
+            postID: "703863",
+            title: "主题切换标题",
+            authorName: "ipv4",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "<p>正文</p>"
+        )
+        let node = PostBodyCellNode(
+            content: header,
+            renderedContent: [],
+            onImageTapped: { _, _ in },
+            onTextLayoutInvalidated: {}
+        )
+
+        let didRefresh = node.refreshAppearanceForCurrentTraits()
+
+        #expect(didRefresh)
+        #expect(node.debugTitleAttributedText?.string == "主题切换标题")
+    }
+
+    @Test func commentCellRefreshAppearanceRebuildsAuthorNameText() {
+        let comment = Comment(
+            id: "1",
+            authorName: "ipv4",
+            avatarURL: nil,
+            floorText: "#1",
+            createdAtText: "刚刚",
+            contentHTML: "<p>评论</p>"
+        )
+        let node = CommentCellNode(
+            comment: comment,
+            renderedBody: [],
+            onImageTapped: { _, _ in },
+            onTextLayoutInvalidated: {}
+        )
+
+        let didRefresh = node.refreshAppearanceForCurrentTraits()
+
+        #expect(didRefresh)
+        #expect(node.debugAuthorAttributedTitle?.string == "ipv4")
+    }
+
     @Test func tableNodeKeepsViewportWidthAndMeasuresContentHeight() {
         let table = RenderedTableBlock(rows: [
             .init(cells: [
@@ -868,6 +912,33 @@ struct PostDetailViewControllerTests {
         )
 
         #expect(String(describing: type(of: try #require(attachmentView))).contains("DetailInlineVideoStickerView"))
+    }
+
+    @Test func richTextViewRefreshAppearanceRebuildsAttributedString() throws {
+        let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
+        let blocks = DTCoreTextHTMLContentRenderer().render(
+            fragment: "<blockquote><p>引用内容</p></blockquote>",
+            baseURL: baseURL,
+            maxImageWidth: 320
+        )
+        let attributedText = try #require(blocks.compactMap { block -> NSAttributedString? in
+            guard case .text(let text) = block else { return nil }
+            return text
+        }.first)
+
+        let richTextView = DetailRichTextView(frame: CGRect(x: 0, y: 0, width: 320, height: 120))
+        richTextView.configure(
+            attributedText,
+            onImageTapped: nil,
+            onLinkTapped: nil,
+            onLayoutInvalidated: nil
+        )
+
+        let initialAttributedText = richTextView.debugAttributedString
+
+        richTextView.refreshAppearanceForCurrentTraits()
+
+        #expect(richTextView.debugAttributedString !== initialAttributedText)
     }
 
     @Test func videoStickerViewKeepsPlayerLayerHiddenUntilTapped() throws {

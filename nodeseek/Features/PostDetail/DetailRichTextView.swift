@@ -24,6 +24,7 @@ final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextCon
     private var layoutInvalidatedHandler: (() -> Void)?
     private var attachmentLayoutUpdatedHandler: ((URL, CGSize, CGSize) -> Void)?
     private var lastLayoutWidth: CGFloat = 0
+    private var lastAppliedUserInterfaceStyle: UIUserInterfaceStyle?
     private let diagnosticID = String(UUID().uuidString.prefix(8))
 
     override init(frame: CGRect) {
@@ -36,6 +37,12 @@ final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextCon
         layoutFrameHeightIsConstrainedByBounds = false
         isUserInteractionEnabled = true
         setContentCompressionResistancePriority(.required, for: .vertical)
+        lastAppliedUserInterfaceStyle = traitCollection.userInterfaceStyle
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { [weak self] (view: Self, previousTraitCollection: UITraitCollection) in
+            guard let self else { return }
+            guard previousTraitCollection.userInterfaceStyle != view.traitCollection.userInterfaceStyle else { return }
+            self.refreshAppearanceForCurrentTraits()
+        }
     }
 
     required init?(coder: NSCoder) {
@@ -76,6 +83,15 @@ final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextCon
         setNeedsLayout()
     }
 
+    func refreshAppearanceForCurrentTraits() {
+        lastAppliedUserInterfaceStyle = traitCollection.userInterfaceStyle
+        rebuildAttributedTextLayout()
+    }
+
+    var debugAttributedString: NSAttributedString? {
+        attributedString
+    }
+
     override func layoutSubviews() {
         let width = bounds.width
         if width > 0, abs(width - lastLayoutWidth) > 0.5 {
@@ -104,6 +120,18 @@ final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextCon
     ) -> CGSize {
         let width = targetSize.width > 0 ? targetSize.width : bounds.width
         return richTextSize(constrainedToWidth: width)
+    }
+
+    private func rebuildAttributedTextLayout() {
+        let snapshot = NSAttributedString(attributedString: attributedString)
+        attributedString = snapshot
+        removeAllCustomViews()
+        removeAllCustomViewsForLinks()
+        layouter = nil
+        relayoutText()
+        invalidateIntrinsicContentSize()
+        setNeedsLayout()
+        setNeedsDisplay()
     }
 
     func attributedTextContentView(

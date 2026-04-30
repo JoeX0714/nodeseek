@@ -41,6 +41,7 @@ final class PostBodyCellNode: ASCellNode {
     private let authorButtonNode = ASButtonNode()
     private let metadataNode = ASTextNode()
     private let bodyNodes: [ASDisplayNode]
+    private var lastAppliedUserInterfaceStyle: UIUserInterfaceStyle?
 
     private lazy var avatarNode: ASDisplayNode = {
         let node = ASDisplayNode(viewBlock: { [weak self] in
@@ -92,6 +93,12 @@ final class PostBodyCellNode: ASCellNode {
 
     override func didLoad() {
         super.didLoad()
+        lastAppliedUserInterfaceStyle = view.traitCollection.userInterfaceStyle
+        view.registerForTraitChanges([UITraitUserInterfaceStyle.self]) { [weak self] (view: UIView, previousTraitCollection: UITraitCollection) in
+            guard let self else { return }
+            guard previousTraitCollection.userInterfaceStyle != view.traitCollection.userInterfaceStyle else { return }
+            self.refreshAppearanceForCurrentTraits()
+        }
         requestAvatarIfNeeded()
     }
 
@@ -175,6 +182,21 @@ final class PostBodyCellNode: ASCellNode {
                 .foregroundColor: UIColor.secondaryLabel
             ]
         )
+    }
+
+    @discardableResult
+    func refreshAppearanceForCurrentTraits() -> Bool {
+        let currentStyle = isNodeLoaded ? view.traitCollection.userInterfaceStyle : UITraitCollection.current.userInterfaceStyle
+        guard lastAppliedUserInterfaceStyle != currentStyle else { return false }
+        lastAppliedUserInterfaceStyle = currentStyle
+        configureText()
+        setNeedsLayout()
+        setNeedsDisplay()
+        return true
+    }
+
+    var debugTitleAttributedText: NSAttributedString? {
+        titleNode.attributedText
     }
 
     private func configureActions() {

@@ -41,6 +41,7 @@ final class PostSummaryCellNode: ASCellNode {
     private let titleNode = ASTextNode()
     private let metadataNode = ASTextNode()
     private weak var avatarImageView: UIImageView?
+    private var lastAppliedUserInterfaceStyle: UIUserInterfaceStyle?
 
     init(post: PostSummary) {
         self.post = post
@@ -53,6 +54,12 @@ final class PostSummaryCellNode: ASCellNode {
 
     override func didLoad() {
         super.didLoad()
+        lastAppliedUserInterfaceStyle = view.traitCollection.userInterfaceStyle
+        view.registerForTraitChanges([UITraitUserInterfaceStyle.self]) { [weak self] (view: UIView, previousTraitCollection: UITraitCollection) in
+            guard let self else { return }
+            guard previousTraitCollection.userInterfaceStyle != view.traitCollection.userInterfaceStyle else { return }
+            self.refreshAppearanceForCurrentTraits()
+        }
         requestAvatarIfNeeded()
     }
 
@@ -97,6 +104,23 @@ final class PostSummaryCellNode: ASCellNode {
         metadataNode.maximumNumberOfLines = PostSummaryCellStyle.metadataMaximumNumberOfLines
         metadataNode.truncationMode = .byTruncatingTail
         metadataNode.attributedText = Self.metadataAttributedText(for: post)
+    }
+
+    func refreshAppearanceForCurrentTraits() {
+        let currentStyle = isNodeLoaded ? view.traitCollection.userInterfaceStyle : UITraitCollection.current.userInterfaceStyle
+        guard lastAppliedUserInterfaceStyle != currentStyle else { return }
+        lastAppliedUserInterfaceStyle = currentStyle
+        configureText()
+        setNeedsLayout()
+        setNeedsDisplay()
+    }
+
+    var debugTitleAttributedText: NSAttributedString? {
+        titleNode.attributedText
+    }
+
+    var debugMetadataAttributedText: NSAttributedString? {
+        metadataNode.attributedText
     }
 
     private func requestAvatarIfNeeded() {

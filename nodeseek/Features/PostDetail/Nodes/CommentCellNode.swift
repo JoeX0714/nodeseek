@@ -56,6 +56,7 @@ final class CommentCellNode: ASCellNode {
     private let quoteButtonNode = ASButtonNode()
     private let separatorNode = ASDisplayNode()
     private let bodyNodes: [ASDisplayNode]
+    private var lastAppliedUserInterfaceStyle: UIUserInterfaceStyle?
 
     private lazy var avatarNode: ASDisplayNode = {
         let node = ASDisplayNode(viewBlock: { [weak self] in
@@ -112,6 +113,12 @@ final class CommentCellNode: ASCellNode {
 
     override func didLoad() {
         super.didLoad()
+        lastAppliedUserInterfaceStyle = view.traitCollection.userInterfaceStyle
+        view.registerForTraitChanges([UITraitUserInterfaceStyle.self]) { [weak self] (view: UIView, previousTraitCollection: UITraitCollection) in
+            guard let self else { return }
+            guard previousTraitCollection.userInterfaceStyle != view.traitCollection.userInterfaceStyle else { return }
+            self.refreshAppearanceForCurrentTraits()
+        }
         requestAvatarIfNeeded()
     }
 
@@ -237,11 +244,12 @@ final class CommentCellNode: ASCellNode {
                 .foregroundColor: UIColor.tertiaryLabel
             ]
         )
+
+        configureActionButton(replyButtonNode, title: "回复", accessibilityLabel: "回复评论")
+        configureActionButton(quoteButtonNode, title: "引用", accessibilityLabel: "引用评论")
     }
 
     private func configureActions() {
-        configureActionButton(replyButtonNode, title: "回复", accessibilityLabel: "回复评论")
-        configureActionButton(quoteButtonNode, title: "引用", accessibilityLabel: "引用评论")
         authorButtonNode.isUserInteractionEnabled = hasAuthorProfileLink
         if hasAuthorProfileLink {
             authorButtonNode.addTarget(self, action: #selector(authorTapped), forControlEvents: .touchUpInside)
@@ -262,6 +270,21 @@ final class CommentCellNode: ASCellNode {
             for: .normal
         )
         button.accessibilityLabel = accessibilityLabel
+    }
+
+    @discardableResult
+    func refreshAppearanceForCurrentTraits() -> Bool {
+        let currentStyle = isNodeLoaded ? view.traitCollection.userInterfaceStyle : UITraitCollection.current.userInterfaceStyle
+        guard lastAppliedUserInterfaceStyle != currentStyle else { return false }
+        lastAppliedUserInterfaceStyle = currentStyle
+        configureText()
+        setNeedsLayout()
+        setNeedsDisplay()
+        return true
+    }
+
+    var debugAuthorAttributedTitle: NSAttributedString? {
+        authorButtonNode.attributedTitle(for: .normal)
     }
 
     @objc private func replyTapped() {

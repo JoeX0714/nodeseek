@@ -104,4 +104,28 @@ struct PostSummaryCellNodeTests {
         #expect(titleText.string.dropFirst().hasPrefix(" "))
         #expect(titleText.string.contains(post.title))
     }
+
+    @Test func cellRefreshAppearanceRebuildsAttributedText() {
+        let post = PostSummary(
+            id: "5",
+            title: "主题切换测试",
+            url: URL(string: "https://www.nodeseek.com/post-5")!,
+            authorName: "mist",
+            nodeName: "NodeSeek",
+            replyCount: 8,
+            viewCount: 88,
+            lastActivityText: "just now",
+            isPinned: true,
+            isLocked: true
+        )
+        let node = PostSummaryCellNode(post: post)
+
+        let initialTitle = node.debugTitleAttributedText
+        let initialMetadata = node.debugMetadataAttributedText
+
+        node.refreshAppearanceForCurrentTraits()
+
+        #expect(node.debugTitleAttributedText !== initialTitle)
+        #expect(node.debugMetadataAttributedText !== initialMetadata)
+    }
 }
