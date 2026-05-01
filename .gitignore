@@ -29,6 +29,7 @@ build/
 .swiftpm/
 
 # Optional local tooling artifacts
+.worktrees/
 .idea/
 fastlane/test_output/
 fastlane/report.xml
