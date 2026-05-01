@@ -12,6 +12,7 @@ import OSLog
 enum PostDetailLinkDestination {
     case currentPageAnchor(String)
     case nativePost(postID: String, page: Int, url: URL)
+    case userProfile(URL)
     case web(URL)
     case safari(URL)
 }
@@ -50,6 +51,10 @@ enum PostDetailLinkResolver {
         }
 
         let path = resolvedURL.path
+        if isUserProfilePath(path) {
+            return .userProfile(resolvedURL)
+        }
+
         let range = NSRange(path.startIndex..<path.endIndex, in: path)
         if let match = postPathRegex.firstMatch(in: path, options: [], range: range),
            match.numberOfRanges >= 3,
@@ -98,6 +103,12 @@ enum PostDetailLinkResolver {
     private static func isHTTPURL(_ url: URL) -> Bool {
         guard let scheme = url.scheme?.lowercased() else { return false }
         return scheme == "http" || scheme == "https"
+    }
+
+    private static func isUserProfilePath(_ path: String) -> Bool {
+        let components = path.split(separator: "/", omittingEmptySubsequences: true)
+        guard components.count == 2, components[0] == "space" else { return false }
+        return components[1].isEmpty == false
     }
 
     private static func isNodeSeekHost(_ url: URL) -> Bool {

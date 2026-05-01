@@ -755,6 +755,32 @@ struct PostDetailViewControllerTests {
         #expect(resolvedURL.absoluteString == "https://www.nodeseek.com/member?t=linda")
     }
 
+    @Test func resolvesNodeSeekSpaceLinksToUserProfile() throws {
+        let baseURL = try #require(URL(string: "https://www.nodeseek.com/post-704174-1"))
+        let url = try #require(URL(string: "/space/1541", relativeTo: baseURL)?.absoluteURL)
+
+        let destination = try #require(PostDetailLinkResolver.destination(for: url, baseURL: baseURL))
+
+        guard case .userProfile(let resolvedURL) = destination else {
+            Issue.record("Expected user profile destination")
+            return
+        }
+        #expect(resolvedURL.absoluteString == "https://www.nodeseek.com/space/1541")
+    }
+
+    @Test func resolvesRelativeNodeSeekSpaceLinksToUserProfile() throws {
+        let baseURL = try #require(URL(string: "https://www.nodeseek.com/post-704174-1"))
+        let url = try #require(URL(string: "space/1541", relativeTo: baseURL))
+
+        let destination = try #require(PostDetailLinkResolver.destination(for: url, baseURL: baseURL))
+
+        guard case .userProfile(let resolvedURL) = destination else {
+            Issue.record("Expected user profile destination")
+            return
+        }
+        #expect(resolvedURL.absoluteString == "https://www.nodeseek.com/space/1541")
+    }
+
     @Test func resolvesExternalLinksToSafari() throws {
         let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
         let url = try #require(URL(string: "https://example.com/path"))
