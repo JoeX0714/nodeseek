@@ -19,6 +19,7 @@ extension DTCoreTextHTMLContentRenderer {
         let needsStructuredParsing = fragment.range(of: "<table", options: [.caseInsensitive]) != nil
             || fragment.range(of: "<pre", options: [.caseInsensitive]) != nil
             || fragment.range(of: "<img", options: [.caseInsensitive]) != nil
+            || fragment.range(of: Self.unsupportedContentClassName, options: [.caseInsensitive]) != nil
         guard needsStructuredParsing else {
             return renderTextBlocks(fragment: fragment, baseURL: baseURL, maxImageWidth: maxImageWidth)
         }
@@ -142,7 +143,9 @@ extension DTCoreTextHTMLContentRenderer {
             )
 
             let candidateHTML = source.substring(with: match.range)
-            if let imageBlocks = standaloneImageBlocks(fromHTML: candidateHTML, baseURL: baseURL) {
+            if let unsupportedBlock = unsupportedBlock(fromHTML: candidateHTML) {
+                blocks.append(unsupportedBlock)
+            } else if let imageBlocks = standaloneImageBlocks(fromHTML: candidateHTML, baseURL: baseURL) {
                 blocks.append(contentsOf: imageBlocks.map(RenderedContentBlock.image))
             } else {
                 appendTextBlocks(
@@ -388,6 +391,21 @@ extension DTCoreTextHTMLContentRenderer {
                 options: .regularExpression
             )
         return decodedHTMLEntities(in: text).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    func unsupportedBlock(fromHTML html: String) -> RenderedContentBlock? {
+        guard html.range(of: Self.unsupportedContentClassName, options: [.caseInsensitive]) != nil else {
+            return nil
+        }
+        guard let document = try? HTML(html: html, encoding: .utf8),
+              let marker = document.at_css(".\(Self.unsupportedContentClassName)") else {
+            return nil
+        }
+        let reason = marker.text?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let reason, reason.isEmpty == false {
+            return .unsupported(reason: reason)
+        }
+        return .unsupported(reason: Self.unsupportedXtermContentNotice)
     }
 
     func imageURL(from node: XMLElement, baseURL: URL) -> URL? {

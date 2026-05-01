@@ -63,6 +63,8 @@ struct DTCoreTextHTMLContentRenderer {
         pattern: "(?is)<(p|div|section)\\b[^>]*>.*?</\\1>",
         options: []
     )
+    static let unsupportedXtermContentNotice = "不支持显示此内容，请前往网页查看。"
+    static let unsupportedContentClassName = "nodeseek-unsupported-content"
     static let listMarkerRegex = try! NSRegularExpression(
         pattern: "\\t((?:\\d+[.)])|[•◦▪])\\t",
         options: []
