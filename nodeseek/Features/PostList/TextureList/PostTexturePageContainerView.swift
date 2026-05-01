@@ -96,12 +96,8 @@ final class PostTexturePageContainerView: UIView {
         setCurrentCategory(category, animated: animated, notifyDelegate: false)
     }
 
-    func setItems(_ items: [PostListItem], for category: PostListCategory) {
-        hostViewControllers[category]?.setItems(items)
-    }
-
-    func updateVisitedState(at index: Int, isVisited: Bool, for category: PostListCategory) {
-        hostViewControllers[category]?.updateVisitedState(at: index, isVisited: isVisited)
+    func setPosts(_ posts: [PostSummary], for category: PostListCategory) {
+        hostViewControllers[category]?.setPosts(posts)
     }
 
     func scrollToTop(for category: PostListCategory, animated: Bool) {
@@ -317,14 +313,9 @@ final class PostTextureListHostViewController: UIViewController {
         ])
     }
 
-    func setItems(_ items: [PostListItem]) {
+    func setPosts(_ posts: [PostSummary]) {
         loadViewIfNeeded()
-        listView.setItems(items)
-    }
-
-    func updateVisitedState(at index: Int, isVisited: Bool) {
-        loadViewIfNeeded()
-        listView.updateVisitedState(at: index, isVisited: isVisited)
+        listView.setPosts(posts)
     }
 
     func showLoadingSkeleton() {
