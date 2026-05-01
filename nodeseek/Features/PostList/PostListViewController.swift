@@ -445,8 +445,11 @@ extension PostListViewController: PostListViewProtocol {
             sortToggleWidthConstraint?.constant = SortToggleLayout.expandedWidth(for: sortMode.accessibilityTitle)
         }
     }
-    func render(posts: [PostSummary]) {
-        pageContainerView.setPosts(posts, for: selectedCategory)
+    func render(items: [PostListItem]) {
+        pageContainerView.setPosts(items.map(\.post), for: selectedCategory)
+    }
+
+    func renderVisitedState(at index: Int, isVisited: Bool) {
     }
 }
 
