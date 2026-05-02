@@ -99,6 +99,28 @@ struct PostListPresenterTests {
         #expect(router.recentVisitedStore === visitedStore)
     }
 
+    @Test func recommendedReadingCategoryRendersLast() {
+        let view = SpyPostListView()
+        let interactor = SpyPostListInteractor()
+        let router = SpyPostListRouter()
+        let presenter = PostListPresenter(interactor: interactor, router: router)
+        presenter.setView(view)
+
+        presenter.viewDidLoad()
+
+        #expect(view.renderedCategories.last == .award)
+    }
+
+    @Test func tappingNewDiscussionRoutesToNewDiscussionWebView() {
+        let interactor = SpyPostListInteractor()
+        let router = SpyPostListRouter()
+        let presenter = PostListPresenter(interactor: interactor, router: router)
+
+        presenter.didTapNewDiscussion()
+
+        #expect(router.navigateToNewDiscussionCount == 1)
+    }
+
     @Test func tappingLogFileRoutesToLogFileViewer() {
         let view = SpyPostListView()
         let interactor = SpyPostListInteractor()
@@ -492,6 +514,17 @@ struct PostListPresenterTests {
         #expect(interactor.loadPostsCategories == [.all, .all])
         #expect(interactor.loadPostsSortModes == [.replyTime, .replyTime])
     }
+
+    @Test func tappingAccountProfileRoutesToUserProfile() throws {
+        let interactor = SpyPostListInteractor()
+        let router = SpyPostListRouter()
+        let presenter = PostListPresenter(interactor: interactor, router: router)
+        let profileURL = try #require(URL(string: "https://www.nodeseek.com/space/31037"))
+
+        presenter.didTapAccountProfile(profileURL: profileURL)
+
+        #expect(router.userProfileURL == profileURL)
+    }
 }
 
 private func makePost(id: String, title: String) -> PostSummary {
@@ -662,7 +695,9 @@ private final class SpyPostListRouter: PostListRouterProtocol {
     var selectedPost: PostSummary?
     var selectedPage: Int?
     var recentVisitedStore: VisitedPostStoreProtocol?
+    var userProfileURL: URL?
     var navigateToLoginCount = 0
+    var navigateToNewDiscussionCount = 0
     var navigateToLogFileCount = 0
     var onLoginClose: (@MainActor () -> Void)?
 
@@ -682,6 +717,14 @@ private final class SpyPostListRouter: PostListRouterProtocol {
 
     func navigateToRecentVisitedPosts(visitedStore: VisitedPostStoreProtocol) {
         recentVisitedStore = visitedStore
+    }
+
+    func navigateToNewDiscussion() {
+        navigateToNewDiscussionCount += 1
+    }
+
+    func navigateToUserProfile(profileURL: URL) {
+        userProfileURL = profileURL
     }
 
     func navigateToLogFile() {

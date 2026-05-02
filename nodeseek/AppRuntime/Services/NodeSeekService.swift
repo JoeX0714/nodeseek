@@ -95,6 +95,13 @@ struct NodeSeekService: Sendable {
             return url.appendingSortQuery(sortMode)
         }
 
+        if category == .award {
+            url = baseURL
+                .appendingPathComponent(pathComponent)
+                .appendingPathComponent("page-\(normalized)")
+            return url.appendingSortQuery(sortMode)
+        }
+
         if normalized == 1 {
             url = baseURL
                 .appendingPathComponent("categories")

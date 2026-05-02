@@ -53,6 +53,28 @@ class PostListRouter: PostListRouterProtocol {
         viewController?.present(navigationWrapper, animated: true)
     }
 
+    func navigateToUserProfile(profileURL: URL) {
+        let userInfoViewController = UserInfoWebViewController(profileURL: profileURL)
+        if let navigationController = viewController?.navigationController {
+            navigationController.pushViewController(userInfoViewController, animated: true)
+            return
+        }
+
+        let navigationWrapper = UINavigationController(rootViewController: userInfoViewController)
+        viewController?.present(navigationWrapper, animated: true)
+    }
+
+    func navigateToNewDiscussion() {
+        let newDiscussionViewController = NewDiscussionWebViewController()
+        if let navigationController = viewController?.navigationController {
+            navigationController.pushViewController(newDiscussionViewController, animated: true)
+            return
+        }
+
+        let navigationWrapper = UINavigationController(rootViewController: newDiscussionViewController)
+        viewController?.present(navigationWrapper, animated: true)
+    }
+
     func navigateToRecentVisitedPosts(visitedStore: VisitedPostStoreProtocol) {
         let recentViewController = RecentVisitedPostsViewController(visitedStore: visitedStore)
         recentViewController.onSelectRecord = { [weak self, weak recentViewController] record in

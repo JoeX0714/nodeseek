@@ -131,6 +131,7 @@ struct PostListViewControllerTests {
         let accountHeaderButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-list-side-menu-account-header-button"))
         let detailTestButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-list-side-menu-detail-test-button"))
         let logFileButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-list-side-menu-log-file-button"))
+        let newDiscussionButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-list-side-menu-new-discussion-button"))
         let recentVisitedButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-list-side-menu-recent-visited-button"))
         let settingsButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-list-side-menu-settings-button"))
         let sideMenuHost = viewController.children.first {
@@ -144,11 +145,15 @@ struct PostListViewControllerTests {
         #expect(nameLabel.text == "未登录")
         #expect(statsLabel.text == "登录后同步账号信息")
         #expect(viewController.view.firstButton(accessibilityIdentifier: "post-list-side-menu-login-button") == nil)
+        #expect(viewController.view.firstView(accessibilityIdentifier: "post-list-side-menu-account-debug-text-view") == nil)
+        #expect(viewController.view.firstButton(accessibilityIdentifier: "post-list-side-menu-account-debug-copy-button") == nil)
         #expect(accountHeaderButton.accessibilityLabel == "登录账号")
         #expect(detailTestButton.configuration?.title == "详情测试")
         #expect(detailTestButton.configuration?.image != nil)
         #expect(logFileButton.configuration?.title == "文件日志")
         #expect(logFileButton.configuration?.image != nil)
+        #expect(newDiscussionButton.configuration?.title == "发帖")
+        #expect(newDiscussionButton.configuration?.image != nil)
         #expect(recentVisitedButton.configuration?.title == "最近浏览")
         #expect(recentVisitedButton.configuration?.image != nil)
         #expect(settingsButton.configuration?.title == "设置")
@@ -165,6 +170,7 @@ struct PostListViewControllerTests {
         #expect(backdrop.alpha == 1)
         #expect(accountHeaderButton.frame.contains(avatar.frame))
         #expect(recentVisitedButton.frame.maxY < settingsButton.frame.minY)
+        #expect(newDiscussionButton.frame.maxY < recentVisitedButton.frame.minY)
         #expect(logFileButton.frame.maxY < recentVisitedButton.frame.minY)
         #expect(detailTestButton.frame.maxY < settingsButton.frame.minY)
         #expect(settingsButton.frame.maxY < viewController.view.bounds.maxY)
@@ -177,6 +183,16 @@ struct PostListViewControllerTests {
         #expect(presenter.didTapRecentVisitedCount == 1)
         #expect(sideMenu.frame.maxX <= 0.5)
         #expect(backdrop.isHidden == true)
+
+        UIView.setAnimationsEnabled(false)
+        menuButton.sendActions(for: .touchUpInside)
+        viewController.view.layoutIfNeeded()
+        newDiscussionButton.sendActions(for: .touchUpInside)
+        viewController.view.layoutIfNeeded()
+        UIView.setAnimationsEnabled(animationsWereEnabled)
+
+        #expect(presenter.didTapNewDiscussionCount == 1)
+        #expect(sideMenu.frame.maxX <= 0.5)
 
         UIView.setAnimationsEnabled(false)
         menuButton.sendActions(for: .touchUpInside)
@@ -210,6 +226,49 @@ struct PostListViewControllerTests {
         #expect(sideMenu.frame.maxX <= 0.5)
         #expect(backdrop.isHidden == true)
     }
+
+    @Test func loggedInSideMenuAccountHeaderRoutesToProfileInsteadOfLogin() async throws {
+        let defaults = try #require(UserDefaults(suiteName: "post-list-side-menu-\(UUID().uuidString)"))
+        let store = CurrentAccountStore(userDefaults: defaults, storageKey: "account")
+        let profileURL = try #require(URL(string: "https://www.nodeseek.com/space/31037"))
+        await store.save(
+            AccountResponse(
+                displayName: "mistj",
+                isLoggedIn: true,
+                profileURL: profileURL
+            )
+        )
+        let viewController = PostListSideMenuViewController(
+            currentAccountStore: store,
+            accountRefresher: StubCurrentAccountRefresher()
+        )
+        var routedProfileURL: URL?
+        var loginTapCount = 0
+        viewController.onAccountProfileTapped = { profileURL in
+            routedProfileURL = profileURL
+        }
+        viewController.onLoginTapped = {
+            loginTapCount += 1
+        }
+
+        viewController.loadViewIfNeeded()
+        try await Task.sleep(nanoseconds: 100_000_000)
+        viewController.view.layoutIfNeeded()
+
+        let accountHeaderButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-list-side-menu-account-header-button"))
+        let nameLabel = try #require(viewController.view.firstLabel(accessibilityIdentifier: "post-list-side-menu-name-label"))
+        #expect(nameLabel.text == "mistj")
+        accountHeaderButton.sendActions(for: .touchUpInside)
+
+        #expect(routedProfileURL == profileURL)
+        #expect(loginTapCount == 0)
+    }
+}
+
+private final class StubCurrentAccountRefresher: CurrentAccountRefreshing, @unchecked Sendable {
+    func refreshIfNeeded(force: Bool, maxAge: TimeInterval) async -> AccountResponse? {
+        nil
+    }
 }
 
 private final class SpyPostListPresenter: PostListPresenterProtocol {
@@ -217,6 +276,8 @@ private final class SpyPostListPresenter: PostListPresenterProtocol {
     private(set) var toggleSortCount = 0
     private(set) var didTapLoginCount = 0
     private(set) var didTapRecentVisitedCount = 0
+    private(set) var didTapNewDiscussionCount = 0
+    private(set) var accountProfileURLs: [URL] = []
     private(set) var didTapLogFileCount = 0
     private(set) var didTapDetailTestCount = 0
     private(set) var submittedDetailTestURL: String?
@@ -246,6 +307,14 @@ private final class SpyPostListPresenter: PostListPresenterProtocol {
 
     func didTapRecentVisited() {
         didTapRecentVisitedCount += 1
+    }
+
+    func didTapNewDiscussion() {
+        didTapNewDiscussionCount += 1
+    }
+
+    func didTapAccountProfile(profileURL: URL) {
+        accountProfileURLs.append(profileURL)
     }
 
     func didTapLogFile() {

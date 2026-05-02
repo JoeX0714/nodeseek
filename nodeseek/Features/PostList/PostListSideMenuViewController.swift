@@ -11,6 +11,8 @@ final class PostListSideMenuViewController: UIViewController {
     private var sideMenuLeadingConstraint: NSLayoutConstraint?
     private var isSideMenuVisible = false
     var onLoginTapped: (() -> Void)?
+    var onAccountProfileTapped: ((URL) -> Void)?
+    var onNewDiscussionTapped: (() -> Void)?
     var onRecentVisitedTapped: (() -> Void)?
     #if DEBUG
     var onLogFileTapped: (() -> Void)?
@@ -106,37 +108,11 @@ final class PostListSideMenuViewController: UIViewController {
         return button
     }()
 
-    #if DEBUG
-    private let accountDebugTextView: UITextView = {
-        let textView = UITextView()
-        textView.text = "账号调试日志：等待侧栏刷新"
-        textView.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
-        textView.textColor = .secondaryLabel
-        textView.backgroundColor = .secondarySystemBackground
-        textView.layer.cornerRadius = 6
-        textView.layer.masksToBounds = true
-        textView.isEditable = false
-        textView.isSelectable = true
-        textView.isScrollEnabled = true
-        textView.textContainerInset = UIEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
-        textView.accessibilityIdentifier = "post-list-side-menu-account-debug-text-view"
-        textView.translatesAutoresizingMaskIntoConstraints = false
-        return textView
-    }()
-
-    private let accountDebugCopyButton: UIButton = {
-        let button = UIButton(type: .system)
-        var configuration = UIButton.Configuration.plain()
-        configuration.image = UIImage(systemName: "doc.on.doc")
-        configuration.imagePadding = 6
-        configuration.contentInsets = NSDirectionalEdgeInsets(top: 4, leading: 8, bottom: 4, trailing: 8)
-        configuration.title = "复制日志"
-        button.configuration = configuration
-        button.accessibilityIdentifier = "post-list-side-menu-account-debug-copy-button"
-        button.translatesAutoresizingMaskIntoConstraints = false
+    private let newDiscussionButton: UIButton = {
+        let button = PostListSideMenuViewController.makeMenuButton(title: "发帖", systemImageName: "square.and.pencil")
+        button.accessibilityIdentifier = "post-list-side-menu-new-discussion-button"
         return button
     }()
-    #endif
 
     #if DEBUG
     private let logFileButton: UIButton = {
@@ -212,7 +188,7 @@ final class PostListSideMenuViewController: UIViewController {
             ? account.stats.prefix(3).joined(separator: " · ")
             : "登录后同步账号信息"
         accountHeaderButton.accessibilityLabel = account.isLoggedIn ? "账号信息" : "登录账号"
-        accountHeaderButton.isEnabled = !account.isLoggedIn
+        accountHeaderButton.isEnabled = !account.isLoggedIn || account.profileURL != nil
 
         if account.isLoggedIn {
             avatarLoader.loadAvatar(
@@ -237,11 +213,6 @@ final class PostListSideMenuViewController: UIViewController {
         accountController.onAccountChanged = { [weak self] account in
             self?.renderAccount(account)
         }
-        #if DEBUG
-        accountController.onDebugTextChanged = { [weak self] text in
-            self?.accountDebugTextView.text = text
-        }
-        #endif
     }
 
     private func setupUI() {
@@ -250,13 +221,13 @@ final class PostListSideMenuViewController: UIViewController {
         backdropView.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(backdropTapped)))
         accountHeaderButton.addTarget(self, action: #selector(accountHeaderTapped), for: .touchUpInside)
         #if DEBUG
-        accountDebugCopyButton.addTarget(self, action: #selector(copyAccountDebugLogTapped), for: .touchUpInside)
         logFileButton.addTarget(self, action: #selector(logFileButtonTapped), for: .touchUpInside)
         if NodeSeekDebugConfig.enablePostDetailTestEntry {
             detailTestButton.addTarget(self, action: #selector(detailTestButtonTapped), for: .touchUpInside)
         }
         #endif
         settingsButton.addTarget(self, action: #selector(settingsButtonTapped), for: .touchUpInside)
+        newDiscussionButton.addTarget(self, action: #selector(newDiscussionButtonTapped), for: .touchUpInside)
         recentVisitedButton.addTarget(self, action: #selector(recentVisitedButtonTapped), for: .touchUpInside)
 
         view.addSubview(backdropView)
@@ -266,15 +237,12 @@ final class PostListSideMenuViewController: UIViewController {
         sideMenuView.addSubview(statsLabel)
         sideMenuView.addSubview(accountHeaderButton)
         #if DEBUG
-        sideMenuView.addSubview(accountDebugCopyButton)
-        sideMenuView.addSubview(accountDebugTextView)
-        #endif
-        #if DEBUG
         if NodeSeekDebugConfig.enablePostDetailTestEntry {
             sideMenuView.addSubview(detailTestButton)
         }
         sideMenuView.addSubview(logFileButton)
         #endif
+        sideMenuView.addSubview(newDiscussionButton)
         sideMenuView.addSubview(recentVisitedButton)
         sideMenuView.addSubview(settingsButton)
 
@@ -321,25 +289,20 @@ final class PostListSideMenuViewController: UIViewController {
             recentVisitedButton.leadingAnchor.constraint(equalTo: sideMenuView.leadingAnchor, constant: SideMenuLayout.horizontalInset),
             recentVisitedButton.trailingAnchor.constraint(equalTo: sideMenuView.trailingAnchor, constant: -SideMenuLayout.horizontalInset),
             recentVisitedButton.bottomAnchor.constraint(equalTo: settingsButton.topAnchor, constant: -8),
-            recentVisitedButton.heightAnchor.constraint(equalToConstant: 48)
+            recentVisitedButton.heightAnchor.constraint(equalToConstant: 48),
+
+            newDiscussionButton.leadingAnchor.constraint(equalTo: sideMenuView.leadingAnchor, constant: SideMenuLayout.horizontalInset),
+            newDiscussionButton.trailingAnchor.constraint(equalTo: sideMenuView.trailingAnchor, constant: -SideMenuLayout.horizontalInset),
+            newDiscussionButton.bottomAnchor.constraint(equalTo: recentVisitedButton.topAnchor, constant: -8),
+            newDiscussionButton.heightAnchor.constraint(equalToConstant: 48)
         ])
 
         #if DEBUG
         NSLayoutConstraint.activate([
             logFileButton.leadingAnchor.constraint(equalTo: sideMenuView.leadingAnchor, constant: SideMenuLayout.horizontalInset),
             logFileButton.trailingAnchor.constraint(equalTo: sideMenuView.trailingAnchor, constant: -SideMenuLayout.horizontalInset),
-            logFileButton.bottomAnchor.constraint(equalTo: recentVisitedButton.topAnchor, constant: -8),
-            logFileButton.heightAnchor.constraint(equalToConstant: 48),
-
-            accountDebugCopyButton.trailingAnchor.constraint(equalTo: sideMenuView.trailingAnchor, constant: -SideMenuLayout.horizontalInset),
-            accountDebugCopyButton.topAnchor.constraint(equalTo: accountHeaderButton.bottomAnchor, constant: 14),
-            accountDebugCopyButton.heightAnchor.constraint(equalToConstant: 32),
-
-            accountDebugTextView.leadingAnchor.constraint(equalTo: sideMenuView.leadingAnchor, constant: SideMenuLayout.horizontalInset),
-            accountDebugTextView.trailingAnchor.constraint(equalTo: sideMenuView.trailingAnchor, constant: -SideMenuLayout.horizontalInset),
-            accountDebugTextView.topAnchor.constraint(equalTo: accountDebugCopyButton.bottomAnchor, constant: 6),
-            accountDebugTextView.heightAnchor.constraint(greaterThanOrEqualToConstant: 120),
-            accountDebugTextView.bottomAnchor.constraint(lessThanOrEqualTo: logFileButton.topAnchor, constant: -12)
+            logFileButton.bottomAnchor.constraint(equalTo: newDiscussionButton.topAnchor, constant: -8),
+            logFileButton.heightAnchor.constraint(equalToConstant: 48)
         ])
         #endif
 
@@ -349,8 +312,7 @@ final class PostListSideMenuViewController: UIViewController {
                 detailTestButton.leadingAnchor.constraint(equalTo: sideMenuView.leadingAnchor, constant: SideMenuLayout.horizontalInset),
                 detailTestButton.trailingAnchor.constraint(equalTo: sideMenuView.trailingAnchor, constant: -SideMenuLayout.horizontalInset),
                 detailTestButton.bottomAnchor.constraint(equalTo: logFileButton.topAnchor, constant: -8),
-                detailTestButton.heightAnchor.constraint(equalToConstant: 48),
-                accountDebugTextView.bottomAnchor.constraint(lessThanOrEqualTo: detailTestButton.topAnchor, constant: -12)
+                detailTestButton.heightAnchor.constraint(equalToConstant: 48)
             ])
         }
         #endif
@@ -361,20 +323,18 @@ final class PostListSideMenuViewController: UIViewController {
     }
 
     @objc private func accountHeaderTapped() {
-        guard !accountController.isLoggedIn else { return }
+        if accountController.isLoggedIn {
+            guard let profileURL = accountController.profileURL else { return }
+            hide(animated: true)
+            onAccountProfileTapped?(profileURL)
+            return
+        }
+
         hide(animated: true)
         onLoginTapped?()
     }
 
     #if DEBUG
-    @objc private func copyAccountDebugLogTapped() {
-        UIPasteboard.general.string = accountController.debugText
-        accountDebugCopyButton.configuration?.title = "已复制"
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
-            self?.accountDebugCopyButton.configuration?.title = "复制日志"
-        }
-    }
-
     @objc private func logFileButtonTapped() {
         hide(animated: true)
         onLogFileTapped?()
@@ -388,6 +348,11 @@ final class PostListSideMenuViewController: UIViewController {
 
     @objc private func settingsButtonTapped() {
         hide(animated: true)
+    }
+
+    @objc private func newDiscussionButtonTapped() {
+        hide(animated: true)
+        onNewDiscussionTapped?()
     }
 
     @objc private func recentVisitedButtonTapped() {

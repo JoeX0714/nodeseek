@@ -17,10 +17,12 @@ enum PostListCategory: String, CaseIterable, Sendable {
     case carpool
     case promotion
     case df
+    case award
 
     var title: String {
         switch self {
         case .all: return "全部"
+        case .award: return "推荐阅读"
         case .daily: return "日常"
         case .tech: return "技术"
         case .info: return "情报"
@@ -36,6 +38,8 @@ enum PostListCategory: String, CaseIterable, Sendable {
         switch self {
         case .all:
             return nil
+        case .award:
+            return rawValue
         case .df:
             // 站点顶部 DF 对应 dev 频道内容。
             return "dev"

@@ -80,6 +80,14 @@ class PostListPresenter: PostListPresenterProtocol {
         }
     }
 
+    func didTapAccountProfile(profileURL: URL) {
+        router.navigateToUserProfile(profileURL: profileURL)
+    }
+
+    func didTapNewDiscussion() {
+        router.navigateToNewDiscussion()
+    }
+
     func didTapRecentVisited() {
         router.navigateToRecentVisitedPosts(visitedStore: visitedStore)
     }
