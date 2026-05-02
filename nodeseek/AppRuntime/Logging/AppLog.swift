@@ -111,8 +111,8 @@ private final class AppLogFileWriter: @unchecked Sendable {
     nonisolated func write(level: AppLogLevel, type: AppLogType, message: String) {
         #if DEBUG
         guard NodeSeekDebugConfig.enableFileLogging else { return }
-        queue.async { [directoryOverride] in
-            let directory = directoryOverride ?? Self.defaultDirectory()
+        queue.async {
+            let directory = self.directoryOverride ?? Self.defaultDirectory()
             do {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 let line = "\(Self.timestamp()) [\(level.rawValue)] [\(type.rawValue)] \(message)\n"
@@ -120,9 +120,9 @@ private final class AppLogFileWriter: @unchecked Sendable {
                 let data = Data(line.utf8)
                 if FileManager.default.fileExists(atPath: logURL.path) {
                     let handle = try FileHandle(forWritingTo: logURL)
+                    defer { try? handle.close() }
                     try handle.seekToEnd()
                     try handle.write(contentsOf: data)
-                    try handle.close()
                 } else {
                     try data.write(to: logURL, options: .atomic)
                 }
@@ -141,12 +141,12 @@ private final class AppLogFileWriter: @unchecked Sendable {
     }
 
     nonisolated func readContent() throws -> String {
-        queue.sync {
+        try queue.sync {
             let logURL = Self.logURL(in: directoryOverride ?? Self.defaultDirectory())
             guard FileManager.default.fileExists(atPath: logURL.path) else {
                 return ""
             }
-            return (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
+            return try String(contentsOf: logURL, encoding: .utf8)
         }
     }
 

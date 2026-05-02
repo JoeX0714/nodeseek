@@ -10,6 +10,7 @@ import Testing
 @testable import nodeseek
 
 @MainActor
+@Suite(.serialized)
 struct AppLogTests {
     @Test func debugPanelPostsAccountMessageNotification() async throws {
         var receivedMessage: String?
@@ -29,11 +30,12 @@ struct AppLogTests {
     }
 
     @Test func fileLoggingWritesOnlyWhenDebugSwitchIsEnabled() async throws {
+        let previousFileLoggingEnabled = NodeSeekDebugConfig.enableFileLogging
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer {
             try? FileManager.default.removeItem(at: directory)
-            NodeSeekDebugConfig.enableFileLogging = false
+            NodeSeekDebugConfig.enableFileLogging = previousFileLoggingEnabled
             AppLog.setFileLogDirectoryForTesting(nil)
         }
 
@@ -54,11 +56,12 @@ struct AppLogTests {
     }
 
     @Test func readsCurrentFileLogContent() async throws {
+        let previousFileLoggingEnabled = NodeSeekDebugConfig.enableFileLogging
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer {
             try? FileManager.default.removeItem(at: directory)
-            NodeSeekDebugConfig.enableFileLogging = false
+            NodeSeekDebugConfig.enableFileLogging = previousFileLoggingEnabled
             AppLog.setFileLogDirectoryForTesting(nil)
         }
 

@@ -27,22 +27,21 @@ final class LogFileViewController: UIViewController {
         title = "文件日志"
         view.backgroundColor = .systemBackground
         navigationItem.largeTitleDisplayMode = .never
-        navigationItem.rightBarButtonItems = [
-            UIBarButtonItem(
-                image: UIImage(systemName: "doc.on.doc"),
-                style: .plain,
-                target: self,
-                action: #selector(copyButtonTapped)
-            ),
-            UIBarButtonItem(
-                image: UIImage(systemName: "arrow.clockwise"),
-                style: .plain,
-                target: self,
-                action: #selector(refreshButtonTapped)
-            )
-        ]
-        navigationItem.rightBarButtonItems?[0].accessibilityLabel = "复制文件日志"
-        navigationItem.rightBarButtonItems?[1].accessibilityLabel = "刷新文件日志"
+        let copyButton = UIBarButtonItem(
+            image: UIImage(systemName: "doc.on.doc"),
+            style: .plain,
+            target: self,
+            action: #selector(copyButtonTapped)
+        )
+        let refreshButton = UIBarButtonItem(
+            image: UIImage(systemName: "arrow.clockwise"),
+            style: .plain,
+            target: self,
+            action: #selector(refreshButtonTapped)
+        )
+        copyButton.accessibilityLabel = "复制文件日志"
+        refreshButton.accessibilityLabel = "刷新文件日志"
+        navigationItem.rightBarButtonItems = [copyButton, refreshButton]
 
         view.addSubview(textView)
         NSLayoutConstraint.activate([

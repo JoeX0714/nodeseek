@@ -95,34 +95,14 @@ final class PostListSideMenuViewController: UIViewController {
     }()
 
     private let settingsButton: UIButton = {
-        let button = UIButton(type: .system)
-        let symbolConfiguration = UIImage.SymbolConfiguration(pointSize: 18, weight: .semibold)
-        var configuration = UIButton.Configuration.plain()
-        configuration.image = UIImage(systemName: "gearshape", withConfiguration: symbolConfiguration)
-        configuration.imagePadding = 10
-        configuration.baseForegroundColor = .label
-        configuration.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14)
-        configuration.title = "设置"
-        button.configuration = configuration
-        button.contentHorizontalAlignment = .leading
+        let button = PostListSideMenuViewController.makeMenuButton(title: "设置", systemImageName: "gearshape")
         button.accessibilityIdentifier = "post-list-side-menu-settings-button"
-        button.translatesAutoresizingMaskIntoConstraints = false
         return button
     }()
 
     private let recentVisitedButton: UIButton = {
-        let button = UIButton(type: .system)
-        let symbolConfiguration = UIImage.SymbolConfiguration(pointSize: 18, weight: .semibold)
-        var configuration = UIButton.Configuration.plain()
-        configuration.image = UIImage(systemName: "clock.arrow.circlepath", withConfiguration: symbolConfiguration)
-        configuration.imagePadding = 10
-        configuration.baseForegroundColor = .label
-        configuration.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14)
-        configuration.title = "最近浏览"
-        button.configuration = configuration
-        button.contentHorizontalAlignment = .leading
+        let button = PostListSideMenuViewController.makeMenuButton(title: "最近浏览", systemImageName: "clock.arrow.circlepath")
         button.accessibilityIdentifier = "post-list-side-menu-recent-visited-button"
-        button.translatesAutoresizingMaskIntoConstraints = false
         return button
     }()
 
@@ -160,34 +140,14 @@ final class PostListSideMenuViewController: UIViewController {
 
     #if DEBUG
     private let logFileButton: UIButton = {
-        let button = UIButton(type: .system)
-        let symbolConfiguration = UIImage.SymbolConfiguration(pointSize: 18, weight: .semibold)
-        var configuration = UIButton.Configuration.plain()
-        configuration.image = UIImage(systemName: "doc.text", withConfiguration: symbolConfiguration)
-        configuration.imagePadding = 10
-        configuration.baseForegroundColor = .label
-        configuration.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14)
-        configuration.title = "文件日志"
-        button.configuration = configuration
-        button.contentHorizontalAlignment = .leading
+        let button = PostListSideMenuViewController.makeMenuButton(title: "文件日志", systemImageName: "doc.text")
         button.accessibilityIdentifier = "post-list-side-menu-log-file-button"
-        button.translatesAutoresizingMaskIntoConstraints = false
         return button
     }()
 
     private let detailTestButton: UIButton = {
-        let button = UIButton(type: .system)
-        let symbolConfiguration = UIImage.SymbolConfiguration(pointSize: 18, weight: .semibold)
-        var configuration = UIButton.Configuration.plain()
-        configuration.image = UIImage(systemName: "doc.text.magnifyingglass", withConfiguration: symbolConfiguration)
-        configuration.imagePadding = 10
-        configuration.baseForegroundColor = .label
-        configuration.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14)
-        configuration.title = "详情测试"
-        button.configuration = configuration
-        button.contentHorizontalAlignment = .leading
+        let button = PostListSideMenuViewController.makeMenuButton(title: "详情测试", systemImageName: "doc.text.magnifyingglass")
         button.accessibilityIdentifier = "post-list-side-menu-detail-test-button"
-        button.translatesAutoresizingMaskIntoConstraints = false
         button.isHidden = !NodeSeekDebugConfig.enablePostDetailTestEntry
         return button
     }()
@@ -220,6 +180,21 @@ final class PostListSideMenuViewController: UIViewController {
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         avatarImageView.layer.cornerRadius = avatarImageView.bounds.width / 2
+    }
+
+    private static func makeMenuButton(title: String, systemImageName: String) -> UIButton {
+        let button = UIButton(type: .system)
+        let symbolConfiguration = UIImage.SymbolConfiguration(pointSize: 18, weight: .semibold)
+        var configuration = UIButton.Configuration.plain()
+        configuration.image = UIImage(systemName: systemImageName, withConfiguration: symbolConfiguration)
+        configuration.imagePadding = 10
+        configuration.baseForegroundColor = .label
+        configuration.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14)
+        configuration.title = title
+        button.configuration = configuration
+        button.contentHorizontalAlignment = .leading
+        button.translatesAutoresizingMaskIntoConstraints = false
+        return button
     }
 
     func show(animated: Bool) {
