@@ -53,10 +53,14 @@ final class CommentCellNode: ASCellNode {
     private let posterBadgeNode = ASTextNode()
     private let timeNode = ASTextNode()
     private let floorNode = ASTextNode()
+    private let likeButtonNode = ASButtonNode()
+    private let chickenLegButtonNode = ASButtonNode()
+    private let opposeButtonNode = ASButtonNode()
     private let replyButtonNode = ASButtonNode()
     private let quoteButtonNode = ASButtonNode()
     private let separatorNode = ASDisplayNode()
     private let bodyNodes: [ASDisplayNode]
+    private(set) var debugActionsAreDisplayedBelowBody = false
     private var lastAppliedUserInterfaceStyle: UIUserInterfaceStyle?
 
     private lazy var avatarNode: ASDisplayNode = {
@@ -143,6 +147,9 @@ final class CommentCellNode: ASCellNode {
         posterBadgeNode.style.flexShrink = 0
         timeNode.style.flexShrink = 1
         floorNode.style.flexShrink = 0
+        likeButtonNode.style.flexShrink = 0
+        chickenLegButtonNode.style.flexShrink = 0
+        opposeButtonNode.style.flexShrink = 0
         replyButtonNode.style.flexShrink = 0
         quoteButtonNode.style.flexShrink = 0
         separatorNode.style.height = ASDimension(unit: .points, value: 1 / UIScreen.main.scale)
@@ -171,24 +178,17 @@ final class CommentCellNode: ASCellNode {
         if identityChildren.isEmpty == false {
             headerChildren.append(identityStack)
         }
-        var actionChildren: [ASLayoutElement] = []
         if comment.floorText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
-            actionChildren.append(floorNode)
+            headerChildren.append(floorNode)
         }
-        actionChildren.append(replyButtonNode)
-        actionChildren.append(quoteButtonNode)
-
-        let actionStack = ASStackLayoutSpec.horizontal()
-        actionStack.spacing = 8
-        actionStack.alignItems = .center
-        actionStack.children = actionChildren
-        headerChildren.append(actionStack)
         headerStack.children = headerChildren
 
         var textChildren: [ASLayoutElement] = headerChildren.isEmpty ? [] : [headerStack]
         for bodyNode in bodyNodes {
             textChildren.append(bodyNode)
         }
+        textChildren.append(makeFooterActionStack())
+        debugActionsAreDisplayedBelowBody = true
 
         let textStack = ASStackLayoutSpec.vertical()
         textStack.spacing = Layout.bodySpacing
@@ -264,8 +264,11 @@ final class CommentCellNode: ASCellNode {
             ]
         )
 
-        configureActionButton(replyButtonNode, title: "回复", accessibilityLabel: "回复评论")
-        configureActionButton(quoteButtonNode, title: "引用", accessibilityLabel: "引用评论")
+        configureActionButton(likeButtonNode, systemImageName: "hand.thumbsup", accessibilityLabel: "点赞")
+        configureActionButton(chickenLegButtonNode, systemImageName: "fork.knife", accessibilityLabel: "加鸡腿")
+        configureActionButton(opposeButtonNode, systemImageName: "hand.thumbsdown", accessibilityLabel: "反对")
+        configureActionButton(replyButtonNode, systemImageName: "arrowshape.turn.up.left", accessibilityLabel: "回复评论")
+        configureActionButton(quoteButtonNode, systemImageName: "quote.bubble", accessibilityLabel: "引用评论")
     }
 
     private func configureActions() {
@@ -277,17 +280,32 @@ final class CommentCellNode: ASCellNode {
         quoteButtonNode.addTarget(self, action: #selector(quoteTapped), forControlEvents: .touchUpInside)
     }
 
-    private func configureActionButton(_ button: ASButtonNode, title: String, accessibilityLabel: String) {
-        button.setAttributedTitle(
-            NSAttributedString(
-                string: title,
-                attributes: [
-                    .font: UIFont.preferredFont(forTextStyle: .subheadline),
-                    .foregroundColor: UIColor.secondaryLabel
-                ]
-            ),
-            for: .normal
-        )
+    private func makeFooterActionStack() -> ASLayoutSpec {
+        let spacer = ASLayoutSpec()
+        spacer.style.flexGrow = 1
+
+        let actionStack = ASStackLayoutSpec.horizontal()
+        actionStack.spacing = 8
+        actionStack.alignItems = .center
+        actionStack.children = [
+            spacer,
+            likeButtonNode,
+            chickenLegButtonNode,
+            opposeButtonNode,
+            replyButtonNode,
+            quoteButtonNode
+        ]
+        return actionStack
+    }
+
+    private func configureActionButton(_ button: ASButtonNode, systemImageName: String, accessibilityLabel: String) {
+        let configuration = UIImage.SymbolConfiguration(pointSize: 15, weight: .regular)
+        let image = UIImage(systemName: systemImageName, withConfiguration: configuration)?
+            .withTintColor(UIColor.secondaryLabel.withAlphaComponent(0.72), renderingMode: .alwaysOriginal)
+        button.setAttributedTitle(nil, for: .normal)
+        button.setImage(image, for: .normal)
+        button.contentEdgeInsets = UIEdgeInsets(top: 6, left: 8, bottom: 6, right: 8)
+        button.style.preferredSize = CGSize(width: 40, height: 32)
         button.accessibilityLabel = accessibilityLabel
     }
 
@@ -308,6 +326,32 @@ final class CommentCellNode: ASCellNode {
 
     var debugPosterBadgeAttributedText: NSAttributedString? {
         comment.isPoster ? posterBadgeNode.attributedText : nil
+    }
+
+    var debugReplyActionTitle: String? {
+        replyButtonNode.attributedTitle(for: .normal)?.string
+    }
+
+    var debugQuoteActionTitle: String? {
+        quoteButtonNode.attributedTitle(for: .normal)?.string
+    }
+
+    var debugReplyActionImage: UIImage? {
+        replyButtonNode.image(for: .normal)
+    }
+
+    var debugQuoteActionImage: UIImage? {
+        quoteButtonNode.image(for: .normal)
+    }
+
+    var debugFooterActionAccessibilityLabels: [String] {
+        [
+            likeButtonNode,
+            chickenLegButtonNode,
+            opposeButtonNode,
+            replyButtonNode,
+            quoteButtonNode
+        ].map { $0.accessibilityLabel ?? "" }
     }
 
     @objc private func replyTapped() {

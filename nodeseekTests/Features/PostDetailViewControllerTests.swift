@@ -720,6 +720,34 @@ struct PostDetailViewControllerTests {
         #expect(node.debugPosterBadgeAttributedText?.string == "楼主")
     }
 
+    @Test func commentCellUsesIconOnlyFooterActions() {
+        let comment = Comment(
+            id: "1",
+            authorName: "ipv4",
+            avatarURL: nil,
+            floorText: "#1",
+            createdAtText: "刚刚",
+            contentHTML: "<p>评论</p>"
+        )
+        let node = CommentCellNode(
+            comment: comment,
+            renderedBody: [],
+            onImageTapped: { _, _ in },
+            onTextLayoutInvalidated: {}
+        )
+        _ = node.layoutThatFits(ASSizeRange(
+            min: .zero,
+            max: CGSize(width: 360, height: CGFloat.greatestFiniteMagnitude)
+        ))
+
+        #expect(node.debugReplyActionTitle == nil)
+        #expect(node.debugQuoteActionTitle == nil)
+        #expect(node.debugReplyActionImage != nil)
+        #expect(node.debugQuoteActionImage != nil)
+        #expect(node.debugFooterActionAccessibilityLabels == ["点赞", "加鸡腿", "反对", "回复评论", "引用评论"])
+        #expect(node.debugActionsAreDisplayedBelowBody)
+    }
+
     @Test func tableNodeKeepsViewportWidthAndMeasuresContentHeight() {
         let table = RenderedTableBlock(rows: [
             .init(cells: [
