@@ -11,6 +11,8 @@ import Foundation
 protocol PostListViewProtocol: AnyObject {
     func showLoading()
     func hideLoading()
+    func showFirstPageError(message: String)
+    func hideFirstPageError()
     func showRefreshing()
     func hideRefreshing()
     func showLoadingMore()
@@ -29,6 +31,7 @@ protocol PostListViewProtocol: AnyObject {
 protocol PostListPresenterProtocol: AnyObject {
     func viewDidLoad()
     func didSelectCategory(_ category: PostListCategory)
+    func didReselectCategory(_ category: PostListCategory)
     func didToggleSortMode()
     func didTapLogin()
     #if DEBUG
@@ -36,6 +39,7 @@ protocol PostListPresenterProtocol: AnyObject {
     func didSubmitDetailTestURL(_ rawURL: String)
     #endif
     func didPullToRefresh()
+    func didRetryFirstPage()
     func didSelectPost(at index: Int)
     func didApproachBottom(currentIndex: Int, totalCount: Int)
 }

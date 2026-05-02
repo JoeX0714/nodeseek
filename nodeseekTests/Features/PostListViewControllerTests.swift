@@ -86,6 +86,35 @@ struct PostListViewControllerTests {
         #expect(abs(selectedTabFrame.height - menuButtonFrame.height) < 1)
     }
 
+    @Test func tappingSelectedCategoryRequestsFirstPageReload() throws {
+        let presenter = SpyPostListPresenter()
+        let viewController = PostListViewController(presenter: presenter)
+        viewController.loadViewIfNeeded()
+        viewController.renderCategories([.all, .daily], selected: .all)
+
+        let selectedTab = try #require(viewController.view.firstButton(title: "全部"))
+        selectedTab.sendActions(for: .touchUpInside)
+
+        #expect(presenter.reselectedCategories == [.all])
+        #expect(presenter.selectedCategories.isEmpty)
+    }
+
+    @Test func firstPageErrorRetryButtonRequestsFirstPageRetry() throws {
+        let presenter = SpyPostListPresenter()
+        let viewController = PostListViewController(presenter: presenter)
+        viewController.loadViewIfNeeded()
+        viewController.renderCategories([.all, .daily], selected: .all)
+
+        viewController.showFirstPageError(message: "网络超时")
+
+        _ = try #require(viewController.view.firstView(accessibilityIdentifier: "post-list-first-page-error"))
+        _ = try #require(viewController.view.firstLabel(text: "网络超时"))
+        let retryButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-list-first-page-retry-button"))
+        retryButton.sendActions(for: .touchUpInside)
+
+        #expect(presenter.didRetryFirstPageCount == 1)
+    }
+
     @Test func menuButtonPresentsSideMenuWithAccountHeaderSettingsAndDetailTestButton() throws {
         let presenter = SpyPostListPresenter()
         let viewController = PostListViewController(presenter: presenter)
@@ -160,12 +189,21 @@ private final class SpyPostListPresenter: PostListPresenterProtocol {
     private(set) var didTapLoginCount = 0
     private(set) var didTapDetailTestCount = 0
     private(set) var submittedDetailTestURL: String?
+    private(set) var selectedCategories: [PostListCategory] = []
+    private(set) var reselectedCategories: [PostListCategory] = []
+    private(set) var didRetryFirstPageCount = 0
 
     func viewDidLoad() {
         viewDidLoadCount += 1
     }
 
-    func didSelectCategory(_ category: PostListCategory) {}
+    func didSelectCategory(_ category: PostListCategory) {
+        selectedCategories.append(category)
+    }
+
+    func didReselectCategory(_ category: PostListCategory) {
+        reselectedCategories.append(category)
+    }
 
     func didToggleSortMode() {
         toggleSortCount += 1
@@ -184,6 +222,10 @@ private final class SpyPostListPresenter: PostListPresenterProtocol {
     }
 
     func didPullToRefresh() {}
+
+    func didRetryFirstPage() {
+        didRetryFirstPageCount += 1
+    }
 
     func didSelectPost(at index: Int) {}
 
@@ -254,6 +296,20 @@ private extension UIView {
 
         for subview in subviews {
             if let matched = subview.firstLabel(accessibilityIdentifier: accessibilityIdentifier) {
+                return matched
+            }
+        }
+
+        return nil
+    }
+
+    func firstLabel(text: String) -> UILabel? {
+        if let label = self as? UILabel, label.text == text {
+            return label
+        }
+
+        for subview in subviews {
+            if let matched = subview.firstLabel(text: text) {
                 return matched
             }
         }

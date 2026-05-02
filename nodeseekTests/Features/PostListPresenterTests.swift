@@ -282,6 +282,61 @@ struct PostListPresenterTests {
         #expect(view.lastRenderedPostIDs == ["all-2"])
     }
 
+    @Test func reselectingCurrentCategoryReloadsFirstPageWithSkeletonAndClearsItems() {
+        let view = SpyPostListView()
+        let interactor = SpyPostListInteractor()
+        let router = SpyPostListRouter()
+        let presenter = PostListPresenter(interactor: interactor, router: router)
+        presenter.setView(view)
+        let post = makePost(id: "1", title: "旧帖子")
+
+        presenter.viewDidLoad()
+        presenter.didLoadPosts([post], category: .all)
+        view.events.removeAll()
+
+        presenter.didReselectCategory(.all)
+
+        #expect(view.lastRenderedPostIDs.isEmpty)
+        #expect(view.events.first == "render")
+        #expect(view.events.contains("hideFirstPageError"))
+        #expect(view.events.contains("showLoading"))
+        #expect(interactor.loadPostsCategories == [.all, .all])
+    }
+
+    @Test func firstPageLoadFailureShowsInlineRetryErrorWhenListIsEmpty() {
+        let view = SpyPostListView()
+        let interactor = SpyPostListInteractor()
+        let router = SpyPostListRouter()
+        let presenter = PostListPresenter(interactor: interactor, router: router)
+        presenter.setView(view)
+
+        presenter.viewDidLoad()
+        let hideLoadingBefore = view.hideLoadingCount
+        presenter.didFailLoadPosts(error: "网络超时", category: .all)
+
+        #expect(view.hideLoadingCount == hideLoadingBefore + 1)
+        #expect(view.firstPageErrorMessages == ["网络超时"])
+        #expect(view.lastErrorMessage == nil)
+    }
+
+    @Test func retryingFirstPageErrorReloadsCurrentCategory() {
+        let view = SpyPostListView()
+        let interactor = SpyPostListInteractor()
+        let router = SpyPostListRouter()
+        let presenter = PostListPresenter(interactor: interactor, router: router)
+        presenter.setView(view)
+
+        presenter.viewDidLoad()
+        presenter.didFailLoadPosts(error: "网络超时", category: .all)
+        view.events.removeAll()
+
+        presenter.didRetryFirstPage()
+
+        #expect(view.events.contains("hideFirstPageError"))
+        #expect(view.events.contains("showLoading"))
+        #expect(interactor.loadPostsCategories == [.all, .all])
+    }
+
     @Test func togglingSortModeReloadsCurrentCategoryFromFirstPage() {
         let view = SpyPostListView()
         let interactor = SpyPostListInteractor()
@@ -445,6 +500,7 @@ private final class SpyPostListView: PostListViewProtocol {
     var selectedCategory: PostListCategory = .all
     var renderedSortMode: PostListSortMode?
     var events: [String] = []
+    var firstPageErrorMessages: [String] = []
 
     func showLoading() {
         showLoadingCount += 1
@@ -478,6 +534,15 @@ private final class SpyPostListView: PostListViewProtocol {
 
     func showError(message: String) {
         lastErrorMessage = message
+    }
+
+    func showFirstPageError(message: String) {
+        firstPageErrorMessages.append(message)
+        events.append("showFirstPageError")
+    }
+
+    func hideFirstPageError() {
+        events.append("hideFirstPageError")
     }
 
     func showDetailTestInput() {

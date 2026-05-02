@@ -10,6 +10,7 @@ import UIKit
 protocol PostTexturePageContainerViewDelegate: AnyObject {
     func postTexturePageContainerView(_ containerView: PostTexturePageContainerView, didSelectPostAt index: Int, category: PostListCategory)
     func postTexturePageContainerViewDidRequestRefresh(_ containerView: PostTexturePageContainerView, category: PostListCategory)
+    func postTexturePageContainerViewDidRequestFirstPageRetry(_ containerView: PostTexturePageContainerView, category: PostListCategory)
     func postTexturePageContainerView(_ containerView: PostTexturePageContainerView, didApproachBottomAt index: Int, totalCount: Int, category: PostListCategory)
     func postTexturePageContainerView(_ containerView: PostTexturePageContainerView, didScrollTo category: PostListCategory)
     func postTexturePageContainerViewDidRequestLeadingSideMenu(_ containerView: PostTexturePageContainerView)
@@ -114,6 +115,14 @@ final class PostTexturePageContainerView: UIView {
 
     func hideLoadingSkeleton(for category: PostListCategory) {
         hostViewControllers[category]?.hideLoadingSkeleton()
+    }
+
+    func showFirstPageError(message: String, for category: PostListCategory) {
+        hostViewControllers[category]?.showFirstPageError(message: message)
+    }
+
+    func hideFirstPageError(for category: PostListCategory) {
+        hostViewControllers[category]?.hideFirstPageError()
     }
 
     func showLoadingMore(for category: PostListCategory) {
@@ -280,11 +289,17 @@ extension PostTexturePageContainerView: PostTextureListHostViewControllerDelegat
         let category = viewController.category
         delegate?.postTexturePageContainerViewDidRequestRefresh(self, category: category)
     }
+
+    func postTextureListHostViewControllerDidRequestFirstPageRetry(_ viewController: PostTextureListHostViewController) {
+        let category = viewController.category
+        delegate?.postTexturePageContainerViewDidRequestFirstPageRetry(self, category: category)
+    }
 }
 
 protocol PostTextureListHostViewControllerDelegate: AnyObject {
     func postTextureListHostViewController(_ viewController: PostTextureListHostViewController, didSelectPostAt index: Int)
     func postTextureListHostViewControllerDidRequestRefresh(_ viewController: PostTextureListHostViewController)
+    func postTextureListHostViewControllerDidRequestFirstPageRetry(_ viewController: PostTextureListHostViewController)
     func postTextureListHostViewController(_ viewController: PostTextureListHostViewController, didApproachBottomAt index: Int, totalCount: Int)
 }
 
@@ -337,6 +352,16 @@ final class PostTextureListHostViewController: UIViewController {
         listView.hideLoadingSkeleton()
     }
 
+    func showFirstPageError(message: String) {
+        loadViewIfNeeded()
+        listView.showFirstPageError(message: message)
+    }
+
+    func hideFirstPageError() {
+        loadViewIfNeeded()
+        listView.hideFirstPageError()
+    }
+
     func showLoadingMore() {
         loadViewIfNeeded()
         listView.showLoadingMore()
@@ -370,6 +395,10 @@ extension PostTextureListHostViewController: PostTextureListViewDelegate {
 
     func postTextureListViewDidRequestRefresh(_ textureListView: PostTextureListView) {
         delegate?.postTextureListHostViewControllerDidRequestRefresh(self)
+    }
+
+    func postTextureListViewDidRequestFirstPageRetry(_ textureListView: PostTextureListView) {
+        delegate?.postTextureListHostViewControllerDidRequestFirstPageRetry(self)
     }
 
     func postTextureListView(_ textureListView: PostTextureListView, didApproachBottomAt index: Int, totalCount: Int) {

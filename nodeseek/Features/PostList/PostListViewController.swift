@@ -20,6 +20,7 @@ class PostListViewController: UIViewController {
     private var isSortToggleExpanded = false
     private let sideMenuViewController = PostListSideMenuViewController()
     private let menuButtonFeedbackGenerator = UIImpactFeedbackGenerator(style: .light)
+    private let categoryReselectFeedbackGenerator = UIImpactFeedbackGenerator(style: .light)
     
     var hasCompactTopButton: Bool {
         compactTopButton.superview != nil
@@ -217,7 +218,12 @@ class PostListViewController: UIViewController {
 
     @objc private func categoryButtonTapped(_ sender: CategoryTabButton) {
         guard let category = sender.category else { return }
-        guard category != selectedCategory else { return }
+        guard category != selectedCategory else {
+            categoryReselectFeedbackGenerator.impactOccurred()
+            pageContainerView.scrollToTop(for: selectedCategory, animated: false)
+            presenter.didReselectCategory(category)
+            return
+        }
         selectedCategory = category
         applySelectedCategory(category, syncPage: true, pageAnimated: true)
         presenter.didSelectCategory(category)
@@ -378,6 +384,14 @@ extension PostListViewController: PostListViewProtocol {
     func hideLoading() {
         pageContainerView.hideLoadingSkeleton(for: selectedCategory)
         loadingIndicator.stopAnimating()
+    }
+
+    func showFirstPageError(message: String) {
+        pageContainerView.showFirstPageError(message: message, for: selectedCategory)
+    }
+
+    func hideFirstPageError() {
+        pageContainerView.hideFirstPageError(for: selectedCategory)
     }
 
     func showRefreshing() {
@@ -583,6 +597,18 @@ extension PostListViewController: PostTexturePageContainerViewDelegate {
             presenter.didSelectCategory(category)
         }
         presenter.didPullToRefresh()
+    }
+
+    func postTexturePageContainerViewDidRequestFirstPageRetry(
+        _ containerView: PostTexturePageContainerView,
+        category: PostListCategory
+    ) {
+        if category != selectedCategory {
+            selectedCategory = category
+            applySelectedCategory(category, syncPage: false, pageAnimated: false)
+            presenter.didSelectCategory(category)
+        }
+        presenter.didRetryFirstPage()
     }
 
     func postTexturePageContainerView(_ containerView: PostTexturePageContainerView, didScrollTo category: PostListCategory) {

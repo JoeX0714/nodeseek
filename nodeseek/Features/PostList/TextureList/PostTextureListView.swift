@@ -11,6 +11,7 @@ import UIKit
 protocol PostTextureListViewDelegate: AnyObject {
     func postTextureListView(_ textureListView: PostTextureListView, didSelectPostAt index: Int)
     func postTextureListViewDidRequestRefresh(_ textureListView: PostTextureListView)
+    func postTextureListViewDidRequestFirstPageRetry(_ textureListView: PostTextureListView)
     func postTextureListView(_ textureListView: PostTextureListView, didApproachBottomAt index: Int, totalCount: Int)
 }
 
@@ -18,6 +19,7 @@ final class PostTextureListView: UIView {
     private enum DisplayMode {
         case content
         case skeleton
+        case firstPageError
     }
 
     weak var delegate: PostTextureListViewDelegate?
@@ -35,6 +37,49 @@ final class PostTextureListView: UIView {
         indicator.hidesWhenStopped = true
         indicator.translatesAutoresizingMaskIntoConstraints = false
         return indicator
+    }()
+
+    private let errorTitleLabel: UILabel = {
+        let label = UILabel()
+        label.text = "加载失败"
+        label.font = .preferredFont(forTextStyle: .headline)
+        label.textColor = .label
+        label.textAlignment = .center
+        label.adjustsFontForContentSizeCategory = true
+        return label
+    }()
+
+    private let errorMessageLabel: UILabel = {
+        let label = UILabel()
+        label.font = .preferredFont(forTextStyle: .subheadline)
+        label.textColor = .secondaryLabel
+        label.textAlignment = .center
+        label.numberOfLines = 0
+        label.adjustsFontForContentSizeCategory = true
+        return label
+    }()
+
+    private lazy var retryButton: UIButton = {
+        var configuration = UIButton.Configuration.filled()
+        configuration.title = "重试"
+        configuration.cornerStyle = .capsule
+        configuration.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 18, bottom: 8, trailing: 18)
+        let button = UIButton(type: .system)
+        button.configuration = configuration
+        button.accessibilityIdentifier = "post-list-first-page-retry-button"
+        button.addTarget(self, action: #selector(retryFirstPageTapped), for: .touchUpInside)
+        return button
+    }()
+
+    private lazy var errorStackView: UIStackView = {
+        let stack = UIStackView(arrangedSubviews: [errorTitleLabel, errorMessageLabel, retryButton])
+        stack.axis = .vertical
+        stack.alignment = .center
+        stack.spacing = 10
+        stack.isHidden = true
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.accessibilityIdentifier = "post-list-first-page-error"
+        return stack
     }()
 
     private lazy var loadMoreContainer: UIView = {
@@ -57,6 +102,7 @@ final class PostTextureListView: UIView {
     }
 
     func setItems(_ items: [PostListItem]) {
+        hideErrorView()
         if displayMode == .content, self.items == items {
             return
         }
@@ -90,6 +136,7 @@ final class PostTextureListView: UIView {
     }
 
     func showLoadingSkeleton() {
+        hideErrorView()
         guard displayMode != .skeleton else { return }
         displayMode = .skeleton
         skeletonRowCount = currentSkeletonRowCount()
@@ -100,6 +147,26 @@ final class PostTextureListView: UIView {
     func hideLoadingSkeleton() {
         guard displayMode == .skeleton else { return }
         displayMode = .content
+        tableNode.reloadData()
+    }
+
+    func showFirstPageError(message: String) {
+        displayMode = .firstPageError
+        items = []
+        hideLoadingMore()
+        hideRefreshing()
+        errorMessageLabel.text = message
+        errorStackView.isHidden = false
+        tableNode.reloadData()
+    }
+
+    func hideFirstPageError() {
+        guard displayMode == .firstPageError else {
+            hideErrorView()
+            return
+        }
+        displayMode = .content
+        hideErrorView()
         tableNode.reloadData()
     }
 
@@ -136,12 +203,22 @@ final class PostTextureListView: UIView {
         tableNode.view.translatesAutoresizingMaskIntoConstraints = false
 
         addSubview(tableNode.view)
+        addSubview(errorStackView)
         NSLayoutConstraint.activate([
             tableNode.view.leadingAnchor.constraint(equalTo: leadingAnchor),
             tableNode.view.trailingAnchor.constraint(equalTo: trailingAnchor),
             tableNode.view.topAnchor.constraint(equalTo: topAnchor),
-            tableNode.view.bottomAnchor.constraint(equalTo: bottomAnchor)
+            tableNode.view.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            errorStackView.centerXAnchor.constraint(equalTo: centerXAnchor),
+            errorStackView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            errorStackView.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 32),
+            errorStackView.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -32)
         ])
+    }
+
+    private func hideErrorView() {
+        errorStackView.isHidden = true
     }
 
     private func makeAppendIndexPaths(from oldItems: [PostListItem], to newItems: [PostListItem]) -> [IndexPath]? {
@@ -157,6 +234,10 @@ final class PostTextureListView: UIView {
 
     @objc private func handlePullToRefresh() {
         delegate?.postTextureListViewDidRequestRefresh(self)
+    }
+
+    @objc private func retryFirstPageTapped() {
+        delegate?.postTextureListViewDidRequestFirstPageRetry(self)
     }
 
     override func layoutSubviews() {
@@ -183,6 +264,8 @@ extension PostTextureListView: ASTableDataSource {
             return items.count
         case .skeleton:
             return skeletonRowCount
+        case .firstPageError:
+            return 0
         }
     }
 
@@ -196,6 +279,10 @@ extension PostTextureListView: ASTableDataSource {
         case .skeleton:
             return {
                 PostSummarySkeletonCellNode()
+            }
+        case .firstPageError:
+            return {
+                ASCellNode()
             }
         }
     }

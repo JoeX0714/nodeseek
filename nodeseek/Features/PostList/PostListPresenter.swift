@@ -59,6 +59,14 @@ class PostListPresenter: PostListPresenterProtocol {
         presentCurrentCategory(useCache: true)
     }
 
+    func didReselectCategory(_ category: PostListCategory) {
+        guard category == currentCategory else {
+            didSelectCategory(category)
+            return
+        }
+        reloadCurrentCategoryFirstPage()
+    }
+
     func didToggleSortMode() {
         currentSortMode = currentSortMode.toggled
         categoryStates = [:]
@@ -99,6 +107,7 @@ class PostListPresenter: PostListPresenterProtocol {
         view?.render(items: state.items)
         if state.isLoadingFirstPage {
             view?.showLoading()
+            view?.hideFirstPageError()
         } else {
             view?.hideLoading()
         }
@@ -134,11 +143,22 @@ class PostListPresenter: PostListPresenterProtocol {
 
         if category == currentCategory {
             view?.showLoading()
+            view?.hideFirstPageError()
             view?.hideRefreshing()
             view?.hideLoadingMore()
         }
 
         interactor.loadPosts(category: category, sortMode: currentSortMode)
+    }
+
+    private func reloadCurrentCategoryFirstPage() {
+        var state = state(for: currentCategory)
+        guard !state.isLoadingFirstPage else { return }
+        state = CategoryState()
+        categoryStates[currentCategory] = state
+        view?.render(items: [])
+        view?.hideFirstPageError()
+        loadFirstPage(for: currentCategory)
     }
 
     func didPullToRefresh() {
@@ -152,6 +172,10 @@ class PostListPresenter: PostListPresenterProtocol {
         categoryStates[currentCategory] = state
         view?.showRefreshing()
         interactor.loadPosts(category: currentCategory, sortMode: currentSortMode)
+    }
+
+    func didRetryFirstPage() {
+        reloadCurrentCategoryFirstPage()
     }
     
     func didSelectPost(at index: Int) {
@@ -205,6 +229,7 @@ extension PostListPresenter: PostListInteractorOutput {
 
         guard category == currentCategory else { return }
         view?.render(items: state.items)
+        view?.hideFirstPageError()
         view?.hideLoading()
         view?.hideRefreshing()
         view?.hideLoadingMore()
@@ -261,7 +286,11 @@ extension PostListPresenter: PostListInteractorOutput {
         view?.hideLoading()
         view?.hideRefreshing()
         view?.hideLoadingMore()
-        view?.showError(message: error)
+        if state.items.isEmpty {
+            view?.showFirstPageError(message: error)
+        } else {
+            view?.showError(message: error)
+        }
     }
 
     func didFailLoadMorePosts(
