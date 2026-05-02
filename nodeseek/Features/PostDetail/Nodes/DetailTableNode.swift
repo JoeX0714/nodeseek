@@ -340,6 +340,8 @@ private final class DetailTableScrollView: UIScrollView {
     private let onImageTapped: ([URL], Int) -> Void
     private let contentContainer = UIView()
     private let contentWidthConstraint: NSLayoutConstraint
+    private var cellWidthConstraints: [[NSLayoutConstraint]] = []
+    private var rowHeightConstraints: [NSLayoutConstraint] = []
 
     init(
         table: RenderedTableBlock,
@@ -360,8 +362,7 @@ private final class DetailTableScrollView: UIScrollView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        let naturalWidth = DetailTableLayout.columnWidths(for: table).reduce(0, +)
-        contentWidthConstraint.constant = max(naturalWidth, bounds.width)
+        applyTableLayout(for: bounds.width)
     }
 
     private func configureScrollView() {
@@ -410,10 +411,13 @@ private final class DetailTableScrollView: UIScrollView {
             rowStack.spacing = 0
             rowStack.alignment = .fill
             rowStack.distribution = .fill
-            rowStack.heightAnchor.constraint(
+            let rowHeightConstraint = rowStack.heightAnchor.constraint(
                 equalToConstant: rowHeights[safe: rowIndex] ?? DetailTableLayout.defaultRowHeight
-            ).isActive = true
+            )
+            rowHeightConstraint.isActive = true
+            rowHeightConstraints.append(rowHeightConstraint)
 
+            var widthConstraints: [NSLayoutConstraint] = []
             for columnIndex in columnWidths.indices {
                 let cell = row.cells[safe: columnIndex]
                 let cellView = DetailTableCellView(
@@ -423,10 +427,30 @@ private final class DetailTableScrollView: UIScrollView {
                     tableImageURLs: tableImageURLs,
                     onImageTapped: onImageTapped
                 )
-                cellView.widthAnchor.constraint(equalToConstant: columnWidths[columnIndex]).isActive = true
+                let widthConstraint = cellView.widthAnchor.constraint(equalToConstant: columnWidths[columnIndex])
+                widthConstraint.isActive = true
+                widthConstraints.append(widthConstraint)
                 rowStack.addArrangedSubview(cellView)
             }
+            cellWidthConstraints.append(widthConstraints)
             stack.addArrangedSubview(rowStack)
+        }
+    }
+
+    private func applyTableLayout(for viewportWidth: CGFloat) {
+        let columnWidths = DetailTableLayout.columnWidths(for: table, fittingWidth: viewportWidth)
+        let rowHeights = DetailTableLayout.rowHeights(for: table, columnWidths: columnWidths)
+        contentWidthConstraint.constant = max(columnWidths.reduce(0, +), viewportWidth)
+
+        for rowIndex in cellWidthConstraints.indices {
+            for columnIndex in cellWidthConstraints[rowIndex].indices {
+                guard let width = columnWidths[safe: columnIndex] else { continue }
+                cellWidthConstraints[rowIndex][columnIndex].constant = width
+            }
+        }
+
+        for rowIndex in rowHeightConstraints.indices {
+            rowHeightConstraints[rowIndex].constant = rowHeights[safe: rowIndex] ?? DetailTableLayout.defaultRowHeight
         }
     }
 }
@@ -471,6 +495,7 @@ private final class DetailTableCellView: UIView {
         if let text = cell?.text, text.isEmpty == false {
             let label = UILabel()
             label.numberOfLines = 0
+            label.lineBreakMode = .byCharWrapping
             label.font = isHeader
                 ? UIFont.preferredFont(forTextStyle: .subheadline).withWeight(.semibold)
                 : UIFont.preferredFont(forTextStyle: .subheadline)
@@ -564,17 +589,17 @@ enum DetailTableLayout {
 
     static func measure(table: RenderedTableBlock, constrainedSize: CGSize) -> CGSize {
         let width = resolvedWidth(constrainedSize.width)
-        let columnWidths = columnWidths(for: table)
+        let columnWidths = columnWidths(for: table, fittingWidth: width)
         let rowHeights = rowHeights(for: table, columnWidths: columnWidths)
         let height = max(rowHeights.reduce(0, +), defaultRowHeight)
         return CGSize(width: width, height: ceil(height))
     }
 
-    static func columnWidths(for table: RenderedTableBlock) -> [CGFloat] {
+    static func columnWidths(for table: RenderedTableBlock, fittingWidth width: CGFloat? = nil) -> [CGFloat] {
         let columnCount = table.rows.map(\.cells.count).max() ?? 0
         guard columnCount > 0 else { return [] }
 
-        return (0..<columnCount).map { columnIndex in
+        let naturalWidths = (0..<columnCount).map { columnIndex in
             let maxTextLength = table.rows
                 .compactMap { $0.cells[safe: columnIndex]?.text.count }
                 .max() ?? 0
@@ -583,13 +608,23 @@ enum DetailTableLayout {
             let minimumWidth = containsImage ? Layout.imageColumnWidth : Layout.minColumnWidth
             return min(max(estimatedWidth, minimumWidth), Layout.maxColumnWidth)
         }
+        guard let width, width.isFinite, width > 0 else { return naturalWidths }
+
+        let naturalTotal = naturalWidths.reduce(0, +)
+        guard naturalTotal > 0, naturalTotal < width else { return naturalWidths }
+
+        let extraWidth = width - naturalTotal
+        return naturalWidths.map { columnWidth in
+            columnWidth + extraWidth * (columnWidth / naturalTotal)
+        }
     }
 
     static func rowHeights(for table: RenderedTableBlock, columnWidths: [CGFloat]) -> [CGFloat] {
         table.rows.map { row in
             let estimatedHeight = row.cells.enumerated().map { columnIndex, cell in
-                let textHeight = estimatedTextHeight(
+                let textHeight = measuredTextHeight(
                     for: cell.text,
+                    isHeader: row.isHeader || cell.isHeader,
                     columnWidth: columnWidths[safe: columnIndex] ?? Layout.minColumnWidth
                 )
                 if cell.imageURL != nil {
@@ -604,17 +639,25 @@ enum DetailTableLayout {
         }
     }
 
-    private static func estimatedTextHeight(for text: String, columnWidth: CGFloat) -> CGFloat {
+    private static func measuredTextHeight(for text: String, isHeader: Bool, columnWidth: CGFloat) -> CGFloat {
         guard text.isEmpty == false else { return 0 }
 
         let usableWidth = max(columnWidth - Layout.horizontalPadding, 1)
-        let charactersPerLine = max(Int(usableWidth / Layout.estimatedCharacterWidth), 1)
-        let explicitLines = text.split(separator: "\n", omittingEmptySubsequences: false)
-        let lineCount = explicitLines.reduce(0) { partialResult, line in
-            let wrappedLineCount = max(Int(ceil(Double(line.count) / Double(charactersPerLine))), 1)
-            return partialResult + wrappedLineCount
-        }
-        return CGFloat(max(lineCount, 1)) * Layout.estimatedLineHeight
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineBreakMode = .byCharWrapping
+        let font = isHeader
+            ? UIFont.preferredFont(forTextStyle: .subheadline).withWeight(.semibold)
+            : UIFont.preferredFont(forTextStyle: .subheadline)
+        let bounds = (text as NSString).boundingRect(
+            with: CGSize(width: usableWidth, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: [
+                .font: font,
+                .paragraphStyle: paragraphStyle
+            ],
+            context: nil
+        )
+        return max(ceil(bounds.height), Layout.estimatedLineHeight)
     }
 
     private static func resolvedWidth(_ width: CGFloat) -> CGFloat {

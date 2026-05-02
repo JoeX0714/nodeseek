@@ -44,7 +44,7 @@ struct PostListViewControllerTests {
         UIView.setAnimationsEnabled(animationsWereEnabled)
 
         #expect(presenter.toggleSortCount == 1)
-        #expect(button.title(for: .normal) == "按回复时间排序")
+        #expect(button.title(for: .normal) == "回复时间优先")
         #expect(button.alpha == 1)
         #expect(button.bounds.width >= 168)
         #expect(button.configuration?.titleTextAttributesTransformer != nil)
@@ -52,7 +52,7 @@ struct PostListViewControllerTests {
         #expect(abs(button.frame.maxX - viewController.view.bounds.maxX) < 0.5)
 
         viewController.renderSortMode(.postTime)
-        #expect(button.title(for: .normal) == "按发帖时间排序")
+        #expect(button.title(for: .normal) == "发帖时间优先")
         #expect(button.bounds.width >= 168)
         #expect(button.intrinsicContentSize.width <= button.bounds.width)
     }

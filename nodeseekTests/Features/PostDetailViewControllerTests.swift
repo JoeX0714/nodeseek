@@ -714,6 +714,25 @@ struct PostDetailViewControllerTests {
         #expect(layout.size.height > 0)
     }
 
+    @Test func tableLayoutExpandsNarrowColumnsToFillViewportWidth() {
+        let table = RenderedTableBlock(rows: [
+            .init(cells: [
+                .init(text: "功能", isHeader: true),
+                .init(text: "说明", isHeader: true)
+            ], isHeader: true),
+            .init(cells: [
+                .init(text: "验证", isHeader: false),
+                .init(text: "本地题库", isHeader: false)
+            ], isHeader: false)
+        ])
+
+        let naturalWidth = DetailTableLayout.columnWidths(for: table).reduce(0, +)
+        let expandedWidth = DetailTableLayout.columnWidths(for: table, fittingWidth: 360).reduce(0, +)
+
+        #expect(naturalWidth < 360)
+        #expect(abs(expandedWidth - 360) < 0.5)
+    }
+
     @Test func tableNodeAllocatesStableHeightForImageCells() throws {
         let imageURL = try #require(URL(string: "https://github.com/xykt/NetQuality/raw/main/res/v4_cn.png"))
         let table = RenderedTableBlock(rows: [
@@ -736,7 +755,7 @@ struct PostDetailViewControllerTests {
     @Test func tableNodeExpandsHeightForExplicitTextLines() {
         let singleLineTable = RenderedTableBlock(rows: [
             .init(cells: [
-                .init(text: "第一行 第二行 第三行", isHeader: false)
+                .init(text: "第一行", isHeader: false)
             ], isHeader: false)
         ])
         let multiLineTable = RenderedTableBlock(rows: [
@@ -755,6 +774,40 @@ struct PostDetailViewControllerTests {
         ).height
 
         #expect(multiLineHeight > singleLineHeight)
+    }
+
+    @Test func tableNodeWrapsLongChineseCellTextWithoutTailTruncation() {
+        let table = RenderedTableBlock(rows: [
+            .init(cells: [
+                .init(text: "核心功能", isHeader: true),
+                .init(text: "说明", isHeader: true)
+            ], isHeader: true),
+            .init(cells: [
+                .init(text: "⚡ 0 延迟验证", isHeader: false),
+                .init(
+                    text: "采用本地精选常识题库。秒开秒验，彻底告别网络超时与接口报错，验证成功率 100%。",
+                    isHeader: false
+                )
+            ], isHeader: false)
+        ])
+        let node = DetailTableNode(table: table, onImageTapped: { _, _ in })
+        _ = node.layoutThatFits(ASSizeRange(
+            min: .zero,
+            max: CGSize(width: 320, height: CGFloat.greatestFiniteMagnitude)
+        ))
+        node.view.frame = CGRect(x: 0, y: 0, width: 320, height: 200)
+        node.view.setNeedsLayout()
+        node.view.layoutIfNeeded()
+
+        let cellLabels = node.view.allSubviews(of: UILabel.self)
+        let longTextLabel = cellLabels.first { $0.text?.contains("秒开秒验") == true }
+
+        #expect(longTextLabel?.numberOfLines == 0)
+        #expect(longTextLabel?.lineBreakMode == .byCharWrapping)
+        #expect(DetailTableLayout.rowHeights(
+            for: table,
+            columnWidths: DetailTableLayout.columnWidths(for: table)
+        )[1] > 70)
     }
 
     @Test func codeBlockNodeKeepsViewportWidthForLongLines() {
@@ -1590,6 +1643,19 @@ private extension UIView {
         }
 
         return nil
+    }
+
+    func allSubviews<T: UIView>(of type: T.Type) -> [T] {
+        var result: [T] = []
+        if let matched = self as? T {
+            result.append(matched)
+        }
+
+        for subview in subviews {
+            result.append(contentsOf: subview.allSubviews(of: type))
+        }
+
+        return result
     }
 
     func firstButton(accessibilityIdentifier: String) -> UIButton? {

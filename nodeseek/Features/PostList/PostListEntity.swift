@@ -74,9 +74,9 @@ enum PostListSortMode: String, Sendable {
     var accessibilityTitle: String {
         switch self {
         case .postTime:
-            return "按发帖时间排序"
+            return "发帖时间优先"
         case .replyTime:
-            return "按回复时间排序"
+            return "回复时间优先"
         }
     }
 
