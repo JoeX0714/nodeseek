@@ -271,12 +271,14 @@ struct KannaNodeSeekParser: NodeSeekParser {
 
     func parsePostDetail(html: String, url: URL) throws -> PostDetail {
         let document = try HTML(html: html, encoding: .utf8)
+        let restrictedNotice = postDetailRestrictedNotice(in: document)
 
-        let title = document.at_xpath(XPathRules.postDetailTitleLink)?.text?.normalizedNonEmpty
+        let parsedTitle = document.at_xpath(XPathRules.postDetailTitleLink)?.text?.normalizedNonEmpty
             ?? document.at_xpath(XPathRules.postDetailTitleFallback)?.text?.normalizedNonEmpty
             ?? document.at_xpath("//meta[@property='og:title']")?["content"]?.trimmedNonEmpty
             ?? document.at_xpath("//meta[@name='twitter:title']")?["content"]?.trimmedNonEmpty
             ?? document.at_xpath("//title")?.text?.normalizedNonEmpty
+        let title = Self.isGenericPostDetailTitle(parsedTitle) ? restrictedNotice : parsedTitle
 
         guard let title else {
             throw NodeSeekParserError.postDetailNotFound
@@ -301,6 +303,7 @@ struct KannaNodeSeekParser: NodeSeekParser {
             .text?
             .normalizedNonEmpty
             .flatMap(Self.firstInteger(in:))
+            ?? restrictedNotice.flatMap(Self.firstInteger(in:))
 
         let comments = document.xpath(XPathRules.postDetailComments).compactMap { item -> Comment? in
             parseComment(item)
@@ -329,11 +332,15 @@ struct KannaNodeSeekParser: NodeSeekParser {
             return contentHTML
         }
 
-        if let notice = document.at_xpath(XPathRules.postDetailLoginRequiredNotice)?.text?.normalizedNonEmpty {
+        if let notice = postDetailRestrictedNotice(in: document) {
             return notice
         }
 
         return ""
+    }
+
+    private func postDetailRestrictedNotice(in document: HTMLDocument) -> String? {
+        document.at_xpath(XPathRules.postDetailRestrictedNotice)?.text?.normalizedNonEmpty
     }
 
     func parseCheckInState(html: String, pageURL: URL) throws -> CheckInState {
@@ -378,6 +385,11 @@ struct KannaNodeSeekParser: NodeSeekParser {
         }
         
         return Int(text[range])
+    }
+
+    private static func isGenericPostDetailTitle(_ title: String?) -> Bool {
+        guard let title else { return false }
+        return title == "NodeSeek"
     }
 
     private static func replyCount(in text: String) -> Int? {

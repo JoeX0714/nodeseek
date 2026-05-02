@@ -345,6 +345,38 @@ struct KannaNodeSeekParserTests {
         #expect(detail.comments.isEmpty)
     }
 
+    @Test func parsesReadingLevelRequiredNoticeFromBodyLeftFallback() throws {
+        let html = """
+        <html data-server-rendered="true">
+        <head><title>NodeSeek</title></head>
+        <body class="bg1 light-layout">
+            <header></header>
+            <section id="nsk-frame">
+                <div id="nsk-body" class="nsk-container">
+                    <div id="nsk-body-left">
+                        <div style="min-height:300px;display:flex;align-items:center;justify-content:center;font-size:2rem;">
+                            <div style="line-height: 1.25;"> 查看本帖需要Lv2，您的权限不足😑，请赚取🍗升级您的用户等级 </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </body>
+        </html>
+        """
+        let parser = KannaNodeSeekParser(baseURL: URL(string: "https://www.nodeseek.com")!)
+
+        let detail = try parser.parsePostDetail(
+            html: html,
+            url: URL(string: "https://www.nodeseek.com/post-704286-1")!
+        )
+
+        #expect(detail.id == "704286")
+        #expect(detail.title == "查看本帖需要Lv2，您的权限不足😑，请赚取🍗升级您的用户等级")
+        #expect(detail.requiredReadingLevel == 2)
+        #expect(detail.contentHTML == "查看本帖需要Lv2，您的权限不足😑，请赚取🍗升级您的用户等级")
+        #expect(detail.comments.isEmpty)
+    }
+
     @Test func parsesPostDetailTitleLinkBeforeRequiredReadingLevelBadge() throws {
         let html = """
         <div id="nsk-body" class="nsk-container">
