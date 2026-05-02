@@ -106,6 +106,8 @@ extension PostDetailViewController: ASTableDataSource, ASTableDelegate {
                 return { ASCellNode() }
             }
             let renderedContent = headerRenderedContent
+            let imageSizeCache = detailImageSizeCache
+            let imageSizeProvider = Self.makeImageSizeProvider(from: imageSizeCache)
             return { [weak self] in
                 PostBodyCellNode(
                     content: header,
@@ -121,6 +123,10 @@ extension PostDetailViewController: ASTableDataSource, ASTableDelegate {
                     },
                     onTextLayoutInvalidated: {
                         self?.scheduleAttachmentLayoutRefresh()
+                    },
+                    imageSizeProvider: imageSizeProvider,
+                    onImageSizeResolved: { url, size in
+                        self?.cacheDetailImageSize(size, for: url)
                     }
                 )
             }
@@ -139,6 +145,8 @@ extension PostDetailViewController: ASTableDataSource, ASTableDelegate {
 
             let comment = comments[commentIndex]
             let renderedBody = commentRenderedCache[comment.id]
+            let imageSizeCache = detailImageSizeCache
+            let imageSizeProvider = Self.makeImageSizeProvider(from: imageSizeCache)
             return { [weak self] in
                 CommentCellNode(
                     comment: comment,
@@ -160,9 +168,25 @@ extension PostDetailViewController: ASTableDataSource, ASTableDelegate {
                     },
                     onTextLayoutInvalidated: {
                         self?.scheduleAttachmentLayoutRefresh()
+                    },
+                    imageSizeProvider: imageSizeProvider,
+                    onImageSizeResolved: { url, size in
+                        self?.cacheDetailImageSize(size, for: url)
                     }
                 )
             }
+        }
+    }
+
+    private static func makeImageSizeProvider(from cache: [URL: CGSize]) -> (URL) -> CGSize? {
+        { url in
+            guard let resolvedURL = AvatarImageLoader.resolveImageURL(url),
+                  let size = cache[resolvedURL],
+                  size.width > 0,
+                  size.height > 0 else {
+                return nil
+            }
+            return size
         }
     }
 

@@ -16,7 +16,7 @@ import UIKit
 @Suite(.serialized)
 @MainActor
 struct PostDetailViewControllerTests {
-    @Test func startsWithSkeletonRowsEvenWhenInitialHeaderExists() throws {
+    @Test func startsWithSkeletonRowsEvenWhenInitialHeaderExists() async throws {
         let post = PostSummary(
             id: "703863",
             title: "列表标题",
@@ -51,11 +51,12 @@ struct PostDetailViewControllerTests {
                 Comment(id: "2", authorName: "b", avatarURL: nil, floorText: "#2", createdAtText: "2min ago", contentHTML: "<p>评论二</p>")
             ],
         ))
+        await waitForDetailContent(in: viewController, expectedRowCount: 4)
 
         #expect(viewController.testRowCount(inSection: 0) == 4)
     }
 
-    @Test func showsSkeletonRowsWhileInitialDetailIsLoading() throws {
+    @Test func showsSkeletonRowsWhileInitialDetailIsLoading() async throws {
         let presenter = SpyPostDetailPresenter()
         let viewController = PostDetailViewController(presenter: presenter)
 
@@ -74,10 +75,41 @@ struct PostDetailViewControllerTests {
             contentHTML: "<p>正文</p>",
             comments: [],
         ))
+        await waitForDetailContent(in: viewController, expectedRowCount: 1)
+
         #expect(viewController.testRowCount(inSection: 0) == 1)
     }
 
-    @Test func detailWithPaginationShowsPageScrubberOverlayWithoutPagerRows() throws {
+    @Test func initialDetailKeepsSkeletonUntilBodyRenderCompletes() async throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter)
+
+        viewController.loadViewIfNeeded()
+        viewController.showLoading()
+        viewController.render(detail: PostDetail(
+            id: "703863",
+            title: "详情标题",
+            authorName: "ipv4",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "<p>正文</p>",
+            comments: [
+                Comment(id: "1", authorName: "a", avatarURL: nil, floorText: "#1", createdAtText: "1min ago", contentHTML: "<p>评论一</p>")
+            ],
+        ))
+
+        #expect(viewController.testRowCount(inSection: 0) == 5)
+
+        await waitUntil {
+            viewController.testRowCount(inSection: 0) == 3
+                && viewController.headerRenderedContent != nil
+                && viewController.renderedCommentIDs.contains("1")
+        }
+
+        #expect(viewController.testRowCount(inSection: 0) == 3)
+    }
+
+    @Test func detailWithPaginationShowsPageScrubberOverlayWithoutPagerRows() async throws {
         let presenter = SpyPostDetailPresenter()
         let viewController = PostDetailViewController(presenter: presenter)
 
@@ -104,6 +136,7 @@ struct PostDetailViewControllerTests {
                 nextPage: 2
             )
         ))
+        await waitForDetailContent(in: viewController, expectedRowCount: 4)
 
         _ = try #require(viewController.view.firstSubview(of: UITableView.self))
         #expect(viewController.testRowCount(inSection: 0) == 4)
@@ -222,7 +255,7 @@ struct PostDetailViewControllerTests {
         #expect(view.point(inside: CGPoint(x: 57, y: 320), with: nil) == true)
     }
 
-    @Test func selectingPageThroughDetailScrubberCallsPresenter() throws {
+    @Test func selectingPageThroughDetailScrubberCallsPresenter() async throws {
         let presenter = SpyPostDetailPresenter()
         let viewController = PostDetailViewController(presenter: presenter)
 
@@ -248,6 +281,7 @@ struct PostDetailViewControllerTests {
                 nextPage: 2
             )
         ))
+        await waitForDetailContent(in: viewController)
 
         let scrubber = try #require(viewController.view.firstSubview(of: PageScrubberView.self))
         scrubber.frame = CGRect(x: 0, y: 0, width: 58, height: 220)
@@ -258,7 +292,7 @@ struct PostDetailViewControllerTests {
         #expect(presenter.selectedPages == [2])
     }
 
-    @Test func renderingOtherPageScrollsFirstCommentToTop() throws {
+    @Test func renderingOtherPageScrollsFirstCommentToTop() async throws {
         let presenter = SpyPostDetailPresenter()
         let viewController = PostDetailViewController(presenter: presenter)
 
@@ -284,6 +318,7 @@ struct PostDetailViewControllerTests {
                 nextPage: 2
             )
         ))
+        await waitForDetailContent(in: viewController)
 
         viewController.render(detail: PostDetail(
             id: "703863",
@@ -310,7 +345,7 @@ struct PostDetailViewControllerTests {
         #expect(viewController.testPendingScrollRow() == 2)
     }
 
-    @Test func pageLoadingKeepsHeaderAndShowsCommentSkeletonRows() throws {
+    @Test func pageLoadingKeepsHeaderAndShowsCommentSkeletonRows() async throws {
         let presenter = SpyPostDetailPresenter()
         let viewController = PostDetailViewController(presenter: presenter)
 
@@ -337,6 +372,7 @@ struct PostDetailViewControllerTests {
                 nextPage: 2
             )
         ))
+        await waitForDetailContent(in: viewController)
 
         viewController.showPageLoading()
 
@@ -344,7 +380,7 @@ struct PostDetailViewControllerTests {
         #expect(viewController.testHeaderContent()?.contentHTML == "<p>原帖正文</p>")
     }
 
-    @Test func renderingOtherPagePreservesExistingHeaderContent() throws {
+    @Test func renderingOtherPagePreservesExistingHeaderContent() async throws {
         let presenter = SpyPostDetailPresenter()
         let viewController = PostDetailViewController(presenter: presenter)
 
@@ -370,6 +406,7 @@ struct PostDetailViewControllerTests {
                 nextPage: 2
             )
         ))
+        await waitForDetailContent(in: viewController)
 
         viewController.render(detail: PostDetail(
             id: "703863",
@@ -397,7 +434,50 @@ struct PostDetailViewControllerTests {
         #expect(viewController.testHeaderContent()?.contentHTML == "<p>原帖正文</p>")
     }
 
-    @Test func renderingOtherPageKeepsPaginationWhenParserMissesPager() throws {
+    @Test func refreshingSamePageReusesRenderedContentWhenOnlyMetadataChanges() async throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter)
+        let detail = PostDetail(
+            id: "703863",
+            title: "详情标题",
+            authorName: "ipv4",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "<p>原帖正文</p>",
+            comments: [
+                Comment(id: "1", authorName: "a", avatarURL: nil, floorText: "#1", createdAtText: "1min ago", contentHTML: "<p>评论一</p>")
+            ],
+            page: 1
+        )
+
+        viewController.loadViewIfNeeded()
+        viewController.render(detail: detail)
+        await waitForDetailContent(in: viewController)
+        let headerCache = [RenderedContentBlock.unsupported(reason: "cached-header")]
+        let commentCache = [RenderedContentBlock.unsupported(reason: "cached-comment")]
+        viewController.headerRenderedContent = headerCache
+        viewController.commentRenderedCache["1"] = commentCache
+        viewController.renderedCommentIDs.insert("1")
+
+        viewController.render(detail: PostDetail(
+            id: "703863",
+            title: "详情标题",
+            authorName: "ipv4",
+            avatarURL: nil,
+            metadataText: "1 分钟前",
+            contentHTML: "<p>原帖正文</p>",
+            comments: [
+                Comment(id: "1", authorName: "a", avatarURL: nil, floorText: "#1", createdAtText: "2min ago", contentHTML: "<p>评论一</p>")
+            ],
+            page: 1
+        ))
+
+        #expect(viewController.headerRenderedContent?.testUnsupportedReasons() == ["cached-header"])
+        #expect(viewController.commentRenderedCache["1"]?.testUnsupportedReasons() == ["cached-comment"])
+        #expect(viewController.renderedCommentIDs.contains("1"))
+    }
+
+    @Test func renderingOtherPageKeepsPaginationWhenParserMissesPager() async throws {
         let presenter = SpyPostDetailPresenter()
         let viewController = PostDetailViewController(presenter: presenter)
 
@@ -423,6 +503,7 @@ struct PostDetailViewControllerTests {
                 nextPage: 2
             )
         ))
+        await waitForDetailContent(in: viewController)
 
         viewController.render(detail: PostDetail(
             id: "703863",
@@ -757,7 +838,7 @@ struct PostDetailViewControllerTests {
         #expect(anchorID == "0")
     }
 
-    @Test func currentPageAnchorOneTargetsFirstCommentInsteadOfHeader() throws {
+    @Test func currentPageAnchorOneTargetsFirstCommentInsteadOfHeader() async throws {
         let presenter = SpyPostDetailPresenter()
         let viewController = PostDetailViewController(presenter: presenter)
         viewController.loadViewIfNeeded()
@@ -775,6 +856,7 @@ struct PostDetailViewControllerTests {
             page: 1,
             pagination: nil
         ))
+        await waitForDetailContent(in: viewController)
 
         #expect(viewController.testCurrentPageAnchorRow(for: "0") == 0)
         #expect(viewController.testCurrentPageAnchorRow(for: "1") == 2)
@@ -924,6 +1006,41 @@ struct PostDetailViewControllerTests {
 
         #expect(didUpdate)
         #expect(updatedHeight > initialHeight)
+    }
+
+    @Test func richTextNodeUsesCachedAttachmentSizeBeforeImageReloads() throws {
+        let imageURL = try #require(URL(string: "https://i.111666.best/image/network.webp"))
+        let blocks = DTCoreTextHTMLContentRenderer().render(
+            fragment: "<p>配图<img src=\"\(imageURL.absoluteString)\" alt=\"image\">正文</p>",
+            baseURL: URL(string: "https://www.nodeseek.com")!,
+            maxImageWidth: 320
+        )
+        let attributedText = try #require(blocks.compactMap { block -> NSAttributedString? in
+            guard case .text(let text) = block else { return nil }
+            return text
+        }.first)
+        let constrainedSize = ASSizeRange(
+            min: .zero,
+            max: CGSize(width: 320, height: CGFloat.greatestFiniteMagnitude)
+        )
+        let uncachedNode = DetailRichTextNode(
+            attributedText: attributedText,
+            onImageTapped: { _, _ in },
+            onLayoutInvalidated: {}
+        )
+        let cachedNode = DetailRichTextNode(
+            attributedText: attributedText,
+            imageSizeProvider: { url in
+                url == imageURL ? CGSize(width: 1200, height: 800) : nil
+            },
+            onImageTapped: { _, _ in },
+            onLayoutInvalidated: {}
+        )
+
+        let uncachedHeight = uncachedNode.layoutThatFits(constrainedSize).size.height
+        let cachedHeight = cachedNode.layoutThatFits(constrainedSize).size.height
+
+        #expect(cachedHeight > uncachedHeight)
     }
 
     @Test func rendererSplitsWideBlockImageBeforeFollowingText() throws {
@@ -1145,6 +1262,26 @@ struct PostDetailViewControllerTests {
         #expect(initialLayout.height == 160)
         #expect(loadedLayout.width == 320)
         #expect(abs(loadedLayout.height - 214) < 0.01)
+    }
+
+    @Test func imageBlockNodeUsesCachedImageSizeForInitialMeasurement() throws {
+        let imageURL = try #require(URL(string: "https://i.111666.best/image/network.webp"))
+        let node = DetailImageBlockNode(
+            imageBlock: RenderedImageBlock(url: imageURL, altText: nil),
+            imageURLs: [imageURL],
+            imageIndex: 0,
+            initialImageSize: CGSize(width: 1200, height: 800),
+            onImageTapped: { _, _ in },
+            onLayoutInvalidated: {}
+        )
+
+        let layout = node.layoutThatFits(ASSizeRange(
+            min: .zero,
+            max: CGSize(width: 320, height: CGFloat.greatestFiniteMagnitude)
+        ))
+
+        #expect(layout.size.width == 320)
+        #expect(abs(layout.size.height - 214) < 0.01)
     }
 
     @Test func imageBlockUsesRealAspectRatioHeightForVeryWideImages() {
@@ -1414,6 +1551,17 @@ private extension NSAttributedString {
     }
 }
 
+private extension Array where Element == RenderedContentBlock {
+    func testUnsupportedReasons() -> [String] {
+        compactMap { block in
+            if case .unsupported(let reason) = block {
+                return reason
+            }
+            return nil
+        }
+    }
+}
+
 private extension UIView {
     func firstButton(accessibilityLabel: String) -> UIButton? {
         if let button = self as? UIButton, button.accessibilityLabel == accessibilityLabel {
@@ -1510,4 +1658,34 @@ private extension PostDetailViewController {
     func testPendingScrollRow() -> Int? {
         Mirror(reflecting: self).children.first { $0.label == "pendingScrollToRow" }?.value as? Int
     }
+}
+
+@MainActor
+private func waitForDetailContent(
+    in viewController: PostDetailViewController,
+    expectedRowCount: Int? = nil
+) async {
+    let didReveal = await waitUntil(timeout: 2) {
+        guard viewController.hasRenderedDetailContent else { return false }
+        guard let expectedRowCount else { return true }
+        return viewController.testRowCount(inSection: 0) == expectedRowCount
+    }
+    #expect(didReveal)
+}
+
+@discardableResult
+@MainActor
+private func waitUntil(
+    timeout: TimeInterval = 1,
+    pollInterval: UInt64 = 20_000_000,
+    condition: @MainActor () -> Bool
+) async -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+        if condition() {
+            return true
+        }
+        try? await Task.sleep(nanoseconds: pollInterval)
+    }
+    return false
 }

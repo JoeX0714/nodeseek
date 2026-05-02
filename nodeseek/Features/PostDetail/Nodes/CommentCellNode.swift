@@ -88,7 +88,9 @@ final class CommentCellNode: ASCellNode {
         onAuthorTapped: @escaping (URL) -> Void = { _ in },
         onReplyTapped: @escaping (Comment) -> Void = { _ in },
         onQuoteTapped: @escaping (Comment) -> Void = { _ in },
-        onTextLayoutInvalidated: @escaping () -> Void
+        onTextLayoutInvalidated: @escaping () -> Void,
+        imageSizeProvider: @escaping (URL) -> CGSize? = { _ in nil },
+        onImageSizeResolved: @escaping (URL, CGSize) -> Void = { _, _ in }
     ) {
         self.comment = comment
         self.onImageTapped = onImageTapped
@@ -101,7 +103,9 @@ final class CommentCellNode: ASCellNode {
             from: renderedBody ?? [],
             onImageTapped: onImageTapped,
             onLinkTapped: onLinkTapped,
-            onTextLayoutInvalidated: onTextLayoutInvalidated
+            onTextLayoutInvalidated: onTextLayoutInvalidated,
+            imageSizeProvider: imageSizeProvider,
+            onImageSizeResolved: onImageSizeResolved
         )
         super.init()
         automaticallyManagesSubnodes = true

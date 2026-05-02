@@ -10,16 +10,23 @@ import UIKit
 
 final class DetailImageBlockNode: ASDisplayNode {
     private let onLayoutInvalidated: () -> Void
-    private var loadedImageSize: CGSize = .zero
+    private let onImageSizeResolved: (URL, CGSize) -> Void
+    private let imageURL: URL
+    private var loadedImageSize: CGSize
 
     init(
         imageBlock: RenderedImageBlock,
         imageURLs: [URL],
         imageIndex: Int,
+        initialImageSize: CGSize = .zero,
         onImageTapped: @escaping ([URL], Int) -> Void,
+        onImageSizeResolved: @escaping (URL, CGSize) -> Void = { _, _ in },
         onLayoutInvalidated: @escaping () -> Void
     ) {
         self.onLayoutInvalidated = onLayoutInvalidated
+        self.onImageSizeResolved = onImageSizeResolved
+        self.imageURL = imageBlock.url
+        self.loadedImageSize = initialImageSize.width > 0 && initialImageSize.height > 0 ? initialImageSize : .zero
         super.init()
         setViewBlock { [weak self] in
             DetailImageBlockView(
@@ -47,6 +54,7 @@ final class DetailImageBlockNode: ASDisplayNode {
         guard imageSize.width > 0, imageSize.height > 0 else { return }
         let previousSize = loadedImageSize
         loadedImageSize = imageSize
+        onImageSizeResolved(imageURL, imageSize)
         let previousLayout = DetailImageBlockLayout.presentationSize(
             originalSize: previousSize,
             maxWidth: calculatedSize.width

@@ -38,6 +38,7 @@ extension PostDetailViewController: PostDetailViewProtocol {
     }
 
     func showError(message: String) {
+        cancelPendingInitialContentReveal()
         hideLoadingSkeleton()
         let alert = UIAlertController(title: "错误", message: message, preferredStyle: .alert)
         pageLoadingTargetPage = nil
@@ -80,24 +81,53 @@ extension PostDetailViewController: PostDetailViewProtocol {
         title = "详情"
         loginButton.isHidden = true
         showsReplyEntry = true
-        let shouldScrollToTop = hasRenderedDetailContent && detail.page != currentPage
+        let targetPage = max(1, detail.page)
+        if shouldPrepareInitialContentReveal {
+            prepareInitialContentReveal(for: detail, targetPage: targetPage)
+            return
+        }
+        cancelPendingInitialContentReveal()
+        let shouldScrollToTop = hasRenderedDetailContent && targetPage != currentPage
         let existingHeaderContent = currentHeaderContent
         let existingRenderedContent = headerRenderedContent
+        var existingComments: [String: Comment] = [:]
+        for comment in comments {
+            existingComments[comment.id] = comment
+        }
+        let existingCommentRenderedCache = commentRenderedCache
+        let existingRenderedCommentIDs = renderedCommentIDs
+        let isSamePageRefresh = hasRenderedDetailContent
+            && targetPage == currentPage
+            && existingHeaderContent?.postID == detail.id
+        let nextHeaderContent = PostDetailHeaderContent(detail: detail)
+        let canReuseHeaderRender = isSamePageRefresh
+            && existingHeaderContent?.contentHTML == nextHeaderContent.contentHTML
+            && existingRenderedContent != nil
         let shouldPreserveHeader = hasRenderedDetailContent
-            && detail.page != 1
+            && targetPage != 1
             && existingHeaderContent?.postID == detail.id
             && existingHeaderContent?.contentHTML.isEmpty == false
-        currentPage = max(1, detail.page)
+        currentPage = targetPage
         pageLoadingTargetPage = nil
         renderGeneration += 1
         hasRenderedDetailContent = true
         displayMode = .content
-        let headerContent = shouldPreserveHeader ? existingHeaderContent! : PostDetailHeaderContent(detail: detail)
-        configureHeader(headerContent, renderedContent: shouldPreserveHeader ? existingRenderedContent : nil)
+        let headerContent = shouldPreserveHeader ? existingHeaderContent! : nextHeaderContent
+        let renderedHeaderContent = (shouldPreserveHeader || canReuseHeaderRender) ? existingRenderedContent : nil
+        configureHeader(headerContent, renderedContent: renderedHeaderContent)
         pagination = detail.pagination ?? (shouldPreserveHeader ? fallbackPagination(from: pagination, currentPage: detail.page) : nil)
         comments = detail.comments
-        commentRenderedCache.removeAll(keepingCapacity: true)
-        renderedCommentIDs.removeAll(keepingCapacity: true)
+        if isSamePageRefresh {
+            preserveRenderedCommentCache(
+                previousComments: existingComments,
+                previousCache: existingCommentRenderedCache,
+                previousRenderedIDs: existingRenderedCommentIDs,
+                nextComments: detail.comments
+            )
+        } else {
+            commentRenderedCache.removeAll(keepingCapacity: true)
+            renderedCommentIDs.removeAll(keepingCapacity: true)
+        }
         commentRenderInFlight.removeAll(keepingCapacity: true)
         updatePageScrubber(isLoading: false)
         reloadTableData()
@@ -115,11 +145,149 @@ extension PostDetailViewController: PostDetailViewProtocol {
                 )
             }
         }
-        if shouldPreserveHeader == false || existingRenderedContent == nil {
+        if renderedHeaderContent == nil {
             scheduleHeaderRender(for: headerContent)
         }
         preheatCommentRender(for: comments)
         updateReplyButtonVisibility()
+    }
+
+    private var shouldPrepareInitialContentReveal: Bool {
+        hasRenderedDetailContent == false && displayMode == .skeleton
+    }
+
+    private func cancelPendingInitialContentReveal() {
+        pendingInitialContentRevealGeneration = nil
+        initialContentRevealWorkItem?.cancel()
+        initialContentRevealWorkItem = nil
+    }
+
+    private func prepareInitialContentReveal(for detail: PostDetail, targetPage: Int) {
+        renderGeneration += 1
+        let generation = renderGeneration
+        pendingInitialContentRevealGeneration = generation
+        initialContentRevealWorkItem?.cancel()
+        tableReloadWorkItem?.cancel()
+        pendingReloadIndexPaths.removeAll()
+
+        let headerContent = PostDetailHeaderContent(detail: detail)
+        let baseURL = baseURL
+        let headerWidth = availableHeaderContentWidth
+        let commentWidth = availableCommentContentWidth
+
+        let timeoutWorkItem = DispatchWorkItem { [weak self] in
+            self?.revealInitialContent(
+                detail: detail,
+                targetPage: targetPage,
+                headerContent: headerContent,
+                renderedHeaderContent: nil,
+                renderedCommentCache: [:],
+                renderedCommentIDs: [],
+                generation: generation,
+                shouldScheduleMissingRender: true
+            )
+        }
+        initialContentRevealWorkItem = timeoutWorkItem
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + initialContentRevealTimeout,
+            execute: timeoutWorkItem
+        )
+
+        renderQueue.async { [weak self] in
+            let renderedHeaderContent = Self.makeRenderedContent(
+                html: headerContent.contentHTML,
+                baseURL: baseURL,
+                maxImageWidth: headerWidth
+            )
+            var renderedCommentCache: [String: [RenderedContentBlock]] = [:]
+            var renderedCommentIDs = Set<String>()
+
+            for comment in detail.comments {
+                let renderedContent = Self.makeRenderedContent(
+                    html: comment.contentHTML,
+                    baseURL: baseURL,
+                    maxImageWidth: commentWidth
+                )
+                renderedCommentIDs.insert(comment.id)
+                if let renderedContent {
+                    renderedCommentCache[comment.id] = renderedContent
+                }
+            }
+
+            DispatchQueue.main.async {
+                self?.revealInitialContent(
+                    detail: detail,
+                    targetPage: targetPage,
+                    headerContent: headerContent,
+                    renderedHeaderContent: renderedHeaderContent,
+                    renderedCommentCache: renderedCommentCache,
+                    renderedCommentIDs: renderedCommentIDs,
+                    generation: generation,
+                    shouldScheduleMissingRender: false
+                )
+            }
+        }
+    }
+
+    private func revealInitialContent(
+        detail: PostDetail,
+        targetPage: Int,
+        headerContent: PostDetailHeaderContent,
+        renderedHeaderContent: [RenderedContentBlock]?,
+        renderedCommentCache: [String: [RenderedContentBlock]],
+        renderedCommentIDs: Set<String>,
+        generation: Int,
+        shouldScheduleMissingRender: Bool
+    ) {
+        guard pendingInitialContentRevealGeneration == generation else { return }
+        pendingInitialContentRevealGeneration = nil
+        initialContentRevealWorkItem?.cancel()
+        initialContentRevealWorkItem = nil
+
+        currentPage = targetPage
+        pageLoadingTargetPage = nil
+        hasRenderedDetailContent = true
+        displayMode = .content
+        configureHeader(headerContent, renderedContent: renderedHeaderContent)
+        pagination = detail.pagination
+        comments = detail.comments
+        commentRenderedCache = renderedCommentCache
+        self.renderedCommentIDs = renderedCommentIDs
+        commentRenderInFlight.removeAll(keepingCapacity: true)
+        updatePageScrubber(isLoading: false)
+        reloadTableData()
+
+        if shouldScheduleMissingRender {
+            if renderedHeaderContent == nil {
+                scheduleHeaderRender(for: headerContent)
+            }
+            preheatCommentRender(for: comments)
+        }
+        updateReplyButtonVisibility()
+    }
+
+    private func preserveRenderedCommentCache(
+        previousComments: [String: Comment],
+        previousCache: [String: [RenderedContentBlock]],
+        previousRenderedIDs: Set<String>,
+        nextComments: [Comment]
+    ) {
+        var nextCache: [String: [RenderedContentBlock]] = [:]
+        var nextRenderedIDs: Set<String> = []
+
+        for comment in nextComments {
+            guard previousComments[comment.id]?.contentHTML == comment.contentHTML,
+                  previousRenderedIDs.contains(comment.id) else {
+                continue
+            }
+            nextRenderedIDs.insert(comment.id)
+            if let cached = previousCache[comment.id] {
+                nextCache[comment.id] = cached
+            }
+        }
+
+        commentRenderedCache = nextCache
+        renderedCommentIDs = nextRenderedIDs
     }
 
     func setReplySubmitting(_ isSubmitting: Bool) {
@@ -137,6 +305,7 @@ extension PostDetailViewController: PostDetailViewProtocol {
     }
 
     func renderLoginRequired(message: String) {
+        cancelPendingInitialContentReveal()
         title = "详情"
         loginButton.isHidden = false
         showsReplyEntry = false

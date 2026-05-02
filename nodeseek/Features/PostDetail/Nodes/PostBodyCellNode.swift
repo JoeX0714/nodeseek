@@ -69,7 +69,9 @@ final class PostBodyCellNode: ASCellNode {
         onImageTapped: @escaping ([URL], Int) -> Void,
         onLinkTapped: @escaping (URL) -> Void = { _ in },
         onAuthorTapped: @escaping (URL) -> Void = { _ in },
-        onTextLayoutInvalidated: @escaping () -> Void
+        onTextLayoutInvalidated: @escaping () -> Void,
+        imageSizeProvider: @escaping (URL) -> CGSize? = { _ in nil },
+        onImageSizeResolved: @escaping (URL, CGSize) -> Void = { _, _ in }
     ) {
         self.content = content
         self.onImageTapped = onImageTapped
@@ -80,7 +82,9 @@ final class PostBodyCellNode: ASCellNode {
             from: renderedContent ?? [],
             onImageTapped: onImageTapped,
             onLinkTapped: onLinkTapped,
-            onTextLayoutInvalidated: onTextLayoutInvalidated
+            onTextLayoutInvalidated: onTextLayoutInvalidated,
+            imageSizeProvider: imageSizeProvider,
+            onImageSizeResolved: onImageSizeResolved
         )
         super.init()
         automaticallyManagesSubnodes = true
@@ -292,18 +296,24 @@ final class DetailRichTextNode: ASDisplayNode {
     private let onImageTapped: ([URL], Int) -> Void
     private let onLinkTapped: (URL) -> Void
     private let onLayoutInvalidated: () -> Void
+    private let imageSizeProvider: (URL) -> CGSize?
+    private let onImageSizeResolved: (URL, CGSize) -> Void
     private let forcedMinimumHeight: CGFloat
     private let diagnosticID = String(UUID().uuidString.prefix(8))
 
     init(
         attributedText: NSAttributedString,
         forcedMinimumHeight: CGFloat = 0,
+        imageSizeProvider: @escaping (URL) -> CGSize? = { _ in nil },
+        onImageSizeResolved: @escaping (URL, CGSize) -> Void = { _, _ in },
         onImageTapped: @escaping ([URL], Int) -> Void,
         onLinkTapped: @escaping (URL) -> Void = { _ in },
         onLayoutInvalidated: @escaping () -> Void
     ) {
         self.attributedText = NSMutableAttributedString(attributedString: attributedText)
         self.forcedMinimumHeight = forcedMinimumHeight
+        self.imageSizeProvider = imageSizeProvider
+        self.onImageSizeResolved = onImageSizeResolved
         self.onImageTapped = onImageTapped
         self.onLinkTapped = onLinkTapped
         self.onLayoutInvalidated = onLayoutInvalidated
@@ -325,11 +335,15 @@ final class DetailRichTextNode: ASDisplayNode {
             onLinkTapped: onLinkTapped,
             onLayoutInvalidated: onLayoutInvalidated,
             onAttachmentLayoutUpdated: { [weak self] url, originalSize, displaySize in
-                self?.updateAttachmentLayout(
+                guard let self else { return }
+                let didUpdate = self.updateAttachmentLayout(
                     matching: url,
                     originalSize: originalSize,
                     displaySize: displaySize
                 )
+                if didUpdate {
+                    self.onImageSizeResolved(url, originalSize)
+                }
             }
         )
     }
@@ -381,6 +395,11 @@ final class DetailRichTextNode: ASDisplayNode {
     override func calculateSizeThatFits(_ constrainedSize: CGSize) -> CGSize {
         let width = Self.resolvedMeasureWidth(constrainedSize.width)
         attributedTextLock.lock()
+        Self.applyCachedAttachmentSizes(
+            to: attributedText,
+            maxWidth: width,
+            imageSizeProvider: imageSizeProvider
+        )
         let measuredText = NSAttributedString(attributedString: attributedText)
         attributedTextLock.unlock()
 
@@ -423,6 +442,37 @@ final class DetailRichTextNode: ASDisplayNode {
         }
 
         return ceil(max(boundingHeight, 1))
+    }
+
+    private static func applyCachedAttachmentSizes(
+        to attributedText: NSMutableAttributedString,
+        maxWidth: CGFloat,
+        imageSizeProvider: (URL) -> CGSize?
+    ) {
+        guard maxWidth > 0, attributedText.length > 0 else { return }
+        attributedText.enumerateAttribute(
+            .attachment,
+            in: NSRange(location: 0, length: attributedText.length)
+        ) { value, _, _ in
+            guard let attachment = value as? DTTextAttachment,
+                  let contentURL = attachment.contentURL,
+                  let originalSize = imageSizeProvider(contentURL),
+                  originalSize.width > 0,
+                  originalSize.height > 0 else {
+                return
+            }
+
+            let isSticker = DetailAttachmentAttributes.hasClass("sticker", in: attachment.attributes)
+                || contentURL.absoluteString.lowercased().contains("sticker")
+            let displaySize = DetailImageLayout.presentation(
+                for: originalSize,
+                maxWidth: isSticker ? min(maxWidth, DetailImageLayout.fixedStickerWidth) : maxWidth,
+                isSticker: isSticker
+            ).size
+            guard displaySize.width > 0, displaySize.height > 0 else { return }
+            attachment.originalSize = originalSize
+            attachment.displaySize = displaySize
+        }
     }
 
     nonisolated private static func dtCoreTextHeight(for attributedText: NSAttributedString, width: CGFloat) -> CGFloat? {

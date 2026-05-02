@@ -37,7 +37,9 @@ enum DetailContentBlockNodeFactory {
         from blocks: [RenderedContentBlock],
         onImageTapped: @escaping ([URL], Int) -> Void,
         onLinkTapped: @escaping (URL) -> Void,
-        onTextLayoutInvalidated: @escaping () -> Void
+        onTextLayoutInvalidated: @escaping () -> Void,
+        imageSizeProvider: @escaping (URL) -> CGSize? = { _ in nil },
+        onImageSizeResolved: @escaping (URL, CGSize) -> Void = { _, _ in }
     ) -> [ASDisplayNode] {
         let imageURLs = blocks.compactMap { block -> URL? in
             guard case .image(let imageBlock) = block else { return nil }
@@ -50,6 +52,8 @@ enum DetailContentBlockNodeFactory {
                 guard attributedText.length > 0 else { return nil }
                 return DetailRichTextNode(
                     attributedText: attributedText,
+                    imageSizeProvider: imageSizeProvider,
+                    onImageSizeResolved: onImageSizeResolved,
                     onImageTapped: onImageTapped,
                     onLinkTapped: onLinkTapped,
                     onLayoutInvalidated: onTextLayoutInvalidated
@@ -72,7 +76,9 @@ enum DetailContentBlockNodeFactory {
                     imageBlock: imageBlock,
                     imageURLs: imageURLs,
                     imageIndex: index,
+                    initialImageSize: imageSizeProvider(imageBlock.url) ?? .zero,
                     onImageTapped: onImageTapped,
+                    onImageSizeResolved: onImageSizeResolved,
                     onLayoutInvalidated: onTextLayoutInvalidated
                 )
             case .imagePlaceholder(let url):

@@ -137,11 +137,14 @@ class PostDetailViewController: UIViewController {
     var commentRenderedCache: [String: [RenderedContentBlock]] = [:]
     var renderedCommentIDs: Set<String> = []
     var commentRenderInFlight: Set<String> = []
+    var detailImageSizeCache: [URL: CGSize] = [:]
     var renderGeneration: Int = 0
     let sourcePostURL: URL?
     var photoBrowserPresenter: DetailPhotoBrowserPresenter?
     var attachmentLayoutRefreshWorkItem: DispatchWorkItem?
     var tableReloadWorkItem: DispatchWorkItem?
+    var initialContentRevealWorkItem: DispatchWorkItem?
+    var pendingInitialContentRevealGeneration: Int?
     var pendingReloadIndexPaths: Set<IndexPath> = []
     var displayMode: DisplayMode = .skeleton
     var hasRenderedDetailContent = false
@@ -157,6 +160,7 @@ class PostDetailViewController: UIViewController {
         label: "com.nodeseek.app.postdetail.render",
         qos: .userInitiated
     )
+    let initialContentRevealTimeout: TimeInterval = 0.6
 
     let tableNode = ASTableNode(style: .plain)
     var toastHideWorkItem: DispatchWorkItem?
@@ -563,6 +567,25 @@ class PostDetailViewController: UIViewController {
         pendingReloadIndexPaths.removeAll()
         guard isViewLoaded else { return }
         tableNode.reloadData()
+    }
+
+    func cachedDetailImageSize(for url: URL) -> CGSize? {
+        guard let resolvedURL = AvatarImageLoader.resolveImageURL(url),
+              let size = detailImageSizeCache[resolvedURL],
+              size.width > 0,
+              size.height > 0 else {
+            return nil
+        }
+        return size
+    }
+
+    func cacheDetailImageSize(_ size: CGSize, for url: URL) {
+        guard size.width > 0,
+              size.height > 0,
+              let resolvedURL = AvatarImageLoader.resolveImageURL(url) else {
+            return
+        }
+        detailImageSizeCache[resolvedURL] = size
     }
 
     #if DEBUG
