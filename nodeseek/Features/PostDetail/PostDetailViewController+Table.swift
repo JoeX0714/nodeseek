@@ -106,8 +106,7 @@ extension PostDetailViewController: ASTableDataSource, ASTableDelegate {
                 return { ASCellNode() }
             }
             let renderedContent = headerRenderedContent
-            let imageSizeCache = detailImageSizeCache
-            let imageSizeProvider = Self.makeImageSizeProvider(from: imageSizeCache)
+            let imageSizeProvider = makeCurrentImageSizeProvider()
             return { [weak self] in
                 PostBodyCellNode(
                     content: header,
@@ -145,8 +144,7 @@ extension PostDetailViewController: ASTableDataSource, ASTableDelegate {
 
             let comment = comments[commentIndex]
             let renderedBody = commentRenderedCache[comment.id]
-            let imageSizeCache = detailImageSizeCache
-            let imageSizeProvider = Self.makeImageSizeProvider(from: imageSizeCache)
+            let imageSizeProvider = makeCurrentImageSizeProvider()
             return { [weak self] in
                 CommentCellNode(
                     comment: comment,
@@ -176,6 +174,10 @@ extension PostDetailViewController: ASTableDataSource, ASTableDelegate {
                 )
             }
         }
+    }
+
+    private func makeCurrentImageSizeProvider() -> (URL) -> CGSize? {
+        Self.makeImageSizeProvider(from: detailImageSizeCache)
     }
 
     private static func makeImageSizeProvider(from cache: [URL: CGSize]) -> (URL) -> CGSize? {

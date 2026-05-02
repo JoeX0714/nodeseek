@@ -8,6 +8,11 @@
 import AsyncDisplayKit
 import UIKit
 
+private struct DetailCommentRenderSnapshot {
+    let cache: [String: [RenderedContentBlock]]
+    let renderedIDs: Set<String>
+}
+
 extension PostDetailViewController: PostDetailViewProtocol {
     func showLoading() {
         loginButton.isHidden = true
@@ -107,49 +112,33 @@ extension PostDetailViewController: PostDetailViewProtocol {
             && targetPage != 1
             && existingHeaderContent?.postID == detail.id
             && existingHeaderContent?.contentHTML.isEmpty == false
-        currentPage = targetPage
-        pageLoadingTargetPage = nil
         renderGeneration += 1
-        hasRenderedDetailContent = true
-        displayMode = .content
         let headerContent = shouldPreserveHeader ? existingHeaderContent! : nextHeaderContent
         let renderedHeaderContent = (shouldPreserveHeader || canReuseHeaderRender) ? existingRenderedContent : nil
-        configureHeader(headerContent, renderedContent: renderedHeaderContent)
-        pagination = detail.pagination ?? (shouldPreserveHeader ? fallbackPagination(from: pagination, currentPage: detail.page) : nil)
-        comments = detail.comments
+        let commentRenderSnapshot: DetailCommentRenderSnapshot
         if isSamePageRefresh {
-            preserveRenderedCommentCache(
+            commentRenderSnapshot = preservedRenderedCommentSnapshot(
                 previousComments: existingComments,
                 previousCache: existingCommentRenderedCache,
                 previousRenderedIDs: existingRenderedCommentIDs,
                 nextComments: detail.comments
             )
         } else {
-            commentRenderedCache.removeAll(keepingCapacity: true)
-            renderedCommentIDs.removeAll(keepingCapacity: true)
+            commentRenderSnapshot = DetailCommentRenderSnapshot(cache: [:], renderedIDs: [])
         }
-        commentRenderInFlight.removeAll(keepingCapacity: true)
-        updatePageScrubber(isLoading: false)
-        reloadTableData()
-        if shouldScrollToTop {
-            let targetRow = pageCompletionScrollRow()
-            #if DEBUG
-            pendingScrollToRow = targetRow
-            #endif
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                self.tableNode.scrollToRow(
-                    at: IndexPath(row: targetRow, section: 0),
-                    at: .top,
-                    animated: false
-                )
-            }
-        }
-        if renderedHeaderContent == nil {
-            scheduleHeaderRender(for: headerContent)
-        }
-        preheatCommentRender(for: comments)
-        updateReplyButtonVisibility()
+        let nextPagination = detail.pagination
+            ?? (shouldPreserveHeader ? fallbackPagination(from: pagination, currentPage: detail.page) : nil)
+
+        applyDetailContent(
+            targetPage: targetPage,
+            headerContent: headerContent,
+            renderedHeaderContent: renderedHeaderContent,
+            pagination: nextPagination,
+            comments: detail.comments,
+            commentRenderSnapshot: commentRenderSnapshot,
+            shouldScrollToTop: shouldScrollToTop,
+            shouldScheduleMissingRender: true
+        )
     }
 
     private var shouldPrepareInitialContentReveal: Bool {
@@ -244,18 +233,57 @@ extension PostDetailViewController: PostDetailViewProtocol {
         initialContentRevealWorkItem?.cancel()
         initialContentRevealWorkItem = nil
 
+        applyDetailContent(
+            targetPage: targetPage,
+            headerContent: headerContent,
+            renderedHeaderContent: renderedHeaderContent,
+            pagination: detail.pagination,
+            comments: detail.comments,
+            commentRenderSnapshot: DetailCommentRenderSnapshot(
+                cache: renderedCommentCache,
+                renderedIDs: renderedCommentIDs
+            ),
+            shouldScrollToTop: false,
+            shouldScheduleMissingRender: shouldScheduleMissingRender
+        )
+    }
+
+    private func applyDetailContent(
+        targetPage: Int,
+        headerContent: PostDetailHeaderContent,
+        renderedHeaderContent: [RenderedContentBlock]?,
+        pagination: PostDetailPagination?,
+        comments: [Comment],
+        commentRenderSnapshot: DetailCommentRenderSnapshot,
+        shouldScrollToTop: Bool,
+        shouldScheduleMissingRender: Bool
+    ) {
         currentPage = targetPage
         pageLoadingTargetPage = nil
         hasRenderedDetailContent = true
         displayMode = .content
         configureHeader(headerContent, renderedContent: renderedHeaderContent)
-        pagination = detail.pagination
-        comments = detail.comments
-        commentRenderedCache = renderedCommentCache
-        self.renderedCommentIDs = renderedCommentIDs
+        self.pagination = pagination
+        self.comments = comments
+        commentRenderedCache = commentRenderSnapshot.cache
+        renderedCommentIDs = commentRenderSnapshot.renderedIDs
         commentRenderInFlight.removeAll(keepingCapacity: true)
         updatePageScrubber(isLoading: false)
         reloadTableData()
+        if shouldScrollToTop {
+            let targetRow = pageCompletionScrollRow()
+            #if DEBUG
+            pendingScrollToRow = targetRow
+            #endif
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.tableNode.scrollToRow(
+                    at: IndexPath(row: targetRow, section: 0),
+                    at: .top,
+                    animated: false
+                )
+            }
+        }
 
         if shouldScheduleMissingRender {
             if renderedHeaderContent == nil {
@@ -266,12 +294,12 @@ extension PostDetailViewController: PostDetailViewProtocol {
         updateReplyButtonVisibility()
     }
 
-    private func preserveRenderedCommentCache(
+    private func preservedRenderedCommentSnapshot(
         previousComments: [String: Comment],
         previousCache: [String: [RenderedContentBlock]],
         previousRenderedIDs: Set<String>,
         nextComments: [Comment]
-    ) {
+    ) -> DetailCommentRenderSnapshot {
         var nextCache: [String: [RenderedContentBlock]] = [:]
         var nextRenderedIDs: Set<String> = []
 
@@ -286,8 +314,7 @@ extension PostDetailViewController: PostDetailViewProtocol {
             }
         }
 
-        commentRenderedCache = nextCache
-        renderedCommentIDs = nextRenderedIDs
+        return DetailCommentRenderSnapshot(cache: nextCache, renderedIDs: nextRenderedIDs)
     }
 
     func setReplySubmitting(_ isSubmitting: Bool) {
