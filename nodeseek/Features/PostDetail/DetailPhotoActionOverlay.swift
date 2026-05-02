@@ -16,7 +16,7 @@ final class DetailPhotoActionOverlay: UIView, JXPhotoBrowserOverlay {
     private lazy var button: UIButton = {
         let button = UIButton(type: .system)
         var configuration = UIButton.Configuration.filled()
-        configuration.image = UIImage(systemName: "ellipsis")
+        configuration.image = UIImage(systemName: "square.and.arrow.up")
         configuration.baseBackgroundColor = UIColor.black.withAlphaComponent(0.48)
         configuration.baseForegroundColor = .white
         configuration.cornerStyle = .capsule
