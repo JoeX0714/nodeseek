@@ -352,13 +352,34 @@ final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextCon
         attributedString.enumerateAttribute(
             .attachment,
             in: NSRange(location: 0, length: attributedString.length)
-        ) { value, _, _ in
+        ) { value, range, _ in
             guard let attachment = value as? DTTextAttachment,
                   attachment.contentURL == url else {
                 return
             }
 
             let isSticker = isStickerAttachment(attachment, contentURL: url)
+            let isFixedQuoteImage = (attributedString.attribute(
+                DetailAttachmentAttributes.fixedQuoteImage,
+                at: range.location,
+                effectiveRange: nil
+            ) as? Bool) == true
+            if isFixedQuoteImage, isSticker == false {
+                let currentDisplaySize = attachment.displaySize
+                let hasValidDisplaySize = currentDisplaySize.width > 0 && currentDisplaySize.height > 0
+                if hasValidDisplaySize == false {
+                    let fixedSize = DetailImageLayout.fixedNormalImageSize(
+                        maxWidth: maxImageWidth(isSticker: false)
+                    )
+                    attachment.displaySize = fixedSize
+                    updatedDisplaySize = fixedSize
+                }
+                if attachment.originalSize != originalSize {
+                    attachment.originalSize = originalSize
+                    updatedDisplaySize = attachment.displaySize
+                }
+                return
+            }
             let presentation = DetailImageLayout.presentation(
                 for: originalSize,
                 maxWidth: maxImageWidth(isSticker: isSticker),

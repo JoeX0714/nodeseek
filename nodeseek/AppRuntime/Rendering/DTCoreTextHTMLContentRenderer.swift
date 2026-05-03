@@ -141,6 +141,8 @@ struct DTCoreTextHTMLContentRenderer {
 }
 
 enum DetailAttachmentAttributes {
+    static let fixedQuoteImage = NSAttributedString.Key("NodeSeekFixedQuoteImage")
+
     static func value(named name: String, in attributes: [AnyHashable: Any]?) -> String? {
         guard let attributes else { return nil }
         if let value = attributes[name] as? String {

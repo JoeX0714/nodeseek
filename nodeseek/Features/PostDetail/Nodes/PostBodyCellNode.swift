@@ -778,12 +778,21 @@ final class DetailRichTextNode: ASDisplayNode {
         attributedText.enumerateAttribute(
             .attachment,
             in: NSRange(location: 0, length: attributedText.length)
-        ) { value, _, _ in
+        ) { value, range, _ in
             guard let attachment = value as? DTTextAttachment,
                   let contentURL = attachment.contentURL,
                   let originalSize = imageSizeProvider(contentURL),
                   originalSize.width > 0,
                   originalSize.height > 0 else {
+                return
+            }
+            let isFixedQuoteImage = (attributedText.attribute(
+                DetailAttachmentAttributes.fixedQuoteImage,
+                at: range.location,
+                effectiveRange: nil
+            ) as? Bool) == true
+            if isFixedQuoteImage {
+                attachment.originalSize = originalSize
                 return
             }
 

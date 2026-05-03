@@ -332,6 +332,44 @@ struct DTCoreTextHTMLContentRendererTests {
         #expect(attachmentURL?.absoluteString == "https://www.nodeseek.com/static/image/sticker/xhj/032.png")
     }
 
+    @Test func keepsUnknownBlockquoteImageAtFixedSize() throws {
+        let renderer = DTCoreTextHTMLContentRenderer()
+        let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
+        let blocks = renderer.render(
+            fragment: """
+            <blockquote><p>引用图 <img src="https://cdn.example.com/quote.png"> 尾部</p></blockquote>
+            """,
+            baseURL: baseURL,
+            maxImageWidth: 320
+        )
+        let attributed = try #require(
+            blocks.compactMap { block -> NSAttributedString? in
+                guard case .text(let text) = block else { return nil }
+                return text
+            }.first
+        )
+
+        var attachment: DTTextAttachment?
+        var fixedFlag = false
+        attributed.enumerateAttribute(
+            .attachment,
+            in: NSRange(location: 0, length: attributed.length)
+        ) { value, range, stop in
+            guard let textAttachment = value as? DTTextAttachment else { return }
+            attachment = textAttachment
+            fixedFlag = (attributed.attribute(
+                DetailAttachmentAttributes.fixedQuoteImage,
+                at: range.location,
+                effectiveRange: nil
+            ) as? Bool) == true
+            stop.pointee = true
+        }
+
+        let resolvedAttachment = try #require(attachment)
+        #expect(fixedFlag)
+        #expect(resolvedAttachment.displaySize == DetailImageLayout.fixedNormalImageSize(maxWidth: 320))
+    }
+
     @Test func rendersBlockquoteWithCompactHorizontalAndRoomyVerticalPadding() throws {
         let renderer = DTCoreTextHTMLContentRenderer()
         let baseURL = try #require(URL(string: "https://www.nodeseek.com"))

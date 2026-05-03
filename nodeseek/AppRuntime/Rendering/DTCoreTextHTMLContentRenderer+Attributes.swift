@@ -239,7 +239,7 @@ extension DTCoreTextHTMLContentRenderer {
         attributed.enumerateAttribute(
             .attachment,
             in: NSRange(location: 0, length: attributed.length)
-        ) { value, _, _ in
+        ) { value, range, _ in
             guard let attachment = value as? DTTextAttachment else { return }
             let contentURL = attachment.contentURL
             guard let imageURL = contentURL ?? attachmentSourceURL(from: attachment, baseURL: baseURL) else { return }
@@ -252,11 +252,17 @@ extension DTCoreTextHTMLContentRenderer {
             if isSticker {
                 stickerFixedCount += 1
             }
+            let isInBlockquote = containsBlockquoteTextBlock(in: attributed, range: range)
 
             let originalSize = attachment.originalSize
             var usedPlaceholder = false
+            var fixedQuoteImage = false
             let layoutSourceSize: CGSize
-            if originalSize.width > 0, originalSize.height > 0 {
+            if isInBlockquote, isSticker == false, originalSize.width <= 0 || originalSize.height <= 0 {
+                // blockquote 内未知尺寸图片固定占位，避免后续原图尺寸回流把引用块高度撑裂。
+                layoutSourceSize = DetailImageLayout.fixedNormalImageSize(maxWidth: maxImageWidth)
+                fixedQuoteImage = true
+            } else if originalSize.width > 0, originalSize.height > 0 {
                 layoutSourceSize = originalSize
             } else if isSticker, attachment.displaySize.width > 0, attachment.displaySize.height > 0 {
                 layoutSourceSize = attachment.displaySize
@@ -264,6 +270,11 @@ extension DTCoreTextHTMLContentRenderer {
                 layoutSourceSize = .zero
                 usedPlaceholder = true
                 placeholderCount += 1
+            }
+            if fixedQuoteImage {
+                attributed.addAttribute(DetailAttachmentAttributes.fixedQuoteImage, value: true, range: range)
+            } else {
+                attributed.removeAttribute(DetailAttachmentAttributes.fixedQuoteImage, range: range)
             }
             // 避免 attachment 初始尺寸为 0 时无法创建视图，导致图片永远不触发下载回流。
             attachment.displaySize = DetailImageLayout.presentation(
@@ -273,7 +284,7 @@ extension DTCoreTextHTMLContentRenderer {
             ).size
 
             attachmentSummaries.append(
-                "url=\(imageURL.absoluteString),original=\(string(from: attachment.originalSize)),display=\(string(from: attachment.displaySize)),placeholder=\(usedPlaceholder)"
+                "url=\(imageURL.absoluteString),original=\(string(from: attachment.originalSize)),display=\(string(from: attachment.displaySize)),placeholder=\(usedPlaceholder),fixedQuote=\(fixedQuoteImage)"
             )
             normalizedCount += 1
         }
