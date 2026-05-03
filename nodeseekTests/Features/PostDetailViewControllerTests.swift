@@ -1182,6 +1182,25 @@ struct PostDetailViewControllerTests {
         #expect(DetailCodeBlockLayout.contentWidth(for: codeBlock.text, viewportWidth: 180) == 180)
     }
 
+    @Test func codeBlockHeightUsesFontLineHeightWithoutPerLineInflation() {
+        let lineCount = 80
+        let codeBlock = RenderedCodeBlock(
+            text: Array(repeating: "line", count: lineCount).joined(separator: "\n")
+        )
+        let layout = DetailCodeBlockLayout.measure(
+            codeBlock: codeBlock,
+            constrainedSize: CGSize(width: 220, height: CGFloat.greatestFiniteMagnitude)
+        )
+
+        let expectedHeight = ceil(max(
+            64,
+            DetailCodeBlockLayout.chromeHeight
+                + CGFloat(lineCount) * DetailCodeBlockLayout.codeFont.lineHeight
+                + DetailCodeBlockLayout.bottomInset
+        ))
+        #expect(layout.height == expectedHeight)
+    }
+
     @Test func codeBlockCopyButtonCopiesFullText() throws {
         let codeBlock = RenderedCodeBlock(text: "line 1\nline 2")
         let view = DetailCodeBlockView(codeBlock: codeBlock)

@@ -299,16 +299,15 @@ enum DetailCodeBlockLayout {
 
     private enum Layout {
         static let minHeight: CGFloat = 64
-        static let estimatedLineHeight: CGFloat = 18
     }
 
     static func measure(codeBlock: RenderedCodeBlock, constrainedSize: CGSize) -> CGSize {
         let width = resolvedWidth(constrainedSize.width)
         let lineCount = max(codeBlock.text.components(separatedBy: .newlines).count, 1)
-        let lineHeight = max(ceil(codeFont.lineHeight), Layout.estimatedLineHeight)
+        let textHeight = CGFloat(lineCount) * max(codeFont.lineHeight, 1)
         let height = max(
             Layout.minHeight,
-            chromeHeight + CGFloat(lineCount) * lineHeight + bottomInset
+            chromeHeight + textHeight + bottomInset
         )
         return CGSize(width: width, height: ceil(height))
     }
