@@ -22,7 +22,7 @@ extension UserInfoWebViewController {
         })();
         """
         return [
-            WKUserScript(source: source, injectionTime: .atDocumentEnd, forMainFrameOnly: true)
+            WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         ]
     }
 

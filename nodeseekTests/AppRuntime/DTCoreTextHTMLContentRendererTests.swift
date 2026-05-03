@@ -542,6 +542,26 @@ struct DTCoreTextHTMLContentRendererTests {
         #expect(text.contains("</p>") == false)
     }
 
+    @Test func splitsConsecutiveLeadingNormalImagesBeforeTrailingStickerText() throws {
+        let renderer = DTCoreTextHTMLContentRenderer()
+        let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
+        let blocks = renderer.render(
+            fragment: """
+            <p><img src="https://i.postimg.cc/ThvRYXRT/mmexport1777790113919.png" alt="image" class=""><img src="https://i.postimg.cc/xjwHbJ8c/IMG-20260503-143611.png" alt="image" class=""><br>
+            我之前一直没太在意，直到今天被爆破了，ssh能用密钥就尽量用密钥，用密码一定要改端口 <img class="sticker" src="/static/image/sticker/xhj/011.png" loading="lazy" alt="xhj011"></p>
+            """,
+            baseURL: baseURL,
+            maxImageWidth: 320
+        )
+
+        #expect(imageBlocks(in: blocks).map(\.url.absoluteString) == [
+            "https://i.postimg.cc/ThvRYXRT/mmexport1777790113919.png",
+            "https://i.postimg.cc/xjwHbJ8c/IMG-20260503-143611.png"
+        ])
+        let text = combinedText(in: blocks)
+        #expect(text.contains("ssh能用密钥就尽量用密钥，用密码一定要改端口"))
+    }
+
     @Test func rendersRelativeImageAsAttachmentWithResolvedURL() throws {
         let renderer = DTCoreTextHTMLContentRenderer()
         let baseURL = try #require(URL(string: "https://www.nodeseek.com"))

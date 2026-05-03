@@ -494,13 +494,16 @@ extension DTCoreTextHTMLContentRenderer {
         if trimmed.range(of: #"(?i)^<(?:p|div|section|article)\b[^>]*>$"#, options: .regularExpression) != nil {
             return true
         }
+        if trimmed.range(of: #"(?i)<img\b[^>]*>$"#, options: .regularExpression) != nil {
+            return true
+        }
         return trimmed.range(of: #"(?i)<br\s*/?>$"#, options: .regularExpression) != nil
     }
 
     func hasBlockBoundaryAfterImage(_ html: String) -> Bool {
         let trimmed = html.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.isEmpty == false else { return true }
-        return trimmed.range(of: #"(?i)^(?:<br\s*/?>|</)"#, options: .regularExpression) != nil
+        return trimmed.range(of: #"(?i)^(?:<img\b|<br\s*/?>|</)"#, options: .regularExpression) != nil
     }
 
     func rangeAfterAdjacentLineBreaks(in source: NSString, startingAt location: Int) -> NSRange {
