@@ -352,8 +352,10 @@ struct KannaNodeSeekParser: NodeSeekParser {
             metadataText: metadataText,
             contentHTML: contentHTML,
             likeCount: bodyItem.flatMap { parseReactionCount(in: $0, kind: .like) },
+            isLikeClicked: bodyItem.map { parseReactionClicked(in: $0, kind: .like) } ?? false,
             chickenLegCount: bodyItem.flatMap { parseReactionCount(in: $0, kind: .chickenLeg) },
             opposeCount: bodyItem.flatMap { parseReactionCount(in: $0, kind: .oppose) },
+            isOpposeClicked: bodyItem.map { parseReactionClicked(in: $0, kind: .oppose) } ?? false,
             favoriteCount: bodyItem.flatMap { parseReactionCount(in: $0, kind: .favorite) },
             isFavoriteCollected: bodyItem.map { parseReactionClicked(in: $0, kind: .favorite) } ?? false,
             comments: comments,
@@ -516,8 +518,10 @@ struct KannaNodeSeekParser: NodeSeekParser {
             contentHTML: item.at_xpath(XPathRules.contentArticle)?.innerHTML?.trimmedNonEmpty ?? "",
             isHot: item.at_xpath(XPathRules.contentHotBadge) != nil,
             likeCount: parseReactionCount(in: item, kind: .like),
+            isLikeClicked: parseReactionClicked(in: item, kind: .like),
             chickenLegCount: parseReactionCount(in: item, kind: .chickenLeg),
-            opposeCount: parseReactionCount(in: item, kind: .oppose)
+            opposeCount: parseReactionCount(in: item, kind: .oppose),
+            isOpposeClicked: parseReactionClicked(in: item, kind: .oppose)
         )
     }
 

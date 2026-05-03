@@ -259,7 +259,7 @@ struct KannaNodeSeekParserTests {
                                 <svg data-v-254da704 class="iconpark-icon"></svg>
                                 <span data-v-254da704>1</span>
                             </div>
-                            <div data-v-254da704 title="反对" class="menu-item">
+                            <div data-v-254da704 title="反对" class="menu-item clicked">
                                 <svg data-v-254da704 class="iconpark-icon">
                                     <use data-v-254da704 href="#bad-one"></use>
                                 </svg>
@@ -279,6 +279,7 @@ struct KannaNodeSeekParserTests {
         #expect(comment.likeCount == 0)
         #expect(comment.chickenLegCount == 1)
         #expect(comment.opposeCount == 0)
+        #expect(comment.isOpposeClicked == true)
     }
 
     @Test func parsesPostBodyReactionCountsFromDetailMenuDOM() throws {
@@ -301,7 +302,7 @@ struct KannaNodeSeekParserTests {
                         </svg>
                         <span data-v-254da704>3</span>
                     </div>
-                    <div data-v-254da704 title="反对" class="menu-item">
+                    <div data-v-254da704 title="反对" class="menu-item clicked">
                         <svg data-v-254da704 class="iconpark-icon">
                             <use data-v-254da704 href="#bad-one"></use>
                         </svg>
@@ -324,6 +325,7 @@ struct KannaNodeSeekParserTests {
         #expect(detail.likeCount == 2)
         #expect(detail.chickenLegCount == 3)
         #expect(detail.opposeCount == 4)
+        #expect(detail.isOpposeClicked == true)
         #expect(detail.favoriteCount == 5)
         #expect(detail.isFavoriteCollected == true)
     }

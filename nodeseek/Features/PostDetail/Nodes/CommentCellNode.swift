@@ -32,10 +32,12 @@ final class CommentCellNode: ASCellNode {
         }
     }
 
-    private let comment: Comment
+    private var comment: Comment
     private let onImageTapped: ([URL], Int) -> Void
     private let onLinkTapped: (URL) -> Void
     private let onAuthorTapped: (URL) -> Void
+    private let onLikeTapped: (Comment) -> Void
+    private let onOpposeTapped: (Comment) -> Void
     private let onReplyTapped: (Comment) -> Void
     private let onQuoteTapped: (Comment) -> Void
     private let onTextLayoutInvalidated: () -> Void
@@ -92,6 +94,8 @@ final class CommentCellNode: ASCellNode {
         onImageTapped: @escaping ([URL], Int) -> Void,
         onLinkTapped: @escaping (URL) -> Void = { _ in },
         onAuthorTapped: @escaping (URL) -> Void = { _ in },
+        onLikeTapped: @escaping (Comment) -> Void = { _ in },
+        onOpposeTapped: @escaping (Comment) -> Void = { _ in },
         onReplyTapped: @escaping (Comment) -> Void = { _ in },
         onQuoteTapped: @escaping (Comment) -> Void = { _ in },
         onTextLayoutInvalidated: @escaping () -> Void,
@@ -102,6 +106,8 @@ final class CommentCellNode: ASCellNode {
         self.onImageTapped = onImageTapped
         self.onLinkTapped = onLinkTapped
         self.onAuthorTapped = onAuthorTapped
+        self.onLikeTapped = onLikeTapped
+        self.onOpposeTapped = onOpposeTapped
         self.onReplyTapped = onReplyTapped
         self.onQuoteTapped = onQuoteTapped
         self.onTextLayoutInvalidated = onTextLayoutInvalidated
@@ -283,9 +289,9 @@ final class CommentCellNode: ASCellNode {
             ]
         )
 
-        configureActionButton(likeButtonNode, systemImageName: "hand.thumbsup", accessibilityLabel: "点赞", count: comment.likeCount)
+        configureLikeActionButton(count: comment.likeCount, isClicked: comment.isLikeClicked)
         configureActionButton(chickenLegButtonNode, systemImageName: "fork.knife", accessibilityLabel: "加鸡腿", count: comment.chickenLegCount)
-        configureActionButton(opposeButtonNode, systemImageName: "hand.thumbsdown", accessibilityLabel: "反对", count: comment.opposeCount)
+        configureOpposeActionButton(count: comment.opposeCount, isClicked: comment.isOpposeClicked)
         configureActionButton(replyButtonNode, systemImageName: "arrowshape.turn.up.left", accessibilityLabel: "回复评论")
         configureActionButton(quoteButtonNode, systemImageName: "quote.bubble", accessibilityLabel: "引用评论")
     }
@@ -295,6 +301,8 @@ final class CommentCellNode: ASCellNode {
         if hasAuthorProfileLink {
             authorButtonNode.addTarget(self, action: #selector(authorTapped), forControlEvents: .touchUpInside)
         }
+        likeButtonNode.addTarget(self, action: #selector(likeTapped), forControlEvents: .touchUpInside)
+        opposeButtonNode.addTarget(self, action: #selector(opposeTapped), forControlEvents: .touchUpInside)
         replyButtonNode.addTarget(self, action: #selector(replyTapped), forControlEvents: .touchUpInside)
         quoteButtonNode.addTarget(self, action: #selector(quoteTapped), forControlEvents: .touchUpInside)
     }
@@ -343,11 +351,12 @@ final class CommentCellNode: ASCellNode {
         _ button: ASButtonNode,
         systemImageName: String,
         accessibilityLabel: String,
-        count: Int? = nil
+        count: Int? = nil,
+        color: UIColor = UIColor.secondaryLabel.withAlphaComponent(0.72)
     ) {
         let configuration = UIImage.SymbolConfiguration(pointSize: 15, weight: .regular)
         let image = UIImage(systemName: systemImageName, withConfiguration: configuration)?
-            .withTintColor(UIColor.secondaryLabel.withAlphaComponent(0.72), renderingMode: .alwaysOriginal)
+            .withTintColor(color, renderingMode: .alwaysOriginal)
         button.setImage(image, for: .normal)
         let displayCount = count.flatMap { $0 > 0 ? $0 : nil }
         button.contentSpacing = displayCount == nil ? 0 : 4
@@ -360,7 +369,7 @@ final class CommentCellNode: ASCellNode {
                     string: countText,
                     attributes: [
                         .font: font,
-                        .foregroundColor: UIColor.secondaryLabel
+                        .foregroundColor: color
                     ]
                 ),
                 for: .normal
@@ -372,6 +381,50 @@ final class CommentCellNode: ASCellNode {
             button.style.preferredSize = CGSize(width: 40, height: 32)
             button.accessibilityLabel = accessibilityLabel
         }
+    }
+
+    private static func likeActionColor(isClicked: Bool) -> UIColor {
+        isClicked ? .systemRed : UIColor.secondaryLabel.withAlphaComponent(0.72)
+    }
+
+    private static func opposeActionColor(isClicked: Bool) -> UIColor {
+        isClicked ? .systemRed : UIColor.secondaryLabel.withAlphaComponent(0.72)
+    }
+
+    private func configureLikeActionButton(count: Int?, isClicked: Bool) {
+        configureActionButton(
+            likeButtonNode,
+            systemImageName: isClicked ? "hand.thumbsup.fill" : "hand.thumbsup",
+            accessibilityLabel: "点赞",
+            count: count,
+            color: Self.likeActionColor(isClicked: isClicked)
+        )
+    }
+
+    private func configureOpposeActionButton(count: Int?, isClicked: Bool) {
+        configureActionButton(
+            opposeButtonNode,
+            systemImageName: isClicked ? "hand.thumbsdown.fill" : "hand.thumbsdown",
+            accessibilityLabel: "反对",
+            count: count,
+            color: Self.opposeActionColor(isClicked: isClicked)
+        )
+    }
+
+    func updateLikeReaction(count: Int?, isClicked: Bool) {
+        let nextComment = comment.updatingLikeReaction(count: count, isClicked: isClicked)
+        guard nextComment != comment else { return }
+        comment = nextComment
+        configureLikeActionButton(count: comment.likeCount, isClicked: comment.isLikeClicked)
+        setNeedsLayout()
+    }
+
+    func updateOpposeReaction(count: Int?, isClicked: Bool) {
+        let nextComment = comment.updatingOpposeReaction(count: count, isClicked: isClicked)
+        guard nextComment != comment else { return }
+        comment = nextComment
+        configureOpposeActionButton(count: comment.opposeCount, isClicked: comment.isOpposeClicked)
+        setNeedsLayout()
     }
 
     private static func reactionCountText(_ count: Int) -> String {
@@ -454,8 +507,24 @@ final class CommentCellNode: ASCellNode {
         ].map { $0.attributedTitle(for: .normal)?.string }
     }
 
+    var debugLikeActionColor: UIColor {
+        Self.likeActionColor(isClicked: comment.isLikeClicked)
+    }
+
+    var debugOpposeActionColor: UIColor {
+        Self.opposeActionColor(isClicked: comment.isOpposeClicked)
+    }
+
     @objc private func replyTapped() {
         onReplyTapped(comment)
+    }
+
+    @objc private func likeTapped() {
+        onLikeTapped(comment)
+    }
+
+    @objc private func opposeTapped() {
+        onOpposeTapped(comment)
     }
 
     @objc private func quoteTapped() {

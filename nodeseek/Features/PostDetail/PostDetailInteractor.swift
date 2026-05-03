@@ -21,6 +21,10 @@ class PostDetailInteractor: PostDetailInteractorInput {
     private let initialPage: Int
     private let commentSubmitter: NodeSeekCommentSubmitter
     private let collectionSubmitter: PostCollectionSubmitting
+    private let postUpvoteSubmitter: PostUpvoteSubmitting
+    private let commentUpvoteSubmitter: CommentUpvoteSubmitting
+    private let postDislikeSubmitter: PostDislikeSubmitting
+    private let commentDislikeSubmitter: CommentDislikeSubmitting
     private let sessionStore: NodeSeekSessionStore
     
     // MARK: - Initialization
@@ -29,6 +33,10 @@ class PostDetailInteractor: PostDetailInteractorInput {
         service: NodeSeekService = NodeSeekService(),
         commentSubmitter: NodeSeekCommentSubmitter = NodeSeekCommentSubmitter(),
         collectionSubmitter: PostCollectionSubmitting? = nil,
+        postUpvoteSubmitter: PostUpvoteSubmitting? = nil,
+        commentUpvoteSubmitter: CommentUpvoteSubmitting? = nil,
+        postDislikeSubmitter: PostDislikeSubmitting? = nil,
+        commentDislikeSubmitter: CommentDislikeSubmitting? = nil,
         page: Int = 1,
         sessionStore: NodeSeekSessionStore = .shared
     ) {
@@ -37,6 +45,10 @@ class PostDetailInteractor: PostDetailInteractorInput {
         self.initialPage = max(1, page)
         self.commentSubmitter = commentSubmitter
         self.collectionSubmitter = collectionSubmitter ?? NodeSeekPostCollectionSubmitter()
+        self.postUpvoteSubmitter = postUpvoteSubmitter ?? NodeSeekPostUpvoteSubmitter()
+        self.commentUpvoteSubmitter = commentUpvoteSubmitter ?? NodeSeekCommentUpvoteSubmitter()
+        self.postDislikeSubmitter = postDislikeSubmitter ?? NodeSeekPostDislikeSubmitter()
+        self.commentDislikeSubmitter = commentDislikeSubmitter ?? NodeSeekCommentDislikeSubmitter()
         self.sessionStore = sessionStore
     }
     
@@ -115,6 +127,98 @@ class PostDetailInteractor: PostDetailInteractorInput {
 
     func removeFavorite() {
         submitFavorite(action: .remove)
+    }
+
+    func addPostLike() {
+        guard let post else {
+            presenter?.didFailAddPostLike(error: "缺少帖子信息，无法点赞。")
+            return
+        }
+
+        Task {
+            AppLog.info(.postDetail, "开始点赞帖子，postID=\(post.id)")
+            do {
+                let response = try await postUpvoteSubmitter.addUpvote(postID: post.id, referer: post.url)
+                await sessionStore.recordSuccess()
+                await MainActor.run {
+                    presenter?.didAddPostLike(response)
+                }
+            } catch {
+                AppLog.error(.postDetail, "点赞帖子失败，postID=\(post.id): \(error.localizedDescription)")
+                await MainActor.run {
+                    presenter?.didFailAddPostLike(error: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    func addCommentLike(commentID: String) {
+        guard let post else {
+            presenter?.didFailAddCommentLike(commentID: commentID, error: "缺少帖子信息，无法点赞。")
+            return
+        }
+
+        Task {
+            AppLog.info(.postDetail, "开始点赞评论，postID=\(post.id), commentID=\(commentID)")
+            do {
+                let response = try await commentUpvoteSubmitter.addUpvote(commentID: commentID, referer: post.url)
+                await sessionStore.recordSuccess()
+                await MainActor.run {
+                    presenter?.didAddCommentLike(commentID: commentID, response: response)
+                }
+            } catch {
+                AppLog.error(.postDetail, "点赞评论失败，commentID=\(commentID): \(error.localizedDescription)")
+                await MainActor.run {
+                    presenter?.didFailAddCommentLike(commentID: commentID, error: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    func addPostOppose() {
+        guard let post else {
+            presenter?.didFailAddPostOppose(error: "缺少帖子信息，无法反对。")
+            return
+        }
+
+        Task {
+            AppLog.info(.postDetail, "开始反对帖子，postID=\(post.id)")
+            do {
+                let response = try await postDislikeSubmitter.addDislike(postID: post.id, referer: post.url)
+                await sessionStore.recordSuccess()
+                await MainActor.run {
+                    presenter?.didAddPostOppose(response)
+                }
+            } catch {
+                AppLog.error(.postDetail, "反对帖子失败，postID=\(post.id): \(error.localizedDescription)")
+                await MainActor.run {
+                    presenter?.didFailAddPostOppose(error: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    func addCommentOppose(commentID: String) {
+        guard let post else {
+            presenter?.didFailAddCommentOppose(commentID: commentID, error: "缺少帖子信息，无法反对。")
+            return
+        }
+
+        Task {
+            AppLog.info(.postDetail, "开始反对评论，postID=\(post.id), commentID=\(commentID)")
+            do {
+                let response = try await commentDislikeSubmitter.addDislike(commentID: commentID, referer: post.url)
+                await sessionStore.recordSuccess()
+                await MainActor.run {
+                    presenter?.didAddCommentOppose(commentID: commentID, response: response)
+                }
+            } catch {
+                AppLog.error(.postDetail, "反对评论失败，commentID=\(commentID): \(error.localizedDescription)")
+                await MainActor.run {
+                    presenter?.didFailAddCommentOppose(commentID: commentID, error: error.localizedDescription)
+                }
+            }
+        }
     }
 
     private func submitFavorite(action: FavoriteAction) {

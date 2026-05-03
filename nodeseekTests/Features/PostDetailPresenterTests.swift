@@ -389,6 +389,199 @@ struct PostDetailPresenterTests {
         #expect(view.favoriteSubmittingStates == [true, false])
         #expect(view.errorMessage == "网络错误")
     }
+
+    @Test func tappingPostLikeSubmitsUpvoteAndUpdatesPostBody() {
+        let interactor = SpyPostDetailInteractor()
+        let router = SpyPostDetailRouter()
+        let presenter = PostDetailPresenter(interactor: interactor, router: router, initialPage: 1)
+        let view = SpyPostDetailView()
+        presenter.setView(view)
+        presenter.didLoadPostDetail(PostDetailResponse(detail: .init(
+            id: "712073",
+            title: "标题",
+            authorName: "mist",
+            avatarURL: nil,
+            metadataText: nil,
+            contentHTML: "<p>正文</p>",
+            likeCount: 0,
+            comments: []
+        )))
+
+        presenter.didTapPostLike()
+        presenter.didAddPostLike(PostUpvoteResponse(message: "added", current: 1))
+
+        #expect(interactor.postLikeSubmitCount == 1)
+        #expect(view.updatedPostBodyDetails.last?.likeCount == 1)
+        #expect(view.updatedPostBodyDetails.last?.isLikeClicked == true)
+        #expect(view.toastMessage == "已点赞")
+    }
+
+    @Test func tappingAlreadyLikedPostOnlyShowsToast() {
+        let interactor = SpyPostDetailInteractor()
+        let router = SpyPostDetailRouter()
+        let presenter = PostDetailPresenter(interactor: interactor, router: router, initialPage: 1)
+        let view = SpyPostDetailView()
+        presenter.setView(view)
+        presenter.didLoadPostDetail(PostDetailResponse(detail: .init(
+            id: "712073",
+            title: "标题",
+            authorName: "mist",
+            avatarURL: nil,
+            metadataText: nil,
+            contentHTML: "<p>正文</p>",
+            likeCount: 1,
+            isLikeClicked: true,
+            comments: []
+        )))
+
+        presenter.didTapPostLike()
+
+        #expect(interactor.postLikeSubmitCount == 0)
+        #expect(view.toastMessage == "该帖子已点赞")
+    }
+
+    @Test func tappingCommentLikeSubmitsUpvoteAndShowsToastOnSuccess() {
+        let interactor = SpyPostDetailInteractor()
+        let router = SpyPostDetailRouter()
+        let presenter = PostDetailPresenter(interactor: interactor, router: router, initialPage: 1)
+        let view = SpyPostDetailView()
+        presenter.setView(view)
+        let comment = Comment(
+            id: "9835758",
+            authorName: "mist",
+            avatarURL: nil,
+            floorText: "#1",
+            createdAtText: "刚刚",
+            contentHTML: "<p>内容</p>",
+            likeCount: 0
+        )
+        presenter.didLoadPostDetail(PostDetailResponse(detail: PostDetail(
+            id: "712073",
+            title: "标题",
+            authorName: "mist",
+            avatarURL: nil,
+            metadataText: nil,
+            contentHTML: "<p>正文</p>",
+            comments: [comment]
+        )))
+
+        presenter.didTapCommentLike(comment)
+        presenter.didAddCommentLike(commentID: "9835758", response: CommentUpvoteResponse(message: "added", current: 1))
+
+        #expect(interactor.submittedCommentLikeIDs == ["9835758"])
+        #expect(view.updatedCommentLikeEvents.last?.commentID == "9835758")
+        #expect(view.updatedCommentLikeEvents.last?.count == 1)
+        #expect(view.updatedCommentLikeEvents.last?.isClicked == true)
+        #expect(view.toastMessage == "已点赞")
+    }
+
+    @Test func tappingAlreadyLikedCommentOnlyShowsToast() {
+        let interactor = SpyPostDetailInteractor()
+        let router = SpyPostDetailRouter()
+        let presenter = PostDetailPresenter(interactor: interactor, router: router, initialPage: 1)
+        let view = SpyPostDetailView()
+        presenter.setView(view)
+        let comment = Comment(
+            id: "9835758",
+            authorName: "mist",
+            avatarURL: nil,
+            floorText: "#1",
+            createdAtText: "刚刚",
+            contentHTML: "<p>内容</p>",
+            likeCount: 1,
+            isLikeClicked: true
+        )
+
+        presenter.didTapCommentLike(comment)
+
+        #expect(interactor.submittedCommentLikeIDs.isEmpty)
+        #expect(view.toastMessage == "该评论已点赞")
+    }
+
+    @Test func tappingPostOpposeSubmitsDislikeAndUpdatesPostBody() {
+        let interactor = SpyPostDetailInteractor()
+        let router = SpyPostDetailRouter()
+        let presenter = PostDetailPresenter(interactor: interactor, router: router, initialPage: 1)
+        let view = SpyPostDetailView()
+        presenter.setView(view)
+        presenter.didLoadPostDetail(PostDetailResponse(detail: .init(
+            id: "712073",
+            title: "标题",
+            authorName: "mist",
+            avatarURL: nil,
+            metadataText: nil,
+            contentHTML: "<p>正文</p>",
+            opposeCount: 0,
+            comments: []
+        )))
+
+        presenter.didTapPostOppose()
+        presenter.didAddPostOppose(PostDislikeResponse(message: "added", current: 1))
+
+        #expect(interactor.postOpposeSubmitCount == 1)
+        #expect(view.updatedPostBodyDetails.last?.opposeCount == 1)
+        #expect(view.updatedPostBodyDetails.last?.isOpposeClicked == true)
+        #expect(view.toastMessage == "已反对")
+    }
+
+    @Test func tappingAlreadyOpposedPostOnlyShowsToast() {
+        let interactor = SpyPostDetailInteractor()
+        let router = SpyPostDetailRouter()
+        let presenter = PostDetailPresenter(interactor: interactor, router: router, initialPage: 1)
+        let view = SpyPostDetailView()
+        presenter.setView(view)
+        presenter.didLoadPostDetail(PostDetailResponse(detail: .init(
+            id: "712073",
+            title: "标题",
+            authorName: "mist",
+            avatarURL: nil,
+            metadataText: nil,
+            contentHTML: "<p>正文</p>",
+            opposeCount: 1,
+            isOpposeClicked: true,
+            comments: []
+        )))
+
+        presenter.didTapPostOppose()
+
+        #expect(interactor.postOpposeSubmitCount == 0)
+        #expect(view.toastMessage == "该帖子已反对")
+    }
+
+    @Test func tappingCommentOpposeSubmitsDislikeAndUpdatesCell() {
+        let interactor = SpyPostDetailInteractor()
+        let router = SpyPostDetailRouter()
+        let presenter = PostDetailPresenter(interactor: interactor, router: router, initialPage: 1)
+        let view = SpyPostDetailView()
+        presenter.setView(view)
+        let comment = Comment(
+            id: "9835758",
+            authorName: "mist",
+            avatarURL: nil,
+            floorText: "#1",
+            createdAtText: "刚刚",
+            contentHTML: "<p>内容</p>",
+            opposeCount: 0
+        )
+        presenter.didLoadPostDetail(PostDetailResponse(detail: PostDetail(
+            id: "712073",
+            title: "标题",
+            authorName: "mist",
+            avatarURL: nil,
+            metadataText: nil,
+            contentHTML: "<p>正文</p>",
+            comments: [comment]
+        )))
+
+        presenter.didTapCommentOppose(comment)
+        presenter.didAddCommentOppose(commentID: "9835758", response: CommentDislikeResponse(message: "added", current: 1))
+
+        #expect(interactor.submittedCommentOpposeIDs == ["9835758"])
+        #expect(view.updatedCommentOpposeEvents.last?.commentID == "9835758")
+        #expect(view.updatedCommentOpposeEvents.last?.count == 1)
+        #expect(view.updatedCommentOpposeEvents.last?.isClicked == true)
+        #expect(view.toastMessage == "已反对")
+    }
 }
 
 private final class SpyPostDetailInteractor: PostDetailInteractorInput {
@@ -397,6 +590,10 @@ private final class SpyPostDetailInteractor: PostDetailInteractorInput {
     private(set) var submittedReplyContent: String?
     private(set) var favoriteSubmitCount = 0
     private(set) var favoriteRemoveCount = 0
+    private(set) var postLikeSubmitCount = 0
+    private(set) var postOpposeSubmitCount = 0
+    private(set) var submittedCommentLikeIDs: [String] = []
+    private(set) var submittedCommentOpposeIDs: [String] = []
 
     func loadPostDetail() {
         loadPostDetail(page: 1)
@@ -417,6 +614,22 @@ private final class SpyPostDetailInteractor: PostDetailInteractorInput {
 
     func removeFavorite() {
         favoriteRemoveCount += 1
+    }
+
+    func addPostLike() {
+        postLikeSubmitCount += 1
+    }
+
+    func addCommentLike(commentID: String) {
+        submittedCommentLikeIDs.append(commentID)
+    }
+
+    func addPostOppose() {
+        postOpposeSubmitCount += 1
+    }
+
+    func addCommentOppose(commentID: String) {
+        submittedCommentOpposeIDs.append(commentID)
     }
 }
 
@@ -441,6 +654,8 @@ private final class SpyPostDetailView: PostDetailViewProtocol {
     private(set) var hideLoadingCount = 0
     private(set) var renderedDetails: [PostDetail] = []
     private(set) var updatedPostBodyDetails: [PostDetail] = []
+    private(set) var updatedCommentLikeEvents: [(commentID: String, count: Int?, isClicked: Bool)] = []
+    private(set) var updatedCommentOpposeEvents: [(commentID: String, count: Int?, isClicked: Bool)] = []
 
     func showLoading() { loadingCount += 1 }
     func showPageLoading() { pageLoadingCount += 1 }
@@ -457,6 +672,12 @@ private final class SpyPostDetailView: PostDetailViewProtocol {
     func finishReplySubmission() { finishReplySubmissionCount += 1 }
     func render(detail: PostDetail) { renderedDetails.append(detail) }
     func updatePostBody(detail: PostDetail) { updatedPostBodyDetails.append(detail) }
+    func updateCommentLike(commentID: String, count: Int?, isClicked: Bool) {
+        updatedCommentLikeEvents.append((commentID: commentID, count: count, isClicked: isClicked))
+    }
+    func updateCommentOppose(commentID: String, count: Int?, isClicked: Bool) {
+        updatedCommentOpposeEvents.append((commentID: commentID, count: count, isClicked: isClicked))
+    }
     func renderLoginRequired(message: String) {}
 }
 

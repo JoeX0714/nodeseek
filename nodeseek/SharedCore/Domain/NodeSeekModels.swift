@@ -104,8 +104,10 @@ struct PostDetail: Equatable, Sendable {
     let metadataText: String?
     let contentHTML: String
     let likeCount: Int?
+    let isLikeClicked: Bool
     let chickenLegCount: Int?
     let opposeCount: Int?
+    let isOpposeClicked: Bool
     let favoriteCount: Int?
     let isFavoriteCollected: Bool
     let comments: [Comment]
@@ -123,8 +125,10 @@ struct PostDetail: Equatable, Sendable {
         metadataText: String?,
         contentHTML: String,
         likeCount: Int? = nil,
+        isLikeClicked: Bool = false,
         chickenLegCount: Int? = nil,
         opposeCount: Int? = nil,
+        isOpposeClicked: Bool = false,
         favoriteCount: Int? = nil,
         isFavoriteCollected: Bool = false,
         comments: [Comment],
@@ -141,8 +145,10 @@ struct PostDetail: Equatable, Sendable {
         self.metadataText = metadataText
         self.contentHTML = contentHTML
         self.likeCount = likeCount
+        self.isLikeClicked = isLikeClicked
         self.chickenLegCount = chickenLegCount
         self.opposeCount = opposeCount
+        self.isOpposeClicked = isOpposeClicked
         self.favoriteCount = favoriteCount
         self.isFavoriteCollected = isFavoriteCollected
         self.comments = comments
@@ -162,11 +168,121 @@ struct PostDetail: Equatable, Sendable {
             metadataText: metadataText,
             contentHTML: contentHTML,
             likeCount: likeCount,
+            isLikeClicked: isLikeClicked,
             chickenLegCount: chickenLegCount,
             opposeCount: opposeCount,
+            isOpposeClicked: isOpposeClicked,
             favoriteCount: count,
             isFavoriteCollected: isCollected,
             comments: comments,
+            page: page,
+            pagination: pagination,
+            isLastPage: isLastPage
+        )
+    }
+
+    func updatingPostLikeState(count: Int?, isClicked: Bool) -> PostDetail {
+        PostDetail(
+            id: id,
+            title: title,
+            requiredReadingLevel: requiredReadingLevel,
+            authorName: authorName,
+            avatarURL: avatarURL,
+            authorProfileURL: authorProfileURL,
+            metadataText: metadataText,
+            contentHTML: contentHTML,
+            likeCount: count,
+            isLikeClicked: isClicked,
+            chickenLegCount: chickenLegCount,
+            opposeCount: opposeCount,
+            isOpposeClicked: isOpposeClicked,
+            favoriteCount: favoriteCount,
+            isFavoriteCollected: isFavoriteCollected,
+            comments: comments,
+            page: page,
+            pagination: pagination,
+            isLastPage: isLastPage
+        )
+    }
+
+    func updatingCommentLikeState(commentID: String, count: Int?, isClicked: Bool) -> PostDetail {
+        let nextComments = comments.map { comment in
+            comment.id == commentID
+                ? comment.updatingLikeReaction(count: count, isClicked: isClicked)
+                : comment
+        }
+
+        return PostDetail(
+            id: id,
+            title: title,
+            requiredReadingLevel: requiredReadingLevel,
+            authorName: authorName,
+            avatarURL: avatarURL,
+            authorProfileURL: authorProfileURL,
+            metadataText: metadataText,
+            contentHTML: contentHTML,
+            likeCount: likeCount,
+            isLikeClicked: isLikeClicked,
+            chickenLegCount: chickenLegCount,
+            opposeCount: opposeCount,
+            isOpposeClicked: isOpposeClicked,
+            favoriteCount: favoriteCount,
+            isFavoriteCollected: isFavoriteCollected,
+            comments: nextComments,
+            page: page,
+            pagination: pagination,
+            isLastPage: isLastPage
+        )
+    }
+
+    func updatingPostOpposeState(count: Int?, isClicked: Bool) -> PostDetail {
+        PostDetail(
+            id: id,
+            title: title,
+            requiredReadingLevel: requiredReadingLevel,
+            authorName: authorName,
+            avatarURL: avatarURL,
+            authorProfileURL: authorProfileURL,
+            metadataText: metadataText,
+            contentHTML: contentHTML,
+            likeCount: likeCount,
+            isLikeClicked: isLikeClicked,
+            chickenLegCount: chickenLegCount,
+            opposeCount: count,
+            isOpposeClicked: isClicked,
+            favoriteCount: favoriteCount,
+            isFavoriteCollected: isFavoriteCollected,
+            comments: comments,
+            page: page,
+            pagination: pagination,
+            isLastPage: isLastPage
+        )
+    }
+
+    func updatingCommentOpposeState(commentID: String, count: Int?, isClicked: Bool) -> PostDetail {
+        let nextComments = comments.map { comment in
+            comment.id == commentID
+                ? comment.updatingOpposeReaction(count: count, isClicked: isClicked)
+                : comment
+        }
+
+        return PostDetail(
+            id: id,
+            title: title,
+            requiredReadingLevel: requiredReadingLevel,
+            authorName: authorName,
+            avatarURL: avatarURL,
+            authorProfileURL: authorProfileURL,
+            metadataText: metadataText,
+            contentHTML: contentHTML,
+            likeCount: likeCount,
+            isLikeClicked: isLikeClicked,
+            chickenLegCount: chickenLegCount,
+            opposeCount: opposeCount,
+            isOpposeClicked: isOpposeClicked,
+            favoriteCount: favoriteCount,
+            isFavoriteCollected: isFavoriteCollected,
+            comments: nextComments,
             page: page,
             pagination: pagination,
             isLastPage: isLastPage
@@ -188,8 +304,10 @@ struct Comment: Equatable, Sendable {
     let contentHTML: String
     let isHot: Bool
     let likeCount: Int?
+    let isLikeClicked: Bool
     let chickenLegCount: Int?
     let opposeCount: Int?
+    let isOpposeClicked: Bool
 
     init(
         id: String,
@@ -205,8 +323,10 @@ struct Comment: Equatable, Sendable {
         contentHTML: String,
         isHot: Bool = false,
         likeCount: Int? = nil,
+        isLikeClicked: Bool = false,
         chickenLegCount: Int? = nil,
-        opposeCount: Int? = nil
+        opposeCount: Int? = nil,
+        isOpposeClicked: Bool = false
     ) {
         self.id = id
         self.anchorID = anchorID
@@ -221,8 +341,54 @@ struct Comment: Equatable, Sendable {
         self.contentHTML = contentHTML
         self.isHot = isHot
         self.likeCount = likeCount
+        self.isLikeClicked = isLikeClicked
         self.chickenLegCount = chickenLegCount
         self.opposeCount = opposeCount
+        self.isOpposeClicked = isOpposeClicked
+    }
+
+    func updatingLikeReaction(count: Int?, isClicked: Bool) -> Comment {
+        Comment(
+            id: id,
+            anchorID: anchorID,
+            authorName: authorName,
+            isPoster: isPoster,
+            avatarURL: avatarURL,
+            authorProfileURL: authorProfileURL,
+            authorBadgeTexts: authorBadgeTexts,
+            floorText: floorText,
+            createdAtText: createdAtText,
+            createdAtTitleText: createdAtTitleText,
+            contentHTML: contentHTML,
+            isHot: isHot,
+            likeCount: count,
+            isLikeClicked: isClicked,
+            chickenLegCount: chickenLegCount,
+            opposeCount: opposeCount,
+            isOpposeClicked: isOpposeClicked
+        )
+    }
+
+    func updatingOpposeReaction(count: Int?, isClicked: Bool) -> Comment {
+        Comment(
+            id: id,
+            anchorID: anchorID,
+            authorName: authorName,
+            isPoster: isPoster,
+            avatarURL: avatarURL,
+            authorProfileURL: authorProfileURL,
+            authorBadgeTexts: authorBadgeTexts,
+            floorText: floorText,
+            createdAtText: createdAtText,
+            createdAtTitleText: createdAtTitleText,
+            contentHTML: contentHTML,
+            isHot: isHot,
+            likeCount: likeCount,
+            isLikeClicked: isLikeClicked,
+            chickenLegCount: chickenLegCount,
+            opposeCount: count,
+            isOpposeClicked: isClicked
+        )
     }
 }
 

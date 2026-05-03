@@ -26,6 +26,8 @@ final class PostBodyCellNode: ASCellNode {
     private let onImageTapped: ([URL], Int) -> Void
     private let onLinkTapped: (URL) -> Void
     private let onAuthorTapped: (URL) -> Void
+    private let onLikeTapped: () -> Void
+    private let onOpposeTapped: () -> Void
     private let onFavoriteTapped: () -> Void
     private let onTextLayoutInvalidated: () -> Void
     private let avatarLoader = AvatarImageLoader.shared
@@ -83,6 +85,8 @@ final class PostBodyCellNode: ASCellNode {
         onImageTapped: @escaping ([URL], Int) -> Void,
         onLinkTapped: @escaping (URL) -> Void = { _ in },
         onAuthorTapped: @escaping (URL) -> Void = { _ in },
+        onLikeTapped: @escaping () -> Void = {},
+        onOpposeTapped: @escaping () -> Void = {},
         onFavoriteTapped: @escaping () -> Void = {},
         onTextLayoutInvalidated: @escaping () -> Void,
         imageSizeProvider: @escaping (URL) -> CGSize? = { _ in nil },
@@ -92,6 +96,8 @@ final class PostBodyCellNode: ASCellNode {
         self.onImageTapped = onImageTapped
         self.onLinkTapped = onLinkTapped
         self.onAuthorTapped = onAuthorTapped
+        self.onLikeTapped = onLikeTapped
+        self.onOpposeTapped = onOpposeTapped
         self.onFavoriteTapped = onFavoriteTapped
         self.onTextLayoutInvalidated = onTextLayoutInvalidated
         self.bodyNodes = DetailContentBlockNodeFactory.makeNodes(
@@ -199,9 +205,9 @@ final class PostBodyCellNode: ASCellNode {
             ]
         )
 
-        configureActionButton(likeButtonNode, systemImageName: "hand.thumbsup", accessibilityLabel: "点赞", count: content.likeCount)
+        configureLikeActionButton(count: content.likeCount, isClicked: content.isLikeClicked)
         configureActionButton(chickenLegButtonNode, systemImageName: "fork.knife", accessibilityLabel: "加鸡腿", count: content.chickenLegCount)
-        configureActionButton(opposeButtonNode, systemImageName: "hand.thumbsdown", accessibilityLabel: "反对", count: content.opposeCount)
+        configureOpposeActionButton(count: content.opposeCount, isClicked: content.isOpposeClicked)
         configureFavoriteActionButton(count: content.favoriteCount, isCollected: content.isFavoriteCollected)
     }
 
@@ -270,6 +276,8 @@ final class PostBodyCellNode: ASCellNode {
         if hasAuthorProfileLink {
             authorButtonNode.addTarget(self, action: #selector(authorTapped), forControlEvents: .touchUpInside)
         }
+        likeButtonNode.addTarget(self, action: #selector(likeTapped), forControlEvents: .touchUpInside)
+        opposeButtonNode.addTarget(self, action: #selector(opposeTapped), forControlEvents: .touchUpInside)
         favoriteButtonNode.addTarget(self, action: #selector(favoriteTapped), forControlEvents: .touchUpInside)
     }
 
@@ -355,6 +363,36 @@ final class PostBodyCellNode: ASCellNode {
         return isCollected ? .systemYellow : UIColor.secondaryLabel.withAlphaComponent(0.72)
     }
 
+    private static func likeActionColor(isClicked: Bool) -> UIColor {
+        isClicked ? .systemRed : UIColor.secondaryLabel.withAlphaComponent(0.72)
+    }
+
+    private static func opposeActionColor(isClicked: Bool) -> UIColor {
+        isClicked ? .systemRed : UIColor.secondaryLabel.withAlphaComponent(0.72)
+    }
+
+    private func configureLikeActionButton(count: Int?, isClicked: Bool) {
+        configureActionButton(
+            likeButtonNode,
+            systemImageName: isClicked ? "hand.thumbsup.fill" : "hand.thumbsup",
+            accessibilityLabel: "点赞",
+            count: count,
+            color: Self.likeActionColor(isClicked: isClicked)
+        )
+        likeButtonNode.style.preferredSize = CGSize(width: Layout.stableReactionActionWidth, height: 32)
+    }
+
+    private func configureOpposeActionButton(count: Int?, isClicked: Bool) {
+        configureActionButton(
+            opposeButtonNode,
+            systemImageName: isClicked ? "hand.thumbsdown.fill" : "hand.thumbsdown",
+            accessibilityLabel: "反对",
+            count: count,
+            color: Self.opposeActionColor(isClicked: isClicked)
+        )
+        opposeButtonNode.style.preferredSize = CGSize(width: Layout.stableReactionActionWidth, height: 32)
+    }
+
     private func configureFavoriteActionButton(count: Int?, isCollected: Bool) {
         configureActionButton(
             favoriteButtonNode,
@@ -396,6 +434,80 @@ final class PostBodyCellNode: ASCellNode {
         }
     }
 
+    private func updateLikeActionPresentation(count: Int?, isClicked: Bool) {
+        let color = Self.likeActionColor(isClicked: isClicked)
+        let configuration = UIImage.SymbolConfiguration(pointSize: 15, weight: .regular)
+        let image = UIImage(systemName: isClicked ? "hand.thumbsup.fill" : "hand.thumbsup", withConfiguration: configuration)?
+            .withTintColor(color, renderingMode: .alwaysOriginal)
+        likeButtonNode.setImage(image, for: .normal)
+
+        let displayCount = count.flatMap { $0 > 0 ? $0 : nil }
+        if let displayCount {
+            let countText = Self.reactionCountText(displayCount)
+            let font = UIFont.preferredFont(forTextStyle: .caption1)
+            likeButtonNode.setAttributedTitle(
+                NSAttributedString(
+                    string: countText,
+                    attributes: [
+                        .font: font,
+                        .foregroundColor: color
+                    ]
+                ),
+                for: .normal
+            )
+            likeButtonNode.accessibilityLabel = "点赞 \(displayCount)"
+            likeButtonNode.contentSpacing = 4
+        } else {
+            likeButtonNode.setAttributedTitle(nil, for: .normal)
+            likeButtonNode.accessibilityLabel = "点赞"
+            likeButtonNode.contentSpacing = 0
+        }
+    }
+
+    private func updateOpposeActionPresentation(count: Int?, isClicked: Bool) {
+        let color = Self.opposeActionColor(isClicked: isClicked)
+        let configuration = UIImage.SymbolConfiguration(pointSize: 15, weight: .regular)
+        let image = UIImage(systemName: isClicked ? "hand.thumbsdown.fill" : "hand.thumbsdown", withConfiguration: configuration)?
+            .withTintColor(color, renderingMode: .alwaysOriginal)
+        opposeButtonNode.setImage(image, for: .normal)
+
+        let displayCount = count.flatMap { $0 > 0 ? $0 : nil }
+        if let displayCount {
+            let countText = Self.reactionCountText(displayCount)
+            let font = UIFont.preferredFont(forTextStyle: .caption1)
+            opposeButtonNode.setAttributedTitle(
+                NSAttributedString(
+                    string: countText,
+                    attributes: [
+                        .font: font,
+                        .foregroundColor: color
+                    ]
+                ),
+                for: .normal
+            )
+            opposeButtonNode.accessibilityLabel = "反对 \(displayCount)"
+            opposeButtonNode.contentSpacing = 4
+        } else {
+            opposeButtonNode.setAttributedTitle(nil, for: .normal)
+            opposeButtonNode.accessibilityLabel = "反对"
+            opposeButtonNode.contentSpacing = 0
+        }
+    }
+
+    func updateLikeReaction(count: Int?, isClicked: Bool) {
+        let nextContent = content.updatingLikeReaction(count: count, isClicked: isClicked)
+        guard nextContent != content else { return }
+        content = nextContent
+        updateLikeActionPresentation(count: content.likeCount, isClicked: content.isLikeClicked)
+    }
+
+    func updateOpposeReaction(count: Int?, isClicked: Bool) {
+        let nextContent = content.updatingOpposeReaction(count: count, isClicked: isClicked)
+        guard nextContent != content else { return }
+        content = nextContent
+        updateOpposeActionPresentation(count: content.opposeCount, isClicked: content.isOpposeClicked)
+    }
+
     func updateFavoriteReaction(count: Int?, isCollected: Bool) {
         let nextContent = content.updatingFavoriteReaction(count: count, isCollected: isCollected)
         guard nextContent != content else { return }
@@ -406,6 +518,14 @@ final class PostBodyCellNode: ASCellNode {
     @objc private func authorTapped() {
         guard let authorProfileURL = content.authorProfileURL else { return }
         onAuthorTapped(authorProfileURL)
+    }
+
+    @objc private func likeTapped() {
+        onLikeTapped()
+    }
+
+    @objc private func opposeTapped() {
+        onOpposeTapped()
     }
 
     @objc private func favoriteTapped() {
@@ -453,12 +573,28 @@ final class PostBodyCellNode: ASCellNode {
         Self.favoriteActionColor(isCollected: content.isFavoriteCollected)
     }
 
+    var debugLikeActionColor: UIColor {
+        Self.likeActionColor(isClicked: content.isLikeClicked)
+    }
+
+    var debugOpposeActionColor: UIColor {
+        Self.opposeActionColor(isClicked: content.isOpposeClicked)
+    }
+
     var debugFavoriteActionIsSubmitting: Bool {
         content.isFavoriteSubmitting
     }
 
     func debugTapFavoriteAction() {
         favoriteTapped()
+    }
+
+    func debugTapLikeAction() {
+        likeTapped()
+    }
+
+    func debugTapOpposeAction() {
+        opposeTapped()
     }
 }
 

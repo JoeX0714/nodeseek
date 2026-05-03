@@ -733,11 +733,19 @@ struct PostDetailViewControllerTests {
             favoriteCount: 2,
             isFavoriteCollected: true
         )
+        var likeTapCount = 0
+        var opposeTapCount = 0
         var favoriteTapCount = 0
         let node = PostBodyCellNode(
             content: header,
             renderedContent: [],
             onImageTapped: { _, _ in },
+            onLikeTapped: {
+                likeTapCount += 1
+            },
+            onOpposeTapped: {
+                opposeTapCount += 1
+            },
             onFavoriteTapped: {
                 favoriteTapCount += 1
             },
@@ -747,12 +755,64 @@ struct PostDetailViewControllerTests {
             min: .zero,
             max: CGSize(width: 360, height: CGFloat.greatestFiniteMagnitude)
         ))
+        node.debugTapLikeAction()
+        node.debugTapOpposeAction()
         node.debugTapFavoriteAction()
 
         #expect(node.debugReactionActionTitles == [nil, "1", nil, "2"])
         #expect(node.debugFooterActionAccessibilityLabels == ["点赞", "加鸡腿 1", "反对", "收藏 2"])
         #expect(node.debugFavoriteActionColor == .systemYellow)
+        #expect(likeTapCount == 1)
+        #expect(opposeTapCount == 1)
         #expect(favoriteTapCount == 1)
+    }
+
+    @Test func postBodyCellUpdatesLikeReactionInPlace() {
+        let header = PostDetailHeaderContent(
+            postID: "710379",
+            title: "带操作区的主题",
+            authorName: "mist",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "<p>正文</p>",
+            likeCount: 0
+        )
+        let node = PostBodyCellNode(
+            content: header,
+            renderedContent: [],
+            onImageTapped: { _, _ in },
+            onTextLayoutInvalidated: {}
+        )
+
+        node.updateLikeReaction(count: 1, isClicked: true)
+
+        #expect(node.debugReactionActionTitles.first == "1")
+        #expect(node.debugFooterActionAccessibilityLabels.first == "点赞 1")
+        #expect(node.debugLikeActionColor == .systemRed)
+    }
+
+    @Test func postBodyCellUpdatesOpposeReactionInPlace() {
+        let header = PostDetailHeaderContent(
+            postID: "710379",
+            title: "带操作区的主题",
+            authorName: "mist",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "<p>正文</p>",
+            opposeCount: 0
+        )
+        let node = PostBodyCellNode(
+            content: header,
+            renderedContent: [],
+            onImageTapped: { _, _ in },
+            onTextLayoutInvalidated: {}
+        )
+
+        node.updateOpposeReaction(count: 1, isClicked: true)
+
+        #expect(node.debugReactionActionTitles[2] == "1")
+        #expect(node.debugFooterActionAccessibilityLabels[2] == "反对 1")
+        #expect(node.debugOpposeActionColor == .systemRed)
     }
 
     @Test func postBodyCellCompactsLargeReactionCounts() {
@@ -775,7 +835,7 @@ struct PostDetailViewControllerTests {
             onTextLayoutInvalidated: {}
         )
 
-        #expect(node.debugReactionActionTitles == ["1.2万", "12万", "1亿", "20亿"])
+        #expect(node.debugReactionActionTitles == ["1.2万", "12.3万", "1亿", "20亿"])
         #expect(node.debugFooterActionAccessibilityLabels == ["点赞 12345", "加鸡腿 123456", "反对 100000000", "收藏 2000000000"])
     }
 
@@ -938,6 +998,54 @@ struct PostDetailViewControllerTests {
 
         #expect(node.debugReactionActionTitles == [nil, "1", nil])
         #expect(node.debugFooterActionAccessibilityLabels.prefix(3) == ["点赞", "加鸡腿 1", "反对"])
+    }
+
+    @Test func commentCellUpdatesLikeReactionInPlace() {
+        let comment = Comment(
+            id: "1",
+            authorName: "ipv4",
+            avatarURL: nil,
+            floorText: "#1",
+            createdAtText: "刚刚",
+            contentHTML: "<p>评论</p>",
+            likeCount: 0
+        )
+        let node = CommentCellNode(
+            comment: comment,
+            renderedBody: [],
+            onImageTapped: { _, _ in },
+            onTextLayoutInvalidated: {}
+        )
+
+        node.updateLikeReaction(count: 1, isClicked: true)
+
+        #expect(node.debugReactionActionTitles.first == "1")
+        #expect(node.debugFooterActionAccessibilityLabels.first == "点赞 1")
+        #expect(node.debugLikeActionColor == .systemRed)
+    }
+
+    @Test func commentCellUpdatesOpposeReactionInPlace() {
+        let comment = Comment(
+            id: "1",
+            authorName: "ipv4",
+            avatarURL: nil,
+            floorText: "#1",
+            createdAtText: "刚刚",
+            contentHTML: "<p>评论</p>",
+            opposeCount: 0
+        )
+        let node = CommentCellNode(
+            comment: comment,
+            renderedBody: [],
+            onImageTapped: { _, _ in },
+            onTextLayoutInvalidated: {}
+        )
+
+        node.updateOpposeReaction(count: 1, isClicked: true)
+
+        #expect(node.debugReactionActionTitles[2] == "1")
+        #expect(node.debugFooterActionAccessibilityLabels[2] == "反对 1")
+        #expect(node.debugOpposeActionColor == .systemRed)
     }
 
     @Test func tableNodeKeepsViewportWidthAndMeasuresContentHeight() {
@@ -1812,6 +1920,10 @@ private final class SpyPostDetailPresenter: PostDetailPresenterProtocol {
     private(set) var selectedPages: [Int] = []
     private(set) var sentReplyContent: String?
     private(set) var didTapFavoriteCount = 0
+    private(set) var didTapPostLikeCount = 0
+    private(set) var didTapPostOpposeCount = 0
+    private(set) var likedCommentIDs: [String] = []
+    private(set) var opposedCommentIDs: [String] = []
 
     func viewDidLoad() {
         loadCount += 1
@@ -1831,6 +1943,22 @@ private final class SpyPostDetailPresenter: PostDetailPresenterProtocol {
 
     func didTapFavorite() {
         didTapFavoriteCount += 1
+    }
+
+    func didTapPostLike() {
+        didTapPostLikeCount += 1
+    }
+
+    func didTapPostOppose() {
+        didTapPostOpposeCount += 1
+    }
+
+    func didTapCommentLike(_ comment: nodeseek.Comment) {
+        likedCommentIDs.append(comment.id)
+    }
+
+    func didTapCommentOppose(_ comment: nodeseek.Comment) {
+        opposedCommentIDs.append(comment.id)
     }
 }
 

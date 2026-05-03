@@ -125,6 +125,155 @@ struct NodeSeekCommentSubmitterTests {
         #expect(submission.action == "remove")
         #expect(submission.referer.absoluteString == "https://www.nodeseek.com/post-711898-1")
     }
+
+    @Test func addCommentUpvoteUsesPageAutomation() async throws {
+        let automation = CapturingCommentUpvoteAutomation(response: .init(
+            ok: true,
+            statusCode: 200,
+            response: CommentUpvoteResponse(
+                success: true,
+                message: "added",
+                current: 1
+            ),
+            reason: "submitted"
+        ))
+        let submitter = NodeSeekCommentUpvoteSubmitter(automation: automation)
+
+        let response = try await submitter.addUpvote(
+            commentID: "9835758",
+            referer: URL(string: "https://www.nodeseek.com/post-712073-1")!
+        )
+
+        let submission = try #require(automation.submissions.first)
+        #expect(response.success == true)
+        #expect(response.message == "added")
+        #expect(response.current == 1)
+        #expect(submission.commentID == 9835758)
+        #expect(submission.action == "add")
+        #expect(submission.referer.absoluteString == "https://www.nodeseek.com/post-712073-1")
+    }
+
+    @Test func alreadyUpvotedMessageIsSurfaced() async throws {
+        let automation = CapturingCommentUpvoteAutomation(response: .init(
+            ok: false,
+            statusCode: 200,
+            response: CommentUpvoteResponse(
+                success: false,
+                message: "该评论已点赞",
+                current: 1
+            ),
+            reason: "already_clicked"
+        ))
+        let submitter = NodeSeekCommentUpvoteSubmitter(automation: automation)
+
+        do {
+            _ = try await submitter.addUpvote(
+                commentID: "9835758",
+                referer: URL(string: "https://www.nodeseek.com/post-712073-1")!
+            )
+            Issue.record("已点赞应抛出错误")
+        } catch let error as NodeSeekCommentUpvoteSubmitterError {
+            #expect(error.errorDescription == "该评论已点赞")
+        }
+    }
+
+    @Test func addPostUpvoteUsesPageAutomation() async throws {
+        let automation = CapturingPostUpvoteAutomation(response: .init(
+            ok: true,
+            statusCode: 200,
+            response: PostUpvoteResponse(
+                success: true,
+                message: "added",
+                current: 1
+            ),
+            reason: "submitted"
+        ))
+        let submitter = NodeSeekPostUpvoteSubmitter(automation: automation)
+
+        let response = try await submitter.addUpvote(
+            postID: "712073",
+            referer: URL(string: "https://www.nodeseek.com/post-712073-1")!
+        )
+
+        let submission = try #require(automation.submissions.first)
+        #expect(response.success == true)
+        #expect(response.message == "added")
+        #expect(response.current == 1)
+        #expect(submission.postID == 712073)
+        #expect(submission.action == "add")
+        #expect(submission.referer.absoluteString == "https://www.nodeseek.com/post-712073-1")
+    }
+
+    @Test func postUpvoteScriptSubmitsMainContentCommentID() {
+        let source = PostUpvoteAutomationScript.source
+
+        #expect(source.contains("data-comment-id"))
+        #expect(source.contains("commentId: commentID"))
+        #expect(source.contains("postId: postID") == false)
+    }
+
+    @Test func addCommentDislikeUsesPageAutomation() async throws {
+        let automation = CapturingCommentDislikeAutomation(response: .init(
+            ok: true,
+            statusCode: 200,
+            response: CommentDislikeResponse(
+                success: true,
+                message: "added",
+                current: 1
+            ),
+            reason: "submitted"
+        ))
+        let submitter = NodeSeekCommentDislikeSubmitter(automation: automation)
+
+        let response = try await submitter.addDislike(
+            commentID: "9835758",
+            referer: URL(string: "https://www.nodeseek.com/post-712073-1")!
+        )
+
+        let submission = try #require(automation.submissions.first)
+        #expect(response.success == true)
+        #expect(response.message == "added")
+        #expect(response.current == 1)
+        #expect(submission.commentID == 9835758)
+        #expect(submission.action == "add")
+        #expect(submission.referer.absoluteString == "https://www.nodeseek.com/post-712073-1")
+    }
+
+    @Test func addPostDislikeUsesPageAutomation() async throws {
+        let automation = CapturingPostDislikeAutomation(response: .init(
+            ok: true,
+            statusCode: 200,
+            response: PostDislikeResponse(
+                success: true,
+                message: "added",
+                current: 1
+            ),
+            reason: "submitted"
+        ))
+        let submitter = NodeSeekPostDislikeSubmitter(automation: automation)
+
+        let response = try await submitter.addDislike(
+            postID: "712073",
+            referer: URL(string: "https://www.nodeseek.com/post-712073-1")!
+        )
+
+        let submission = try #require(automation.submissions.first)
+        #expect(response.success == true)
+        #expect(response.message == "added")
+        #expect(response.current == 1)
+        #expect(submission.postID == 712073)
+        #expect(submission.action == "add")
+        #expect(submission.referer.absoluteString == "https://www.nodeseek.com/post-712073-1")
+    }
+
+    @Test func postDislikeScriptSubmitsMainContentCommentID() {
+        let source = PostDislikeAutomationScript.source
+
+        #expect(source.contains("/api/statistics/dislike"))
+        #expect(source.contains("data-comment-id"))
+        #expect(source.contains("commentId: commentID"))
+        #expect(source.contains("postId: postID") == false)
+    }
 }
 
 private final class CapturingCommentAutomation: CommentSubmissionAutomating {
@@ -151,6 +300,66 @@ private final class CapturingCollectionAutomation: PostCollectionAutomating {
     }
 
     func submitCollection(postID: Int, action: String, referer: URL) async throws -> PostCollectionAutomationResponse {
+        submissions.append((postID: postID, action: action, referer: referer))
+        return response
+    }
+}
+
+@MainActor
+private final class CapturingCommentUpvoteAutomation: CommentUpvoteAutomating {
+    private(set) var submissions: [(commentID: Int, action: String, referer: URL)] = []
+    private let response: CommentUpvoteAutomationResponse
+
+    init(response: CommentUpvoteAutomationResponse) {
+        self.response = response
+    }
+
+    func submitUpvote(commentID: Int, action: String, referer: URL) async throws -> CommentUpvoteAutomationResponse {
+        submissions.append((commentID: commentID, action: action, referer: referer))
+        return response
+    }
+}
+
+@MainActor
+private final class CapturingPostUpvoteAutomation: PostUpvoteAutomating {
+    private(set) var submissions: [(postID: Int, action: String, referer: URL)] = []
+    private let response: PostUpvoteAutomationResponse
+
+    init(response: PostUpvoteAutomationResponse) {
+        self.response = response
+    }
+
+    func submitUpvote(postID: Int, action: String, referer: URL) async throws -> PostUpvoteAutomationResponse {
+        submissions.append((postID: postID, action: action, referer: referer))
+        return response
+    }
+}
+
+@MainActor
+private final class CapturingCommentDislikeAutomation: CommentDislikeAutomating {
+    private(set) var submissions: [(commentID: Int, action: String, referer: URL)] = []
+    private let response: CommentDislikeAutomationResponse
+
+    init(response: CommentDislikeAutomationResponse) {
+        self.response = response
+    }
+
+    func submitDislike(commentID: Int, action: String, referer: URL) async throws -> CommentDislikeAutomationResponse {
+        submissions.append((commentID: commentID, action: action, referer: referer))
+        return response
+    }
+}
+
+@MainActor
+private final class CapturingPostDislikeAutomation: PostDislikeAutomating {
+    private(set) var submissions: [(postID: Int, action: String, referer: URL)] = []
+    private let response: PostDislikeAutomationResponse
+
+    init(response: PostDislikeAutomationResponse) {
+        self.response = response
+    }
+
+    func submitDislike(postID: Int, action: String, referer: URL) async throws -> PostDislikeAutomationResponse {
         submissions.append((postID: postID, action: action, referer: referer))
         return response
     }

@@ -236,6 +236,120 @@ struct PostDetailInteractorTests {
         #expect(presenter.addFavoriteErrorMessage == "缺少帖子信息，无法收藏。")
     }
 
+    @Test func addCommentLikeUsesUpvoteSubmitterAndReportsSuccess() async throws {
+        let upvoteSubmitter = SpyCommentUpvoteSubmitting(response: CommentUpvoteResponse(message: "added", current: 1))
+        let presenter = SpyPostDetailInteractorOutput()
+        let post = Self.makePost()
+        let interactor = PostDetailInteractor(
+            post: post,
+            service: Self.makeUnusedService(),
+            commentUpvoteSubmitter: upvoteSubmitter,
+            sessionStore: NodeSeekSessionStore()
+        )
+        interactor.presenter = presenter
+
+        interactor.addCommentLike(commentID: "9835758")
+        await waitForInteractorCallbacks()
+
+        #expect(upvoteSubmitter.submittedCommentID == "9835758")
+        #expect(upvoteSubmitter.submittedReferer == post.url)
+        #expect(presenter.commentLikeResponse == CommentUpvoteResponse(message: "added", current: 1))
+        #expect(presenter.commentLikeErrorMessage == nil)
+    }
+
+    @Test func addCommentLikeReportsMissingPost() {
+        let presenter = SpyPostDetailInteractorOutput()
+        let interactor = PostDetailInteractor(
+            post: nil,
+            service: Self.makeUnusedService(),
+            sessionStore: NodeSeekSessionStore()
+        )
+        interactor.presenter = presenter
+
+        interactor.addCommentLike(commentID: "9835758")
+
+        #expect(presenter.commentLikeResponse == nil)
+        #expect(presenter.commentLikeErrorMessage == "缺少帖子信息，无法点赞。")
+    }
+
+    @Test func addPostLikeUsesUpvoteSubmitterAndReportsSuccess() async throws {
+        let upvoteSubmitter = SpyPostUpvoteSubmitting(response: PostUpvoteResponse(message: "added", current: 1))
+        let presenter = SpyPostDetailInteractorOutput()
+        let post = Self.makePost()
+        let interactor = PostDetailInteractor(
+            post: post,
+            service: Self.makeUnusedService(),
+            postUpvoteSubmitter: upvoteSubmitter,
+            sessionStore: NodeSeekSessionStore()
+        )
+        interactor.presenter = presenter
+
+        interactor.addPostLike()
+        await waitForInteractorCallbacks()
+
+        #expect(upvoteSubmitter.submittedPostID == post.id)
+        #expect(upvoteSubmitter.submittedReferer == post.url)
+        #expect(presenter.postLikeResponse == PostUpvoteResponse(message: "added", current: 1))
+        #expect(presenter.postLikeErrorMessage == nil)
+    }
+
+    @Test func addPostLikeReportsMissingPost() {
+        let presenter = SpyPostDetailInteractorOutput()
+        let interactor = PostDetailInteractor(
+            post: nil,
+            service: Self.makeUnusedService(),
+            sessionStore: NodeSeekSessionStore()
+        )
+        interactor.presenter = presenter
+
+        interactor.addPostLike()
+
+        #expect(presenter.postLikeResponse == nil)
+        #expect(presenter.postLikeErrorMessage == "缺少帖子信息，无法点赞。")
+    }
+
+    @Test func addCommentOpposeUsesDislikeSubmitterAndReportsSuccess() async throws {
+        let dislikeSubmitter = SpyCommentDislikeSubmitting(response: CommentDislikeResponse(message: "added", current: 1))
+        let presenter = SpyPostDetailInteractorOutput()
+        let post = Self.makePost()
+        let interactor = PostDetailInteractor(
+            post: post,
+            service: Self.makeUnusedService(),
+            commentDislikeSubmitter: dislikeSubmitter,
+            sessionStore: NodeSeekSessionStore()
+        )
+        interactor.presenter = presenter
+
+        interactor.addCommentOppose(commentID: "9835758")
+        await waitForInteractorCallbacks()
+
+        #expect(dislikeSubmitter.submittedCommentID == "9835758")
+        #expect(dislikeSubmitter.submittedReferer == post.url)
+        #expect(presenter.commentOpposeResponse == CommentDislikeResponse(message: "added", current: 1))
+        #expect(presenter.commentOpposeErrorMessage == nil)
+    }
+
+    @Test func addPostOpposeUsesDislikeSubmitterAndReportsSuccess() async throws {
+        let dislikeSubmitter = SpyPostDislikeSubmitting(response: PostDislikeResponse(message: "added", current: 1))
+        let presenter = SpyPostDetailInteractorOutput()
+        let post = Self.makePost()
+        let interactor = PostDetailInteractor(
+            post: post,
+            service: Self.makeUnusedService(),
+            postDislikeSubmitter: dislikeSubmitter,
+            sessionStore: NodeSeekSessionStore()
+        )
+        interactor.presenter = presenter
+
+        interactor.addPostOppose()
+        await waitForInteractorCallbacks()
+
+        #expect(dislikeSubmitter.submittedPostID == post.id)
+        #expect(dislikeSubmitter.submittedReferer == post.url)
+        #expect(presenter.postOpposeResponse == PostDislikeResponse(message: "added", current: 1))
+        #expect(presenter.postOpposeErrorMessage == nil)
+    }
+
     private static func makePost() -> PostSummary {
         PostSummary(
             id: "703863",
@@ -275,6 +389,14 @@ private final class SpyPostDetailInteractorOutput: PostDetailInteractorOutput {
     var addFavoriteErrorMessage: String?
     var removeFavoriteResponse: PostCollectionResponse?
     var removeFavoriteErrorMessage: String?
+    var postLikeResponse: PostUpvoteResponse?
+    var postLikeErrorMessage: String?
+    var commentLikeResponse: CommentUpvoteResponse?
+    var commentLikeErrorMessage: String?
+    var postOpposeResponse: PostDislikeResponse?
+    var postOpposeErrorMessage: String?
+    var commentOpposeResponse: CommentDislikeResponse?
+    var commentOpposeErrorMessage: String?
 
     func didLoadPostDetail(_ response: PostDetailResponse) {
         loadedResponse = response
@@ -315,6 +437,38 @@ private final class SpyPostDetailInteractorOutput: PostDetailInteractorOutput {
 
     func didFailRemoveFavorite(error: String) {
         removeFavoriteErrorMessage = error
+    }
+
+    func didAddPostLike(_ response: PostUpvoteResponse) {
+        postLikeResponse = response
+    }
+
+    func didFailAddPostLike(error: String) {
+        postLikeErrorMessage = error
+    }
+
+    func didAddCommentLike(commentID: String, response: CommentUpvoteResponse) {
+        commentLikeResponse = response
+    }
+
+    func didFailAddCommentLike(commentID: String, error: String) {
+        commentLikeErrorMessage = error
+    }
+
+    func didAddPostOppose(_ response: PostDislikeResponse) {
+        postOpposeResponse = response
+    }
+
+    func didFailAddPostOppose(error: String) {
+        postOpposeErrorMessage = error
+    }
+
+    func didAddCommentOppose(commentID: String, response: CommentDislikeResponse) {
+        commentOpposeResponse = response
+    }
+
+    func didFailAddCommentOppose(commentID: String, error: String) {
+        commentOpposeErrorMessage = error
     }
 }
 
@@ -389,6 +543,74 @@ private final class SpyPostCollectionSubmitting: PostCollectionSubmitting {
     func removeFavorite(postID: String, referer: URL) async throws -> PostCollectionResponse {
         removedPostID = postID
         removedReferer = referer
+        return response
+    }
+}
+
+@MainActor
+private final class SpyCommentUpvoteSubmitting: CommentUpvoteSubmitting {
+    private let response: CommentUpvoteResponse
+    private(set) var submittedCommentID: String?
+    private(set) var submittedReferer: URL?
+
+    init(response: CommentUpvoteResponse) {
+        self.response = response
+    }
+
+    func addUpvote(commentID: String, referer: URL) async throws -> CommentUpvoteResponse {
+        submittedCommentID = commentID
+        submittedReferer = referer
+        return response
+    }
+}
+
+@MainActor
+private final class SpyPostUpvoteSubmitting: PostUpvoteSubmitting {
+    private let response: PostUpvoteResponse
+    private(set) var submittedPostID: String?
+    private(set) var submittedReferer: URL?
+
+    init(response: PostUpvoteResponse) {
+        self.response = response
+    }
+
+    func addUpvote(postID: String, referer: URL) async throws -> PostUpvoteResponse {
+        submittedPostID = postID
+        submittedReferer = referer
+        return response
+    }
+}
+
+@MainActor
+private final class SpyCommentDislikeSubmitting: CommentDislikeSubmitting {
+    private let response: CommentDislikeResponse
+    private(set) var submittedCommentID: String?
+    private(set) var submittedReferer: URL?
+
+    init(response: CommentDislikeResponse) {
+        self.response = response
+    }
+
+    func addDislike(commentID: String, referer: URL) async throws -> CommentDislikeResponse {
+        submittedCommentID = commentID
+        submittedReferer = referer
+        return response
+    }
+}
+
+@MainActor
+private final class SpyPostDislikeSubmitting: PostDislikeSubmitting {
+    private let response: PostDislikeResponse
+    private(set) var submittedPostID: String?
+    private(set) var submittedReferer: URL?
+
+    init(response: PostDislikeResponse) {
+        self.response = response
+    }
+
+    func addDislike(postID: String, referer: URL) async throws -> PostDislikeResponse {
+        submittedPostID = postID
+        submittedReferer = referer
         return response
     }
 }

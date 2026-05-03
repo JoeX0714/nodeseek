@@ -162,6 +162,8 @@ extension PostDetailViewController: PostDetailViewProtocol {
             currentHeaderContent = nextContent
             if let row = detailRows.firstIndex(where: { if case .header = $0 { return true }; return false }),
                let node = tableNode.nodeForRow(at: IndexPath(row: row, section: 0)) as? PostBodyCellNode {
+                node.updateLikeReaction(count: nextContent.likeCount, isClicked: nextContent.isLikeClicked)
+                node.updateOpposeReaction(count: nextContent.opposeCount, isClicked: nextContent.isOpposeClicked)
                 node.updateFavoriteReaction(count: nextContent.favoriteCount, isCollected: nextContent.isFavoriteCollected)
             }
             return
@@ -169,6 +171,46 @@ extension PostDetailViewController: PostDetailViewProtocol {
 
         configureHeader(nextContent, renderedContent: headerRenderedContent)
         scheduleHeaderReload()
+    }
+
+    func updateCommentLike(commentID: String, count: Int?, isClicked: Bool) {
+        guard let commentIndex = comments.firstIndex(where: { $0.id == commentID }) else { return }
+        comments[commentIndex] = comments[commentIndex].updatingLikeReaction(count: count, isClicked: isClicked)
+
+        guard let row = detailRows.firstIndex(where: {
+            if case .comment(let index) = $0 {
+                return index == commentIndex
+            }
+            return false
+        }) else { return }
+
+        let indexPath = IndexPath(row: row, section: 0)
+        if let node = tableNode.nodeForRow(at: indexPath) as? CommentCellNode {
+            node.updateLikeReaction(count: count, isClicked: isClicked)
+            return
+        }
+
+        scheduleRowsReload([indexPath])
+    }
+
+    func updateCommentOppose(commentID: String, count: Int?, isClicked: Bool) {
+        guard let commentIndex = comments.firstIndex(where: { $0.id == commentID }) else { return }
+        comments[commentIndex] = comments[commentIndex].updatingOpposeReaction(count: count, isClicked: isClicked)
+
+        guard let row = detailRows.firstIndex(where: {
+            if case .comment(let index) = $0 {
+                return index == commentIndex
+            }
+            return false
+        }) else { return }
+
+        let indexPath = IndexPath(row: row, section: 0)
+        if let node = tableNode.nodeForRow(at: indexPath) as? CommentCellNode {
+            node.updateOpposeReaction(count: count, isClicked: isClicked)
+            return
+        }
+
+        scheduleRowsReload([indexPath])
     }
 
     private static func isHeaderLayoutEquivalent(

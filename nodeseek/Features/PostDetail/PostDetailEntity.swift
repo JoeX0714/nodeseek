@@ -30,8 +30,10 @@ struct PostDetailHeaderContent: Equatable {
     let metadataText: String?
     let contentHTML: String
     let likeCount: Int?
+    let isLikeClicked: Bool
     let chickenLegCount: Int?
     let opposeCount: Int?
+    let isOpposeClicked: Bool
     let favoriteCount: Int?
     let isFavoriteCollected: Bool
     let isFavoriteSubmitting: Bool
@@ -46,8 +48,10 @@ struct PostDetailHeaderContent: Equatable {
         contentHTML: String = "",
         requiredReadingLevel: Int? = nil,
         likeCount: Int? = nil,
+        isLikeClicked: Bool = false,
         chickenLegCount: Int? = nil,
         opposeCount: Int? = nil,
+        isOpposeClicked: Bool = false,
         favoriteCount: Int? = nil,
         isFavoriteCollected: Bool = false,
         isFavoriteSubmitting: Bool = false
@@ -61,8 +65,10 @@ struct PostDetailHeaderContent: Equatable {
         self.metadataText = metadataText
         self.contentHTML = contentHTML
         self.likeCount = likeCount
+        self.isLikeClicked = isLikeClicked
         self.chickenLegCount = chickenLegCount
         self.opposeCount = opposeCount
+        self.isOpposeClicked = isOpposeClicked
         self.favoriteCount = favoriteCount
         self.isFavoriteCollected = isFavoriteCollected
         self.isFavoriteSubmitting = isFavoriteSubmitting
@@ -97,8 +103,10 @@ struct PostDetailHeaderContent: Equatable {
             contentHTML: detail.contentHTML,
             requiredReadingLevel: detail.requiredReadingLevel,
             likeCount: detail.likeCount,
+            isLikeClicked: detail.isLikeClicked,
             chickenLegCount: detail.chickenLegCount,
             opposeCount: detail.opposeCount,
+            isOpposeClicked: detail.isOpposeClicked,
             favoriteCount: detail.favoriteCount,
             isFavoriteCollected: detail.isFavoriteCollected,
             isFavoriteSubmitting: false
@@ -116,8 +124,10 @@ struct PostDetailHeaderContent: Equatable {
             contentHTML: contentHTML,
             requiredReadingLevel: requiredReadingLevel,
             likeCount: likeCount,
+            isLikeClicked: isLikeClicked,
             chickenLegCount: chickenLegCount,
             opposeCount: opposeCount,
+            isOpposeClicked: isOpposeClicked,
             favoriteCount: favoriteCount,
             isFavoriteCollected: isFavoriteCollected,
             isFavoriteSubmitting: isSubmitting
@@ -135,10 +145,54 @@ struct PostDetailHeaderContent: Equatable {
             contentHTML: contentHTML,
             requiredReadingLevel: requiredReadingLevel,
             likeCount: likeCount,
+            isLikeClicked: isLikeClicked,
             chickenLegCount: chickenLegCount,
             opposeCount: opposeCount,
+            isOpposeClicked: isOpposeClicked,
             favoriteCount: count,
             isFavoriteCollected: isCollected,
+            isFavoriteSubmitting: isFavoriteSubmitting
+        )
+    }
+
+    func updatingLikeReaction(count: Int?, isClicked: Bool) -> PostDetailHeaderContent {
+        PostDetailHeaderContent(
+            postID: postID,
+            title: title,
+            authorName: authorName,
+            avatarURL: avatarURL,
+            authorProfileURL: authorProfileURL,
+            metadataText: metadataText,
+            contentHTML: contentHTML,
+            requiredReadingLevel: requiredReadingLevel,
+            likeCount: count,
+            isLikeClicked: isClicked,
+            chickenLegCount: chickenLegCount,
+            opposeCount: opposeCount,
+            isOpposeClicked: isOpposeClicked,
+            favoriteCount: favoriteCount,
+            isFavoriteCollected: isFavoriteCollected,
+            isFavoriteSubmitting: isFavoriteSubmitting
+        )
+    }
+
+    func updatingOpposeReaction(count: Int?, isClicked: Bool) -> PostDetailHeaderContent {
+        PostDetailHeaderContent(
+            postID: postID,
+            title: title,
+            authorName: authorName,
+            avatarURL: avatarURL,
+            authorProfileURL: authorProfileURL,
+            metadataText: metadataText,
+            contentHTML: contentHTML,
+            requiredReadingLevel: requiredReadingLevel,
+            likeCount: likeCount,
+            isLikeClicked: isLikeClicked,
+            chickenLegCount: chickenLegCount,
+            opposeCount: count,
+            isOpposeClicked: isClicked,
+            favoriteCount: favoriteCount,
+            isFavoriteCollected: isFavoriteCollected,
             isFavoriteSubmitting: isFavoriteSubmitting
         )
     }

@@ -64,6 +64,126 @@ struct HiddenWebViewPostCollectionClient {
     }
 }
 
+struct HiddenWebViewCommentUpvoteClient {
+    private let timeoutInterval: TimeInterval
+
+    init(timeoutInterval: TimeInterval = 20) {
+        self.timeoutInterval = timeoutInterval
+    }
+
+    func submitUpvote(commentID: Int, action: String, referer: URL) async throws -> CommentUpvoteAutomationResponse {
+        let requestLock = HiddenWebViewRequestLock.shared
+        await requestLock.acquire()
+        AppLog.info(.webView, "准备通过隐藏 WebView 提交评论点赞: commentID=\(commentID), action=\(action), referer=\(referer.absoluteString)")
+        do {
+            let loader = await MainActor.run {
+                HiddenWebViewLoader.shared
+            }
+            let response = try await loader.submitCommentUpvote(
+                pageURL: referer,
+                commentID: commentID,
+                action: action,
+                timeoutInterval: timeoutInterval
+            )
+            await requestLock.release()
+            return response
+        } catch {
+            await requestLock.release()
+            throw error
+        }
+    }
+}
+
+struct HiddenWebViewPostUpvoteClient {
+    private let timeoutInterval: TimeInterval
+
+    init(timeoutInterval: TimeInterval = 20) {
+        self.timeoutInterval = timeoutInterval
+    }
+
+    func submitUpvote(postID: Int, action: String, referer: URL) async throws -> PostUpvoteAutomationResponse {
+        let requestLock = HiddenWebViewRequestLock.shared
+        await requestLock.acquire()
+        AppLog.info(.webView, "准备通过隐藏 WebView 提交帖子点赞: postID=\(postID), action=\(action), referer=\(referer.absoluteString)")
+        do {
+            let loader = await MainActor.run {
+                HiddenWebViewLoader.shared
+            }
+            let response = try await loader.submitPostUpvote(
+                pageURL: referer,
+                postID: postID,
+                action: action,
+                timeoutInterval: timeoutInterval
+            )
+            await requestLock.release()
+            return response
+        } catch {
+            await requestLock.release()
+            throw error
+        }
+    }
+}
+
+struct HiddenWebViewCommentDislikeClient {
+    private let timeoutInterval: TimeInterval
+
+    init(timeoutInterval: TimeInterval = 20) {
+        self.timeoutInterval = timeoutInterval
+    }
+
+    func submitDislike(commentID: Int, action: String, referer: URL) async throws -> CommentDislikeAutomationResponse {
+        let requestLock = HiddenWebViewRequestLock.shared
+        await requestLock.acquire()
+        AppLog.info(.webView, "准备通过隐藏 WebView 提交评论反对: commentID=\(commentID), action=\(action), referer=\(referer.absoluteString)")
+        do {
+            let loader = await MainActor.run {
+                HiddenWebViewLoader.shared
+            }
+            let response = try await loader.submitCommentDislike(
+                pageURL: referer,
+                commentID: commentID,
+                action: action,
+                timeoutInterval: timeoutInterval
+            )
+            await requestLock.release()
+            return response
+        } catch {
+            await requestLock.release()
+            throw error
+        }
+    }
+}
+
+struct HiddenWebViewPostDislikeClient {
+    private let timeoutInterval: TimeInterval
+
+    init(timeoutInterval: TimeInterval = 20) {
+        self.timeoutInterval = timeoutInterval
+    }
+
+    func submitDislike(postID: Int, action: String, referer: URL) async throws -> PostDislikeAutomationResponse {
+        let requestLock = HiddenWebViewRequestLock.shared
+        await requestLock.acquire()
+        AppLog.info(.webView, "准备通过隐藏 WebView 提交帖子反对: postID=\(postID), action=\(action), referer=\(referer.absoluteString)")
+        do {
+            let loader = await MainActor.run {
+                HiddenWebViewLoader.shared
+            }
+            let response = try await loader.submitPostDislike(
+                pageURL: referer,
+                postID: postID,
+                action: action,
+                timeoutInterval: timeoutInterval
+            )
+            await requestLock.release()
+            return response
+        } catch {
+            await requestLock.release()
+            throw error
+        }
+    }
+}
+
 enum CommentSubmissionAutomationScript {
     static let source = """
     return await new Promise(async (resolve) => {
@@ -382,6 +502,510 @@ enum PostCollectionAutomationScript {
             message: json.message || json.msg || json.error || null,
             postCollectionCount: typeof json.postCollectionCount === "number" ? json.postCollectionCount : null,
             userCollectionCount: typeof json.userCollectionCount === "number" ? json.userCollectionCount : null
+          },
+          reason: response.status >= 200 && response.status < 300 && json.success !== false ? "submitted" : "server_error",
+          body
+        });
+      } catch (error) {
+        finish({
+          ok: false,
+          reason: "network_error",
+          message: String(error && error.message ? error.message : error)
+        });
+      }
+    });
+    """
+}
+
+enum CommentUpvoteAutomationScript {
+    static let source = """
+    return await new Promise(async (resolve) => {
+      let resolved = false;
+      let timer = null;
+
+      const finish = (payload) => {
+        if (resolved) return;
+        resolved = true;
+        if (timer) window.clearTimeout(timer);
+        resolve(payload);
+      };
+
+      const parseJSON = (body) => {
+        try {
+          return JSON.parse(body || "{}");
+        } catch (_) {
+          return {};
+        }
+      };
+
+      const readCount = (root) => {
+        if (!root) return null;
+        const countText = root.querySelector("span")?.textContent || root.textContent || "";
+        const matched = String(countText).match(/\\d+/);
+        if (!matched) return null;
+        return Number(matched[0]);
+      };
+
+      const pickUpvoteElement = (commentRoot) => {
+        if (!commentRoot) return null;
+        const direct = commentRoot.querySelector(".menu-item[title='点赞']");
+        if (direct) return direct;
+        const candidates = Array.from(commentRoot.querySelectorAll(".menu-item"));
+        return candidates.find((node) => {
+          const title = String(node.getAttribute("title") || "").trim();
+          const text = String(node.textContent || "").trim();
+          const className = String(node.className || "");
+          const source = `${title} ${text} ${className}`.toLowerCase();
+          return /点赞|赞同|upvote|like/.test(source);
+        }) || null;
+      };
+
+      const locateCommentRoot = (id) => {
+        const normalizedID = String(id);
+        return document.querySelector(`[data-comment-id='${normalizedID}']`) ||
+          document.getElementById(normalizedID) ||
+          document.querySelector(`#comment-${normalizedID}`);
+      };
+
+      try {
+        const commentRoot = locateCommentRoot(commentID);
+        const upvoteElement = pickUpvoteElement(commentRoot);
+        if (!commentRoot || !upvoteElement) {
+          finish({
+            ok: false,
+            statusCode: 404,
+            response: {
+              success: false,
+              message: "未找到可点赞的评论节点",
+              current: null
+            },
+            reason: "comment_not_found",
+            body: ""
+          });
+          return;
+        }
+
+        if (upvoteElement.classList.contains("clicked")) {
+          finish({
+            ok: false,
+            statusCode: 200,
+            response: {
+              success: false,
+              message: "该评论已点赞",
+              current: readCount(upvoteElement)
+            },
+            reason: "already_clicked",
+            body: ""
+          });
+          return;
+        }
+
+        timer = window.setTimeout(() => {
+          finish({ ok: false, reason: "submit_timeout" });
+        }, timeoutMs);
+
+        const response = await window.fetch("/api/statistics/upvote", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            commentId: commentID,
+            action
+          })
+        });
+
+        const body = await response.text();
+        const json = parseJSON(body);
+        finish({
+          ok: response.status >= 200 && response.status < 300 && json.success !== false,
+          statusCode: response.status,
+          response: {
+            success: typeof json.success === "boolean" ? json.success : null,
+            message: json.message || json.msg || json.error || null,
+            current: typeof json.current === "number" ? json.current : null
+          },
+          reason: response.status >= 200 && response.status < 300 && json.success !== false ? "submitted" : "server_error",
+          body
+        });
+      } catch (error) {
+        finish({
+          ok: false,
+          reason: "network_error",
+          message: String(error && error.message ? error.message : error)
+        });
+      }
+    });
+    """
+}
+
+enum PostUpvoteAutomationScript {
+    static let source = """
+    return await new Promise(async (resolve) => {
+      let resolved = false;
+      let timer = null;
+
+      const finish = (payload) => {
+        if (resolved) return;
+        resolved = true;
+        if (timer) window.clearTimeout(timer);
+        resolve(payload);
+      };
+
+      const parseJSON = (body) => {
+        try {
+          return JSON.parse(body || "{}");
+        } catch (_) {
+          return {};
+        }
+      };
+
+      const readCount = (root) => {
+        if (!root) return null;
+        const countText = root.querySelector("span")?.textContent || root.textContent || "";
+        const matched = String(countText).match(/\\d+/);
+        if (!matched) return null;
+        return Number(matched[0]);
+      };
+
+      const pickPostRoot = () =>
+        document.querySelector(".nsk-post > .content-item") ||
+        document.querySelector(".post-title + .content-item") ||
+        document.querySelector("#nsk-body-left .content-item");
+
+      const readPostCommentID = (postRoot) => {
+        const rawID = postRoot?.getAttribute("data-comment-id") || "";
+        const commentID = Number(rawID);
+        return Number.isInteger(commentID) && commentID > 0 ? commentID : null;
+      };
+
+      const pickPostUpvoteElement = () => {
+        const postRoot = pickPostRoot();
+        const candidates = Array.from((postRoot || document).querySelectorAll(".menu-item[title='点赞'], .menu-item"));
+        return candidates.find((node) => {
+          if (!postRoot && node.closest(".comment-container, ul.comments")) return false;
+          const title = String(node.getAttribute("title") || "").trim();
+          const text = String(node.textContent || "").trim();
+          const className = String(node.className || "");
+          const source = `${title} ${text} ${className}`.toLowerCase();
+          return /点赞|赞同|upvote|like/.test(source);
+        }) || null;
+      };
+
+      try {
+        const postRoot = pickPostRoot();
+        const commentID = readPostCommentID(postRoot);
+        if (!commentID) {
+          finish({
+            ok: false,
+            statusCode: 404,
+            response: {
+              success: false,
+              message: "未找到帖子正文的评论 ID",
+              current: null
+            },
+            reason: "post_comment_id_not_found",
+            body: ""
+          });
+          return;
+        }
+
+        const upvoteElement = pickPostUpvoteElement();
+        if (upvoteElement && upvoteElement.classList.contains("clicked")) {
+          finish({
+            ok: false,
+            statusCode: 200,
+            response: {
+              success: false,
+              message: "该帖子已点赞",
+              current: readCount(upvoteElement)
+            },
+            reason: "already_clicked",
+            body: ""
+          });
+          return;
+        }
+
+        timer = window.setTimeout(() => {
+          finish({ ok: false, reason: "submit_timeout" });
+        }, timeoutMs);
+
+        const response = await window.fetch("/api/statistics/upvote", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            commentId: commentID,
+            action
+          })
+        });
+
+        const body = await response.text();
+        const json = parseJSON(body);
+        finish({
+          ok: response.status >= 200 && response.status < 300 && json.success !== false,
+          statusCode: response.status,
+          response: {
+            success: typeof json.success === "boolean" ? json.success : null,
+            message: json.message || json.msg || json.error || null,
+            current: typeof json.current === "number" ? json.current : null
+          },
+          reason: response.status >= 200 && response.status < 300 && json.success !== false ? "submitted" : "server_error",
+          body
+        });
+      } catch (error) {
+        finish({
+          ok: false,
+          reason: "network_error",
+          message: String(error && error.message ? error.message : error)
+        });
+      }
+    });
+    """
+}
+
+enum CommentDislikeAutomationScript {
+    static let source = """
+    return await new Promise(async (resolve) => {
+      let resolved = false;
+      let timer = null;
+
+      const finish = (payload) => {
+        if (resolved) return;
+        resolved = true;
+        if (timer) window.clearTimeout(timer);
+        resolve(payload);
+      };
+
+      const parseJSON = (body) => {
+        try {
+          return JSON.parse(body || "{}");
+        } catch (_) {
+          return {};
+        }
+      };
+
+      const readCount = (root) => {
+        if (!root) return null;
+        const countText = root.querySelector("span")?.textContent || root.textContent || "";
+        const matched = String(countText).match(/\\d+/);
+        if (!matched) return null;
+        return Number(matched[0]);
+      };
+
+      const pickDislikeElement = (commentRoot) => {
+        if (!commentRoot) return null;
+        const direct = commentRoot.querySelector(".menu-item[title='反对']");
+        if (direct) return direct;
+        const candidates = Array.from(commentRoot.querySelectorAll(".menu-item"));
+        return candidates.find((node) => {
+          const title = String(node.getAttribute("title") || "").trim();
+          const text = String(node.textContent || "").trim();
+          const className = String(node.className || "");
+          const source = `${title} ${text} ${className}`.toLowerCase();
+          return /反对|点踩|dislike|downvote|oppose/.test(source);
+        }) || null;
+      };
+
+      const locateCommentRoot = (id) => {
+        const normalizedID = String(id);
+        return document.querySelector(`[data-comment-id='${normalizedID}']`) ||
+          document.getElementById(normalizedID) ||
+          document.querySelector(`#comment-${normalizedID}`);
+      };
+
+      try {
+        const commentRoot = locateCommentRoot(commentID);
+        const dislikeElement = pickDislikeElement(commentRoot);
+        if (!commentRoot || !dislikeElement) {
+          finish({
+            ok: false,
+            statusCode: 404,
+            response: {
+              success: false,
+              message: "未找到可反对的评论节点",
+              current: null
+            },
+            reason: "comment_not_found",
+            body: ""
+          });
+          return;
+        }
+
+        if (dislikeElement.classList.contains("clicked")) {
+          finish({
+            ok: false,
+            statusCode: 200,
+            response: {
+              success: false,
+              message: "该评论已反对",
+              current: readCount(dislikeElement)
+            },
+            reason: "already_clicked",
+            body: ""
+          });
+          return;
+        }
+
+        timer = window.setTimeout(() => {
+          finish({ ok: false, reason: "submit_timeout" });
+        }, timeoutMs);
+
+        const response = await window.fetch("/api/statistics/dislike", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            commentId: commentID,
+            action
+          })
+        });
+
+        const body = await response.text();
+        const json = parseJSON(body);
+        finish({
+          ok: response.status >= 200 && response.status < 300 && json.success !== false,
+          statusCode: response.status,
+          response: {
+            success: typeof json.success === "boolean" ? json.success : null,
+            message: json.message || json.msg || json.error || null,
+            current: typeof json.current === "number" ? json.current : null
+          },
+          reason: response.status >= 200 && response.status < 300 && json.success !== false ? "submitted" : "server_error",
+          body
+        });
+      } catch (error) {
+        finish({
+          ok: false,
+          reason: "network_error",
+          message: String(error && error.message ? error.message : error)
+        });
+      }
+    });
+    """
+}
+
+enum PostDislikeAutomationScript {
+    static let source = """
+    return await new Promise(async (resolve) => {
+      let resolved = false;
+      let timer = null;
+
+      const finish = (payload) => {
+        if (resolved) return;
+        resolved = true;
+        if (timer) window.clearTimeout(timer);
+        resolve(payload);
+      };
+
+      const parseJSON = (body) => {
+        try {
+          return JSON.parse(body || "{}");
+        } catch (_) {
+          return {};
+        }
+      };
+
+      const readCount = (root) => {
+        if (!root) return null;
+        const countText = root.querySelector("span")?.textContent || root.textContent || "";
+        const matched = String(countText).match(/\\d+/);
+        if (!matched) return null;
+        return Number(matched[0]);
+      };
+
+      const pickPostRoot = () =>
+        document.querySelector(".nsk-post > .content-item") ||
+        document.querySelector(".post-title + .content-item") ||
+        document.querySelector("#nsk-body-left .content-item");
+
+      const readPostCommentID = (postRoot) => {
+        const rawID = postRoot?.getAttribute("data-comment-id") || "";
+        const commentID = Number(rawID);
+        return Number.isInteger(commentID) && commentID > 0 ? commentID : null;
+      };
+
+      const pickPostDislikeElement = () => {
+        const postRoot = pickPostRoot();
+        const candidates = Array.from((postRoot || document).querySelectorAll(".menu-item[title='反对'], .menu-item"));
+        return candidates.find((node) => {
+          if (!postRoot && node.closest(".comment-container, ul.comments")) return false;
+          const title = String(node.getAttribute("title") || "").trim();
+          const text = String(node.textContent || "").trim();
+          const className = String(node.className || "");
+          const source = `${title} ${text} ${className}`.toLowerCase();
+          return /反对|点踩|dislike|downvote|oppose/.test(source);
+        }) || null;
+      };
+
+      try {
+        const postRoot = pickPostRoot();
+        const commentID = readPostCommentID(postRoot);
+        if (!commentID) {
+          finish({
+            ok: false,
+            statusCode: 404,
+            response: {
+              success: false,
+              message: "未找到帖子正文的评论 ID",
+              current: null
+            },
+            reason: "post_comment_id_not_found",
+            body: ""
+          });
+          return;
+        }
+
+        const dislikeElement = pickPostDislikeElement();
+        if (dislikeElement && dislikeElement.classList.contains("clicked")) {
+          finish({
+            ok: false,
+            statusCode: 200,
+            response: {
+              success: false,
+              message: "该帖子已反对",
+              current: readCount(dislikeElement)
+            },
+            reason: "already_clicked",
+            body: ""
+          });
+          return;
+        }
+
+        timer = window.setTimeout(() => {
+          finish({ ok: false, reason: "submit_timeout" });
+        }, timeoutMs);
+
+        const response = await window.fetch("/api/statistics/dislike", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            commentId: commentID,
+            action
+          })
+        });
+
+        const body = await response.text();
+        const json = parseJSON(body);
+        finish({
+          ok: response.status >= 200 && response.status < 300 && json.success !== false,
+          statusCode: response.status,
+          response: {
+            success: typeof json.success === "boolean" ? json.success : null,
+            message: json.message || json.msg || json.error || null,
+            current: typeof json.current === "number" ? json.current : null
           },
           reason: response.status >= 200 && response.status < 300 && json.success !== false ? "submitted" : "server_error",
           body

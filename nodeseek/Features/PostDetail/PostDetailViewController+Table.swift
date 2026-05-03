@@ -121,6 +121,12 @@ extension PostDetailViewController: ASTableDataSource, ASTableDelegate {
                     onAuthorTapped: { url in
                         self?.openUserInfo(profileURL: url)
                     },
+                    onLikeTapped: {
+                        self?.presenter.didTapPostLike()
+                    },
+                    onOpposeTapped: {
+                        self?.presenter.didTapPostOppose()
+                    },
                     onFavoriteTapped: {
                         self?.presenter.didTapFavorite()
                     },
@@ -161,6 +167,12 @@ extension PostDetailViewController: ASTableDataSource, ASTableDelegate {
                     },
                     onAuthorTapped: { url in
                         self?.openUserInfo(profileURL: url)
+                    },
+                    onLikeTapped: { comment in
+                        self?.presenter.didTapCommentLike(comment)
+                    },
+                    onOpposeTapped: { comment in
+                        self?.presenter.didTapCommentOppose(comment)
                     },
                     onReplyTapped: { comment in
                         self?.handleReply(to: comment)

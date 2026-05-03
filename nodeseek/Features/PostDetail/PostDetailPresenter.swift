@@ -20,6 +20,10 @@ class PostDetailPresenter: PostDetailPresenterProtocol {
     private var fallbackFavoriteCollectedState = false
     private var isSubmittingReply = false
     private var isSubmittingFavorite = false
+    private var isSubmittingPostLike = false
+    private var isSubmittingPostOppose = false
+    private var submittingCommentLikeIDs = Set<String>()
+    private var submittingCommentOpposeIDs = Set<String>()
     private var favoriteRollbackDetail: PostDetail?
     private var favoriteRollbackCollectedState: Bool?
     private var isRefreshingAfterReplySubmission = false
@@ -92,6 +96,50 @@ class PostDetailPresenter: PostDetailPresenterProtocol {
         } else {
             interactor.removeFavorite()
         }
+    }
+
+    func didTapCommentLike(_ comment: Comment) {
+        guard comment.isLikeClicked == false else {
+            view?.showToast(message: "该评论已点赞")
+            return
+        }
+        guard submittingCommentLikeIDs.contains(comment.id) == false else { return }
+        submittingCommentLikeIDs.insert(comment.id)
+        view?.showToast(message: "正在点赞")
+        interactor.addCommentLike(commentID: comment.id)
+    }
+
+    func didTapCommentOppose(_ comment: Comment) {
+        guard comment.isOpposeClicked == false else {
+            view?.showToast(message: "该评论已反对")
+            return
+        }
+        guard submittingCommentOpposeIDs.contains(comment.id) == false else { return }
+        submittingCommentOpposeIDs.insert(comment.id)
+        view?.showToast(message: "正在反对")
+        interactor.addCommentOppose(commentID: comment.id)
+    }
+
+    func didTapPostLike() {
+        guard currentDetail?.isLikeClicked != true else {
+            view?.showToast(message: "该帖子已点赞")
+            return
+        }
+        guard isSubmittingPostLike == false else { return }
+        isSubmittingPostLike = true
+        view?.showToast(message: "正在点赞")
+        interactor.addPostLike()
+    }
+
+    func didTapPostOppose() {
+        guard currentDetail?.isOpposeClicked != true else {
+            view?.showToast(message: "该帖子已反对")
+            return
+        }
+        guard isSubmittingPostOppose == false else { return }
+        isSubmittingPostOppose = true
+        view?.showToast(message: "正在反对")
+        interactor.addPostOppose()
     }
 
     private var currentFavoriteCollectedState: Bool {
@@ -253,6 +301,104 @@ extension PostDetailPresenter: PostDetailInteractorOutput {
         favoriteRollbackDetail = nil
         favoriteRollbackCollectedState = nil
         view?.setFavoriteSubmitting(false)
+        view?.showError(message: error)
+    }
+
+    func didAddPostLike(_ response: PostUpvoteResponse) {
+        isSubmittingPostLike = false
+        if let currentDetail {
+            let nextCount = response.current ?? max(1, (currentDetail.likeCount ?? 0) + 1)
+            let nextDetail = currentDetail.updatingPostLikeState(count: nextCount, isClicked: true)
+            self.currentDetail = nextDetail
+            view?.updatePostBody(detail: nextDetail)
+        }
+        let trimmed = response.message?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let message = trimmed == "added" || trimmed?.isEmpty != false ? "已点赞" : trimmed!
+        view?.showToast(message: message)
+    }
+
+    func didFailAddPostLike(error: String) {
+        isSubmittingPostLike = false
+        if error.contains("已点赞") {
+            view?.showToast(message: error)
+            return
+        }
+        view?.showError(message: error)
+    }
+
+    func didAddCommentLike(commentID: String, response: CommentUpvoteResponse) {
+        submittingCommentLikeIDs.remove(commentID)
+        if let currentDetail,
+           let comment = currentDetail.comments.first(where: { $0.id == commentID }) {
+            let nextCount = response.current ?? max(1, (comment.likeCount ?? 0) + 1)
+            let nextDetail = currentDetail.updatingCommentLikeState(
+                commentID: commentID,
+                count: nextCount,
+                isClicked: true
+            )
+            self.currentDetail = nextDetail
+            view?.updateCommentLike(commentID: commentID, count: nextCount, isClicked: true)
+        }
+        let trimmed = response.message?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let message = trimmed == "added" || trimmed?.isEmpty != false ? "已点赞" : trimmed!
+        view?.showToast(message: message)
+    }
+
+    func didFailAddCommentLike(commentID: String, error: String) {
+        submittingCommentLikeIDs.remove(commentID)
+        if error.contains("已点赞") {
+            view?.showToast(message: error)
+            return
+        }
+        view?.showError(message: error)
+    }
+
+    func didAddPostOppose(_ response: PostDislikeResponse) {
+        isSubmittingPostOppose = false
+        if let currentDetail {
+            let nextCount = response.current ?? max(1, (currentDetail.opposeCount ?? 0) + 1)
+            let nextDetail = currentDetail.updatingPostOpposeState(count: nextCount, isClicked: true)
+            self.currentDetail = nextDetail
+            view?.updatePostBody(detail: nextDetail)
+        }
+        let trimmed = response.message?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let message = trimmed == "added" || trimmed?.isEmpty != false ? "已反对" : trimmed!
+        view?.showToast(message: message)
+    }
+
+    func didFailAddPostOppose(error: String) {
+        isSubmittingPostOppose = false
+        if error.contains("已反对") {
+            view?.showToast(message: error)
+            return
+        }
+        view?.showError(message: error)
+    }
+
+    func didAddCommentOppose(commentID: String, response: CommentDislikeResponse) {
+        submittingCommentOpposeIDs.remove(commentID)
+        if let currentDetail,
+           let comment = currentDetail.comments.first(where: { $0.id == commentID }) {
+            let nextCount = response.current ?? max(1, (comment.opposeCount ?? 0) + 1)
+            let nextDetail = currentDetail.updatingCommentOpposeState(
+                commentID: commentID,
+                count: nextCount,
+                isClicked: true
+            )
+            self.currentDetail = nextDetail
+            view?.updateCommentOppose(commentID: commentID, count: nextCount, isClicked: true)
+        }
+        let trimmed = response.message?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let message = trimmed == "added" || trimmed?.isEmpty != false ? "已反对" : trimmed!
+        view?.showToast(message: message)
+    }
+
+    func didFailAddCommentOppose(commentID: String, error: String) {
+        submittingCommentOpposeIDs.remove(commentID)
+        if error.contains("已反对") {
+            view?.showToast(message: error)
+            return
+        }
         view?.showError(message: error)
     }
 }

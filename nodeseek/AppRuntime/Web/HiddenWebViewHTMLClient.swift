@@ -451,6 +451,130 @@ final class HiddenWebViewLoader: NSObject, WKNavigationDelegate {
         return result
     }
 
+    func submitCommentUpvote(
+        pageURL: URL,
+        commentID: Int,
+        action: String,
+        timeoutInterval: TimeInterval
+    ) async throws -> CommentUpvoteAutomationResponse {
+        var request = URLRequest(url: pageURL)
+        request.httpMethod = "GET"
+        request.timeoutInterval = timeoutInterval
+        request.cachePolicy = WebViewCachePolicy.getRequestPolicy
+        WebRequestFingerprint.applyHTMLHeaders(to: &request)
+
+        let response = try await load(request: request, timeoutInterval: timeoutInterval)
+        if let challenge = ChallengeDetector().detect(response: response) {
+            return CommentUpvoteAutomationResponse(
+                ok: false,
+                statusCode: response.statusCode,
+                response: CommentUpvoteResponse(message: Self.message(for: challenge)),
+                reason: "challenge"
+            )
+        }
+
+        let result = try await evaluateCommentUpvoteScript(
+            commentID: commentID,
+            action: action,
+            timeoutInterval: timeoutInterval
+        )
+        await cookieBridge.syncWebViewCookiesToURLSession()
+        return result
+    }
+
+    func submitPostUpvote(
+        pageURL: URL,
+        postID: Int,
+        action: String,
+        timeoutInterval: TimeInterval
+    ) async throws -> PostUpvoteAutomationResponse {
+        var request = URLRequest(url: pageURL)
+        request.httpMethod = "GET"
+        request.timeoutInterval = timeoutInterval
+        request.cachePolicy = WebViewCachePolicy.getRequestPolicy
+        WebRequestFingerprint.applyHTMLHeaders(to: &request)
+
+        let response = try await load(request: request, timeoutInterval: timeoutInterval)
+        if let challenge = ChallengeDetector().detect(response: response) {
+            return PostUpvoteAutomationResponse(
+                ok: false,
+                statusCode: response.statusCode,
+                response: PostUpvoteResponse(message: Self.message(for: challenge)),
+                reason: "challenge"
+            )
+        }
+
+        let result = try await evaluatePostUpvoteScript(
+            postID: postID,
+            action: action,
+            timeoutInterval: timeoutInterval
+        )
+        await cookieBridge.syncWebViewCookiesToURLSession()
+        return result
+    }
+
+    func submitCommentDislike(
+        pageURL: URL,
+        commentID: Int,
+        action: String,
+        timeoutInterval: TimeInterval
+    ) async throws -> CommentDislikeAutomationResponse {
+        var request = URLRequest(url: pageURL)
+        request.httpMethod = "GET"
+        request.timeoutInterval = timeoutInterval
+        request.cachePolicy = WebViewCachePolicy.getRequestPolicy
+        WebRequestFingerprint.applyHTMLHeaders(to: &request)
+
+        let response = try await load(request: request, timeoutInterval: timeoutInterval)
+        if let challenge = ChallengeDetector().detect(response: response) {
+            return CommentDislikeAutomationResponse(
+                ok: false,
+                statusCode: response.statusCode,
+                response: CommentDislikeResponse(message: Self.message(for: challenge)),
+                reason: "challenge"
+            )
+        }
+
+        let result = try await evaluateCommentDislikeScript(
+            commentID: commentID,
+            action: action,
+            timeoutInterval: timeoutInterval
+        )
+        await cookieBridge.syncWebViewCookiesToURLSession()
+        return result
+    }
+
+    func submitPostDislike(
+        pageURL: URL,
+        postID: Int,
+        action: String,
+        timeoutInterval: TimeInterval
+    ) async throws -> PostDislikeAutomationResponse {
+        var request = URLRequest(url: pageURL)
+        request.httpMethod = "GET"
+        request.timeoutInterval = timeoutInterval
+        request.cachePolicy = WebViewCachePolicy.getRequestPolicy
+        WebRequestFingerprint.applyHTMLHeaders(to: &request)
+
+        let response = try await load(request: request, timeoutInterval: timeoutInterval)
+        if let challenge = ChallengeDetector().detect(response: response) {
+            return PostDislikeAutomationResponse(
+                ok: false,
+                statusCode: response.statusCode,
+                response: PostDislikeResponse(message: Self.message(for: challenge)),
+                reason: "challenge"
+            )
+        }
+
+        let result = try await evaluatePostDislikeScript(
+            postID: postID,
+            action: action,
+            timeoutInterval: timeoutInterval
+        )
+        await cookieBridge.syncWebViewCookiesToURLSession()
+        return result
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         AppLog.info(.webView, "WebView didFinish: \(webView.url?.absoluteString ?? "nil")")
         guard continuation != nil else { return }
@@ -670,6 +794,230 @@ final class HiddenWebViewLoader: NSObject, WKNavigationDelegate {
             userCollectionCount: Self.intValue(responseObject?["userCollectionCount"] as Any)
         )
         return PostCollectionAutomationResponse(
+            ok: ok,
+            statusCode: statusCode,
+            response: response,
+            reason: reason,
+            body: body
+        )
+    }
+
+    private func evaluateCommentUpvoteScript(
+        commentID: Int,
+        action: String,
+        timeoutInterval: TimeInterval
+    ) async throws -> CommentUpvoteAutomationResponse {
+        let timeoutMilliseconds = max(5_000, Int(timeoutInterval * 1_000))
+        let result: Any?
+        do {
+            result = try await webView.callAsyncJavaScript(
+                CommentUpvoteAutomationScript.source,
+                arguments: [
+                    "commentID": commentID,
+                    "action": action,
+                    "timeoutMs": timeoutMilliseconds
+                ],
+                in: nil,
+                contentWorld: .page
+            )
+        } catch {
+            let nsError = error as NSError
+            AppLog.error(.webView, "点赞脚本执行异常: domain=\(nsError.domain), code=\(nsError.code), info=\(String(describing: nsError.userInfo))")
+            return CommentUpvoteAutomationResponse(
+                ok: false,
+                response: CommentUpvoteResponse(message: error.localizedDescription),
+                reason: "javascript_exception"
+            )
+        }
+
+        guard let object = result as? [String: Any] else {
+            return CommentUpvoteAutomationResponse(
+                ok: false,
+                response: CommentUpvoteResponse(),
+                reason: "invalid_script_result"
+            )
+        }
+
+        let ok = object["ok"] as? Bool ?? false
+        let statusCode = (object["statusCode"] as? NSNumber)?.intValue ?? object["statusCode"] as? Int
+        let reason = object["reason"] as? String ?? "unknown"
+        let body = object["body"] as? String
+        let responseObject = object["response"] as? [String: Any]
+        let message = responseObject?["message"] as? String ?? object["message"] as? String
+        let response = CommentUpvoteResponse(
+            success: responseObject?["success"] as? Bool,
+            message: message,
+            current: Self.intValue(responseObject?["current"] as Any)
+        )
+        return CommentUpvoteAutomationResponse(
+            ok: ok,
+            statusCode: statusCode,
+            response: response,
+            reason: reason,
+            body: body
+        )
+    }
+
+    private func evaluatePostUpvoteScript(
+        postID: Int,
+        action: String,
+        timeoutInterval: TimeInterval
+    ) async throws -> PostUpvoteAutomationResponse {
+        let timeoutMilliseconds = max(5_000, Int(timeoutInterval * 1_000))
+        let result: Any?
+        do {
+            result = try await webView.callAsyncJavaScript(
+                PostUpvoteAutomationScript.source,
+                arguments: [
+                    "postID": postID,
+                    "action": action,
+                    "timeoutMs": timeoutMilliseconds
+                ],
+                in: nil,
+                contentWorld: .page
+            )
+        } catch {
+            let nsError = error as NSError
+            AppLog.error(.webView, "帖子点赞脚本执行异常: domain=\(nsError.domain), code=\(nsError.code), info=\(String(describing: nsError.userInfo))")
+            return PostUpvoteAutomationResponse(
+                ok: false,
+                response: PostUpvoteResponse(message: error.localizedDescription),
+                reason: "javascript_exception"
+            )
+        }
+
+        guard let object = result as? [String: Any] else {
+            return PostUpvoteAutomationResponse(
+                ok: false,
+                response: PostUpvoteResponse(),
+                reason: "invalid_script_result"
+            )
+        }
+
+        let ok = object["ok"] as? Bool ?? false
+        let statusCode = (object["statusCode"] as? NSNumber)?.intValue ?? object["statusCode"] as? Int
+        let reason = object["reason"] as? String ?? "unknown"
+        let body = object["body"] as? String
+        let responseObject = object["response"] as? [String: Any]
+        let message = responseObject?["message"] as? String ?? object["message"] as? String
+        let response = PostUpvoteResponse(
+            success: responseObject?["success"] as? Bool,
+            message: message,
+            current: Self.intValue(responseObject?["current"] as Any)
+        )
+        return PostUpvoteAutomationResponse(
+            ok: ok,
+            statusCode: statusCode,
+            response: response,
+            reason: reason,
+            body: body
+        )
+    }
+
+    private func evaluateCommentDislikeScript(
+        commentID: Int,
+        action: String,
+        timeoutInterval: TimeInterval
+    ) async throws -> CommentDislikeAutomationResponse {
+        let timeoutMilliseconds = max(5_000, Int(timeoutInterval * 1_000))
+        let result: Any?
+        do {
+            result = try await webView.callAsyncJavaScript(
+                CommentDislikeAutomationScript.source,
+                arguments: [
+                    "commentID": commentID,
+                    "action": action,
+                    "timeoutMs": timeoutMilliseconds
+                ],
+                in: nil,
+                contentWorld: .page
+            )
+        } catch {
+            let nsError = error as NSError
+            AppLog.error(.webView, "反对脚本执行异常: domain=\(nsError.domain), code=\(nsError.code), info=\(String(describing: nsError.userInfo))")
+            return CommentDislikeAutomationResponse(
+                ok: false,
+                response: CommentDislikeResponse(message: error.localizedDescription),
+                reason: "javascript_exception"
+            )
+        }
+
+        guard let object = result as? [String: Any] else {
+            return CommentDislikeAutomationResponse(
+                ok: false,
+                response: CommentDislikeResponse(),
+                reason: "invalid_script_result"
+            )
+        }
+
+        let ok = object["ok"] as? Bool ?? false
+        let statusCode = (object["statusCode"] as? NSNumber)?.intValue ?? object["statusCode"] as? Int
+        let reason = object["reason"] as? String ?? "unknown"
+        let body = object["body"] as? String
+        let responseObject = object["response"] as? [String: Any]
+        let message = responseObject?["message"] as? String ?? object["message"] as? String
+        let response = CommentDislikeResponse(
+            success: responseObject?["success"] as? Bool,
+            message: message,
+            current: Self.intValue(responseObject?["current"] as Any)
+        )
+        return CommentDislikeAutomationResponse(
+            ok: ok,
+            statusCode: statusCode,
+            response: response,
+            reason: reason,
+            body: body
+        )
+    }
+
+    private func evaluatePostDislikeScript(
+        postID: Int,
+        action: String,
+        timeoutInterval: TimeInterval
+    ) async throws -> PostDislikeAutomationResponse {
+        let timeoutMilliseconds = max(5_000, Int(timeoutInterval * 1_000))
+        let result: Any?
+        do {
+            result = try await webView.callAsyncJavaScript(
+                PostDislikeAutomationScript.source,
+                arguments: [
+                    "postID": postID,
+                    "action": action,
+                    "timeoutMs": timeoutMilliseconds
+                ],
+                in: nil,
+                contentWorld: .page
+            )
+        } catch {
+            let nsError = error as NSError
+            AppLog.error(.webView, "帖子反对脚本执行异常: domain=\(nsError.domain), code=\(nsError.code), info=\(String(describing: nsError.userInfo))")
+            return PostDislikeAutomationResponse(
+                ok: false,
+                response: PostDislikeResponse(message: error.localizedDescription),
+                reason: "javascript_exception"
+            )
+        }
+
+        guard let object = result as? [String: Any] else {
+            return PostDislikeAutomationResponse(
+                ok: false,
+                response: PostDislikeResponse(),
+                reason: "invalid_script_result"
+            )
+        }
+
+        let ok = object["ok"] as? Bool ?? false
+        let statusCode = (object["statusCode"] as? NSNumber)?.intValue ?? object["statusCode"] as? Int
+        let reason = object["reason"] as? String ?? "unknown"
+        let body = object["body"] as? String
+        let responseObject = object["response"] as? [String: Any]
+        let message = responseObject?["message"] as? String ?? object["message"] as? String
+        let response = PostDislikeResponse(
+            success: responseObject?["success"] as? Bool,
+            message: message,
+            current: Self.intValue(responseObject?["current"] as Any)
+        )
+        return PostDislikeAutomationResponse(
             ok: ok,
             statusCode: statusCode,
             response: response,
