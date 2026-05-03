@@ -150,6 +150,28 @@ struct PostDetail: Equatable, Sendable {
         self.pagination = pagination
         self.isLastPage = isLastPage ?? (pagination?.nextPage == nil)
     }
+
+    func updatingFavoriteState(count: Int?, isCollected: Bool) -> PostDetail {
+        PostDetail(
+            id: id,
+            title: title,
+            requiredReadingLevel: requiredReadingLevel,
+            authorName: authorName,
+            avatarURL: avatarURL,
+            authorProfileURL: authorProfileURL,
+            metadataText: metadataText,
+            contentHTML: contentHTML,
+            likeCount: likeCount,
+            chickenLegCount: chickenLegCount,
+            opposeCount: opposeCount,
+            favoriteCount: count,
+            isFavoriteCollected: isCollected,
+            comments: comments,
+            page: page,
+            pagination: pagination,
+            isLastPage: isLastPage
+        )
+    }
 }
 
 struct Comment: Equatable, Sendable {

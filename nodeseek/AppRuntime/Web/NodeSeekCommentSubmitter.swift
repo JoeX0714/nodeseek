@@ -53,14 +53,11 @@ enum NodeSeekCommentSubmitterError: LocalizedError, Equatable {
 }
 
 final class NodeSeekCommentSubmitter {
-    private let baseURL: URL
     private let automation: CommentSubmissionAutomating
 
     init(
-        baseURL: URL = NodeSeekSite.baseURL,
         automation: CommentSubmissionAutomating = WebViewCommentSubmissionAutomator()
     ) {
-        self.baseURL = baseURL
         self.automation = automation
     }
 
@@ -211,14 +208,11 @@ enum NodeSeekPostCollectionSubmitterError: LocalizedError, Equatable {
 
 @MainActor
 final class NodeSeekPostCollectionSubmitter: PostCollectionSubmitting {
-    private let baseURL: URL
     private let automation: PostCollectionAutomating
 
     init(
-        baseURL: URL = NodeSeekSite.baseURL,
         automation: PostCollectionAutomating? = nil
     ) {
-        self.baseURL = baseURL
         self.automation = automation ?? WebViewPostCollectionAutomator()
     }
 
@@ -235,7 +229,6 @@ final class NodeSeekPostCollectionSubmitter: PostCollectionSubmitting {
             throw NodeSeekPostCollectionSubmitterError.invalidPostID
         }
 
-        _ = baseURL
         let automationResponse = try await automation.submitCollection(
             postID: numericPostID,
             action: action,

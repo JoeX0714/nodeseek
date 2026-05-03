@@ -17,10 +17,11 @@ class PostDetailPresenter: PostDetailPresenterProtocol {
     private var currentPage: Int
     private var loadingPage: Int?
     private var currentDetail: PostDetail?
+    private var fallbackFavoriteCollectedState = false
     private var isSubmittingReply = false
     private var isSubmittingFavorite = false
-    private var isFavoriteAddedInCurrentSession = false
     private var favoriteRollbackDetail: PostDetail?
+    private var favoriteRollbackCollectedState: Bool?
     private var isRefreshingAfterReplySubmission = false
     
     // MARK: - Initialization
@@ -82,14 +83,19 @@ class PostDetailPresenter: PostDetailPresenterProtocol {
         guard isSubmittingFavorite == false else { return }
         isSubmittingFavorite = true
         view?.setFavoriteSubmitting(true)
-        let isCollecting = isFavoriteAddedInCurrentSession == false
+        let isCollecting = currentFavoriteCollectedState == false
         favoriteRollbackDetail = currentDetail
+        favoriteRollbackCollectedState = currentFavoriteCollectedState
         applyOptimisticFavoriteState(isCollected: isCollecting)
         if isCollecting {
             interactor.addFavorite()
         } else {
             interactor.removeFavorite()
         }
+    }
+
+    private var currentFavoriteCollectedState: Bool {
+        currentDetail?.isFavoriteCollected ?? fallbackFavoriteCollectedState
     }
 
     private func markDetailVisited(_ detail: PostDetail) {
@@ -111,27 +117,11 @@ class PostDetailPresenter: PostDetailPresenterProtocol {
     }
 
     private func applyFavoriteState(isCollected: Bool, response: PostCollectionResponse) {
-        isFavoriteAddedInCurrentSession = isCollected
+        fallbackFavoriteCollectedState = isCollected
         guard let currentDetail else { return }
-
-        let nextDetail = PostDetail(
-            id: currentDetail.id,
-            title: currentDetail.title,
-            requiredReadingLevel: currentDetail.requiredReadingLevel,
-            authorName: currentDetail.authorName,
-            avatarURL: currentDetail.avatarURL,
-            authorProfileURL: currentDetail.authorProfileURL,
-            metadataText: currentDetail.metadataText,
-            contentHTML: currentDetail.contentHTML,
-            likeCount: currentDetail.likeCount,
-            chickenLegCount: currentDetail.chickenLegCount,
-            opposeCount: currentDetail.opposeCount,
-            favoriteCount: response.postCollectionCount ?? currentDetail.favoriteCount,
-            isFavoriteCollected: isCollected,
-            comments: currentDetail.comments,
-            page: currentDetail.page,
-            pagination: currentDetail.pagination,
-            isLastPage: currentDetail.isLastPage
+        let nextDetail = currentDetail.updatingFavoriteState(
+            count: response.postCollectionCount ?? currentDetail.favoriteCount,
+            isCollected: isCollected
         )
 
         guard nextDetail != currentDetail else { return }
@@ -140,37 +130,24 @@ class PostDetailPresenter: PostDetailPresenterProtocol {
     }
 
     private func applyOptimisticFavoriteState(isCollected: Bool) {
+        fallbackFavoriteCollectedState = isCollected
         guard let currentDetail else { return }
         let baseCount = currentDetail.favoriteCount ?? 0
         let optimisticCount = isCollected ? baseCount + 1 : max(0, baseCount - 1)
-        let nextDetail = PostDetail(
-            id: currentDetail.id,
-            title: currentDetail.title,
-            requiredReadingLevel: currentDetail.requiredReadingLevel,
-            authorName: currentDetail.authorName,
-            avatarURL: currentDetail.avatarURL,
-            authorProfileURL: currentDetail.authorProfileURL,
-            metadataText: currentDetail.metadataText,
-            contentHTML: currentDetail.contentHTML,
-            likeCount: currentDetail.likeCount,
-            chickenLegCount: currentDetail.chickenLegCount,
-            opposeCount: currentDetail.opposeCount,
-            favoriteCount: optimisticCount,
-            isFavoriteCollected: isCollected,
-            comments: currentDetail.comments,
-            page: currentDetail.page,
-            pagination: currentDetail.pagination,
-            isLastPage: currentDetail.isLastPage
+        let nextDetail = currentDetail.updatingFavoriteState(
+            count: optimisticCount,
+            isCollected: isCollected
         )
         guard nextDetail != currentDetail else { return }
         self.currentDetail = nextDetail
-        isFavoriteAddedInCurrentSession = isCollected
         view?.updatePostBody(detail: nextDetail)
     }
 
     private func restoreFavoriteStateFromRollback() {
+        if let rollbackCollectedState = favoriteRollbackCollectedState {
+            fallbackFavoriteCollectedState = rollbackCollectedState
+        }
         guard let rollback = favoriteRollbackDetail else { return }
-        isFavoriteAddedInCurrentSession = rollback.isFavoriteCollected
         guard currentDetail != rollback else { return }
         currentDetail = rollback
         view?.updatePostBody(detail: rollback)
@@ -184,9 +161,10 @@ extension PostDetailPresenter: PostDetailInteractorOutput {
         loadingPage = nil
         isRefreshingAfterReplySubmission = false
         favoriteRollbackDetail = nil
+        favoriteRollbackCollectedState = nil
         currentPage = max(1, response.detail.page)
         currentDetail = response.detail
-        isFavoriteAddedInCurrentSession = response.detail.isFavoriteCollected
+        fallbackFavoriteCollectedState = response.detail.isFavoriteCollected
         markDetailVisited(response.detail)
         view?.hideLoading()
         view?.render(detail: response.detail)
@@ -246,6 +224,7 @@ extension PostDetailPresenter: PostDetailInteractorOutput {
         isSubmittingFavorite = false
         applyFavoriteState(isCollected: true, response: response)
         favoriteRollbackDetail = nil
+        favoriteRollbackCollectedState = nil
         view?.setFavoriteSubmitting(false)
         view?.showToast(message: "已收藏")
     }
@@ -254,6 +233,7 @@ extension PostDetailPresenter: PostDetailInteractorOutput {
         isSubmittingFavorite = false
         restoreFavoriteStateFromRollback()
         favoriteRollbackDetail = nil
+        favoriteRollbackCollectedState = nil
         view?.setFavoriteSubmitting(false)
         view?.showError(message: error)
     }
@@ -262,6 +242,7 @@ extension PostDetailPresenter: PostDetailInteractorOutput {
         isSubmittingFavorite = false
         applyFavoriteState(isCollected: false, response: response)
         favoriteRollbackDetail = nil
+        favoriteRollbackCollectedState = nil
         view?.setFavoriteSubmitting(false)
         view?.showToast(message: "已取消收藏")
     }
@@ -270,6 +251,7 @@ extension PostDetailPresenter: PostDetailInteractorOutput {
         isSubmittingFavorite = false
         restoreFavoriteStateFromRollback()
         favoriteRollbackDetail = nil
+        favoriteRollbackCollectedState = nil
         view?.setFavoriteSubmitting(false)
         view?.showError(message: error)
     }

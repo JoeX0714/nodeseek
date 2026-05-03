@@ -13,7 +13,6 @@ struct NodeSeekCommentSubmitterTests {
     @Test func submitsCommentThroughPageAutomation() async throws {
         let automation = CapturingCommentAutomation(response: .init(ok: true, statusCode: 200, message: nil, reason: "submitted"))
         let submitter = NodeSeekCommentSubmitter(
-            baseURL: URL(string: "https://www.nodeseek.com")!,
             automation: automation
         )
 
@@ -33,7 +32,6 @@ struct NodeSeekCommentSubmitterTests {
     @Test func surfacesServerMessageFromPageAutomation() async throws {
         let automation = CapturingCommentAutomation(response: .init(ok: false, statusCode: 400, message: "内容不能为空", reason: "server_error"))
         let submitter = NodeSeekCommentSubmitter(
-            baseURL: URL(string: "https://www.nodeseek.com")!,
             automation: automation
         )
 
@@ -52,7 +50,6 @@ struct NodeSeekCommentSubmitterTests {
     @Test func surfacesChallengeFromPageAutomation() async throws {
         let automation = CapturingCommentAutomation(response: .init(ok: false, statusCode: 403, message: "站点当前返回了拦截页面，请稍后重试。", reason: "challenge"))
         let submitter = NodeSeekCommentSubmitter(
-            baseURL: URL(string: "https://www.nodeseek.com")!,
             automation: automation
         )
 
@@ -81,7 +78,6 @@ struct NodeSeekCommentSubmitterTests {
             reason: "submitted"
         ))
         let submitter = NodeSeekPostCollectionSubmitter(
-            baseURL: URL(string: "https://www.nodeseek.com")!,
             automation: automation
         )
 
@@ -113,7 +109,6 @@ struct NodeSeekCommentSubmitterTests {
             reason: "submitted"
         ))
         let submitter = NodeSeekPostCollectionSubmitter(
-            baseURL: URL(string: "https://www.nodeseek.com")!,
             automation: automation
         )
 

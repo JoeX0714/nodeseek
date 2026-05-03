@@ -9,6 +9,10 @@ import Foundation
 
 @MainActor
 class PostDetailInteractor: PostDetailInteractorInput {
+    private enum FavoriteAction {
+        case add
+        case remove
+    }
     
     // MARK: - Properties
     weak var presenter: PostDetailInteractorOutput?
@@ -80,7 +84,7 @@ class PostDetailInteractor: PostDetailInteractorInput {
         }
 
         guard let post else {
-            presenter?.didFailSubmitReply(error: PostDetailSubmitError.missingPost.localizedDescription)
+            presenter?.didFailSubmitReply(error: "缺少帖子信息，无法发表评论。")
             return
         }
 
@@ -106,46 +110,60 @@ class PostDetailInteractor: PostDetailInteractorInput {
     }
 
     func addFavorite() {
-        guard let post else {
-            presenter?.didFailAddFavorite(error: PostDetailFavoriteError.missingPost.localizedDescription)
-            return
-        }
-
-        Task {
-            AppLog.info(.postDetail, "开始收藏帖子，postID=\(post.id)")
-            do {
-                let response = try await collectionSubmitter.addFavorite(postID: post.id, referer: post.url)
-                await sessionStore.recordSuccess()
-                await MainActor.run {
-                    presenter?.didAddFavorite(response)
-                }
-            } catch {
-                AppLog.error(.postDetail, "收藏帖子失败: \(error.localizedDescription)")
-                await MainActor.run {
-                    presenter?.didFailAddFavorite(error: error.localizedDescription)
-                }
-            }
-        }
+        submitFavorite(action: .add)
     }
 
     func removeFavorite() {
+        submitFavorite(action: .remove)
+    }
+
+    private func submitFavorite(action: FavoriteAction) {
         guard let post else {
-            presenter?.didFailRemoveFavorite(error: PostDetailFavoriteError.missingPost.localizedDescription)
+            let message = "缺少帖子信息，无法收藏。"
+            switch action {
+            case .add:
+                presenter?.didFailAddFavorite(error: message)
+            case .remove:
+                presenter?.didFailRemoveFavorite(error: message)
+            }
             return
         }
 
         Task {
-            AppLog.info(.postDetail, "开始取消收藏帖子，postID=\(post.id)")
+            let actionText: String
+            switch action {
+            case .add:
+                actionText = "收藏"
+            case .remove:
+                actionText = "取消收藏"
+            }
+            AppLog.info(.postDetail, "开始\(actionText)帖子，postID=\(post.id)")
             do {
-                let response = try await collectionSubmitter.removeFavorite(postID: post.id, referer: post.url)
+                let response: PostCollectionResponse
+                switch action {
+                case .add:
+                    response = try await collectionSubmitter.addFavorite(postID: post.id, referer: post.url)
+                case .remove:
+                    response = try await collectionSubmitter.removeFavorite(postID: post.id, referer: post.url)
+                }
                 await sessionStore.recordSuccess()
                 await MainActor.run {
-                    presenter?.didRemoveFavorite(response)
+                    switch action {
+                    case .add:
+                        presenter?.didAddFavorite(response)
+                    case .remove:
+                        presenter?.didRemoveFavorite(response)
+                    }
                 }
             } catch {
-                AppLog.error(.postDetail, "取消收藏帖子失败: \(error.localizedDescription)")
+                AppLog.error(.postDetail, "\(actionText)帖子失败: \(error.localizedDescription)")
                 await MainActor.run {
-                    presenter?.didFailRemoveFavorite(error: error.localizedDescription)
+                    switch action {
+                    case .add:
+                        presenter?.didFailAddFavorite(error: error.localizedDescription)
+                    case .remove:
+                        presenter?.didFailRemoveFavorite(error: error.localizedDescription)
+                    }
                 }
             }
         }
@@ -167,7 +185,7 @@ class PostDetailInteractor: PostDetailInteractorInput {
                 }
                 return nil
             }
-            throw PostDetailLoadError.challengeRequired(message)
+            throw MessageError(message: message)
         }
     }
 
@@ -177,44 +195,9 @@ class PostDetailInteractor: PostDetailInteractorInput {
     }
 }
 
-private enum PostDetailLoadError: LocalizedError {
-    case challengeRequired(String)
-    case missingPost
-    case unknown
-
+private struct MessageError: LocalizedError {
+    let message: String
     var errorDescription: String? {
-        switch self {
-        case .challengeRequired(let message):
-            return message
-        case .missingPost:
-            return "缺少帖子信息，无法发表评论。"
-        case .unknown:
-            return "详情加载失败，请稍后重试。"
-        }
-    }
-}
-
-private enum PostDetailSubmitError: LocalizedError {
-    case challengeRequired(String)
-    case missingPost
-
-    var errorDescription: String? {
-        switch self {
-        case .challengeRequired(let message):
-            return message
-        case .missingPost:
-            return "缺少帖子信息，无法发表评论。"
-        }
-    }
-}
-
-private enum PostDetailFavoriteError: LocalizedError {
-    case missingPost
-
-    var errorDescription: String? {
-        switch self {
-        case .missingPost:
-            return "缺少帖子信息，无法收藏。"
-        }
+        message
     }
 }
