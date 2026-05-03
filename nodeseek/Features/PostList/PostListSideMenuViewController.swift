@@ -14,6 +14,7 @@ final class PostListSideMenuViewController: UIViewController {
     var onAccountProfileTapped: ((URL) -> Void)?
     var onNewDiscussionTapped: (() -> Void)?
     var onRecentVisitedTapped: (() -> Void)?
+    var onSearchTapped: (() -> Void)?
     var onSettingsTapped: (() -> Void)?
     private let accountController: PostListSideMenuAccountController
     private let avatarLoader = AvatarImageLoader.shared
@@ -102,6 +103,12 @@ final class PostListSideMenuViewController: UIViewController {
     private let recentVisitedButton: UIButton = {
         let button = PostListSideMenuViewController.makeMenuButton(title: "最近浏览", systemImageName: "clock.arrow.circlepath")
         button.accessibilityIdentifier = "post-list-side-menu-recent-visited-button"
+        return button
+    }()
+
+    private let searchButton: UIButton = {
+        let button = PostListSideMenuViewController.makeMenuButton(title: "搜一搜", systemImageName: "magnifyingglass")
+        button.accessibilityIdentifier = "post-list-side-menu-search-button"
         return button
     }()
 
@@ -205,6 +212,7 @@ final class PostListSideMenuViewController: UIViewController {
         settingsButton.addTarget(self, action: #selector(settingsButtonTapped), for: .touchUpInside)
         newDiscussionButton.addTarget(self, action: #selector(newDiscussionButtonTapped), for: .touchUpInside)
         recentVisitedButton.addTarget(self, action: #selector(recentVisitedButtonTapped), for: .touchUpInside)
+        searchButton.addTarget(self, action: #selector(searchButtonTapped), for: .touchUpInside)
 
         view.addSubview(backdropView)
         view.addSubview(sideMenuView)
@@ -213,6 +221,7 @@ final class PostListSideMenuViewController: UIViewController {
         sideMenuView.addSubview(statsLabel)
         sideMenuView.addSubview(accountHeaderButton)
         sideMenuView.addSubview(newDiscussionButton)
+        sideMenuView.addSubview(searchButton)
         sideMenuView.addSubview(recentVisitedButton)
         sideMenuView.addSubview(settingsButton)
 
@@ -261,9 +270,14 @@ final class PostListSideMenuViewController: UIViewController {
             recentVisitedButton.bottomAnchor.constraint(equalTo: settingsButton.topAnchor, constant: -8),
             recentVisitedButton.heightAnchor.constraint(equalToConstant: 48),
 
+            searchButton.leadingAnchor.constraint(equalTo: sideMenuView.leadingAnchor, constant: SideMenuLayout.horizontalInset),
+            searchButton.trailingAnchor.constraint(equalTo: sideMenuView.trailingAnchor, constant: -SideMenuLayout.horizontalInset),
+            searchButton.bottomAnchor.constraint(equalTo: recentVisitedButton.topAnchor, constant: -8),
+            searchButton.heightAnchor.constraint(equalToConstant: 48),
+
             newDiscussionButton.leadingAnchor.constraint(equalTo: sideMenuView.leadingAnchor, constant: SideMenuLayout.horizontalInset),
             newDiscussionButton.trailingAnchor.constraint(equalTo: sideMenuView.trailingAnchor, constant: -SideMenuLayout.horizontalInset),
-            newDiscussionButton.bottomAnchor.constraint(equalTo: recentVisitedButton.topAnchor, constant: -8),
+            newDiscussionButton.bottomAnchor.constraint(equalTo: searchButton.topAnchor, constant: -8),
             newDiscussionButton.heightAnchor.constraint(equalToConstant: 48)
         ])
     }
@@ -301,6 +315,11 @@ final class PostListSideMenuViewController: UIViewController {
     @objc private func recentVisitedButtonTapped() {
         hide(animated: true)
         onRecentVisitedTapped?()
+    }
+
+    @objc private func searchButtonTapped() {
+        hide(animated: true)
+        onSearchTapped?()
     }
 
     private func setVisible(_ visible: Bool, animated: Bool) {

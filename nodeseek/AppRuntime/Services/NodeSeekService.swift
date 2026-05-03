@@ -48,6 +48,26 @@ struct NodeSeekService: Sendable {
         return .value(posts)
     }
 
+    func loadSearchResults(
+        query: String,
+        page: Int = 1,
+        category: PostListCategory = .all
+    ) async throws -> NodeSeekResult<[PostSummary]> {
+        let targetURL = searchURL(query: query, page: page, category: category)
+        AppLog.info(.service, "开始抓取 NodeSeek 搜索，category=\(category.rawValue), page=\(page): \(targetURL.absoluteString)")
+        let response = try await htmlClient.get(targetURL)
+        AppLog.info(.service, "搜索抓取返回 category=\(category.rawValue), page=\(page), status=\(response.statusCode), htmlLength=\(response.html.count), finalURL=\(response.finalURL.absoluteString)")
+
+        if let challenge = challengeDetector.detect(response: response) {
+            AppLog.warning(.service, "检测到搜索 challenge: \(challenge.logDescription)")
+            return .challenge(challenge)
+        }
+
+        let posts = try parser.parsePostList(html: response.html)
+        AppLog.info(.service, "搜索解析完成，帖子数量: \(posts.count)")
+        return .value(posts)
+    }
+
     func loadAccount() async throws -> NodeSeekResult<AccountResponse> {
         let targetURL = baseURL
         AppLog.info(.service, "开始抓取 NodeSeek 账号信息: \(targetURL.absoluteString)")
@@ -99,6 +119,26 @@ struct NodeSeekService: Sendable {
             return NodeSeekSite.postURL(id: postID, page: page)
         }
         return baseURL.appendingPathComponent("post-\(postID)-\(max(1, page))")
+    }
+
+    private func searchURL(query: String, page: Int, category: PostListCategory) -> URL {
+        guard var components = URLComponents(
+            url: baseURL.appendingPathComponent("search"),
+            resolvingAgainstBaseURL: true
+        ) else {
+            return baseURL.appendingPathComponent("search")
+        }
+
+        var queryItems = [URLQueryItem(name: "q", value: query)]
+        let normalizedPage = max(1, page)
+        if normalizedPage > 1 {
+            queryItems.append(URLQueryItem(name: "page", value: "\(normalizedPage)"))
+        }
+        if let categoryValue = category.searchQueryValue {
+            queryItems.append(URLQueryItem(name: "category", value: categoryValue))
+        }
+        components.queryItems = queryItems
+        return components.url ?? baseURL.appendingPathComponent("search")
     }
 }
 

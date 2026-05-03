@@ -99,6 +99,16 @@ struct PostListPresenterTests {
         #expect(router.recentVisitedStore === visitedStore)
     }
 
+    @Test func tappingSearchRoutesToSearchPage() {
+        let interactor = SpyPostListInteractor()
+        let router = SpyPostListRouter()
+        let presenter = PostListPresenter(interactor: interactor, router: router)
+
+        presenter.didTapSearch()
+
+        #expect(router.navigateToSearchCount == 1)
+    }
+
     @Test func tappingSettingsRoutesToSettingsPage() {
         let interactor = SpyPostListInteractor()
         let router = SpyPostListRouter()
@@ -740,6 +750,7 @@ private final class SpyPostListRouter: PostListRouterProtocol {
     var userProfileURL: URL?
     var navigateToLoginCount = 0
     var navigateToNewDiscussionCount = 0
+    var navigateToSearchCount = 0
     var navigateToSettingsCount = 0
     var navigateToLogFileCount = 0
     var onLoginClose: (@MainActor () -> Void)?
@@ -767,6 +778,10 @@ private final class SpyPostListRouter: PostListRouterProtocol {
 
     func navigateToNewDiscussion() {
         navigateToNewDiscussionCount += 1
+    }
+
+    func navigateToSearch() {
+        navigateToSearchCount += 1
     }
 
     func navigateToSettings(

@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum PostListCategory: String, CaseIterable, Sendable {
+enum PostListCategory: String, CaseIterable, Codable, Sendable {
     case all
     case daily
     case tech
@@ -38,6 +38,17 @@ enum PostListCategory: String, CaseIterable, Sendable {
         switch self {
         case .df:
             // 站点顶部 DF 对应 dev 频道内容。
+            return "dev"
+        default:
+            return rawValue
+        }
+    }
+
+    var searchQueryValue: String? {
+        switch self {
+        case .all:
+            return nil
+        case .df:
             return "dev"
         default:
             return rawValue

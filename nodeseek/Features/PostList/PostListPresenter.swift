@@ -92,6 +92,10 @@ class PostListPresenter: PostListPresenterProtocol {
         router.navigateToRecentVisitedPosts(visitedStore: visitedStore)
     }
 
+    func didTapSearch() {
+        router.navigateToSearch()
+    }
+
     func didTapSettings() {
         #if DEBUG
         let detailTestAction: (@MainActor () -> Void)? = { [weak self] in

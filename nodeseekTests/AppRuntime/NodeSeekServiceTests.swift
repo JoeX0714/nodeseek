@@ -307,6 +307,58 @@ struct NodeSeekServiceTests {
         #expect(requestedURLs.first?.path == "/award/page-3")
     }
 
+    @Test func loadSearchResultsUsesSearchURLWithEncodedKeyword() async throws {
+        let html = try FixtureLoader.html(named: "post-list-basic")
+        let url = URL(string: "https://www.nodeseek.com/")!
+        let htmlClient = URLCapturingHTMLClient(response: HTMLResponse(
+            statusCode: 200,
+            headers: [:],
+            finalURL: url,
+            html: html
+        ))
+        let service = NodeSeekService(
+            baseURL: url,
+            htmlClient: htmlClient,
+            parser: KannaNodeSeekParser(baseURL: url)
+        )
+
+        _ = try await service.loadSearchResults(query: "美西", page: 1, category: .all)
+        let requestedURLs = await htmlClient.requestedURLs()
+
+        #expect(requestedURLs.count == 1)
+        #expect(requestedURLs.first?.path == "/search")
+        let components = URLComponents(url: try #require(requestedURLs.first), resolvingAgainstBaseURL: true)
+        #expect(components?.queryItems?.first(where: { $0.name == "q" })?.value == "美西")
+        #expect(components?.queryItems?.contains(where: { $0.name == "page" }) == false)
+        #expect(components?.queryItems?.contains(where: { $0.name == "category" }) == false)
+    }
+
+    @Test func loadSearchResultsAddsPageAndCategoryWhenNeeded() async throws {
+        let html = try FixtureLoader.html(named: "post-list-basic")
+        let url = URL(string: "https://www.nodeseek.com/")!
+        let htmlClient = URLCapturingHTMLClient(response: HTMLResponse(
+            statusCode: 200,
+            headers: [:],
+            finalURL: url,
+            html: html
+        ))
+        let service = NodeSeekService(
+            baseURL: url,
+            htmlClient: htmlClient,
+            parser: KannaNodeSeekParser(baseURL: url)
+        )
+
+        _ = try await service.loadSearchResults(query: "美国", page: 2, category: .daily)
+        let requestedURLs = await htmlClient.requestedURLs()
+
+        #expect(requestedURLs.count == 1)
+        let components = URLComponents(url: try #require(requestedURLs.first), resolvingAgainstBaseURL: true)
+        #expect(components?.path == "/search")
+        #expect(components?.queryItems?.first(where: { $0.name == "q" })?.value == "美国")
+        #expect(components?.queryItems?.first(where: { $0.name == "page" })?.value == "2")
+        #expect(components?.queryItems?.first(where: { $0.name == "category" })?.value == "daily")
+    }
+
     @Test func loadsPostDetailURLWithoutHTMLSuffix() async throws {
         let html = try FixtureLoader.html(named: "post-703863-1")
         let url = URL(string: "https://www.nodeseek.com/")!

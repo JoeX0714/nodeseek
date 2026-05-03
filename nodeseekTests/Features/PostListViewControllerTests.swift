@@ -130,6 +130,7 @@ struct PostListViewControllerTests {
         let statsLabel = try #require(viewController.view.firstLabel(accessibilityIdentifier: "post-list-side-menu-stats-label"))
         let accountHeaderButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-list-side-menu-account-header-button"))
         let newDiscussionButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-list-side-menu-new-discussion-button"))
+        let searchButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-list-side-menu-search-button"))
         let recentVisitedButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-list-side-menu-recent-visited-button"))
         let settingsButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-list-side-menu-settings-button"))
         let sideMenuHost = viewController.children.first {
@@ -150,6 +151,8 @@ struct PostListViewControllerTests {
         #expect(accountHeaderButton.accessibilityLabel == "登录账号")
         #expect(newDiscussionButton.configuration?.title == "发帖")
         #expect(newDiscussionButton.configuration?.image != nil)
+        #expect(searchButton.configuration?.title == "搜一搜")
+        #expect(searchButton.configuration?.image != nil)
         #expect(recentVisitedButton.configuration?.title == "最近浏览")
         #expect(recentVisitedButton.configuration?.image != nil)
         #expect(settingsButton.configuration?.title == "设置")
@@ -166,7 +169,8 @@ struct PostListViewControllerTests {
         #expect(backdrop.alpha == 1)
         #expect(accountHeaderButton.frame.contains(avatar.frame))
         #expect(recentVisitedButton.frame.maxY < settingsButton.frame.minY)
-        #expect(newDiscussionButton.frame.maxY < recentVisitedButton.frame.minY)
+        #expect(searchButton.frame.maxY < recentVisitedButton.frame.minY)
+        #expect(newDiscussionButton.frame.maxY < searchButton.frame.minY)
         #expect(settingsButton.frame.maxY < viewController.view.bounds.maxY)
 
         UIView.setAnimationsEnabled(false)
@@ -175,6 +179,17 @@ struct PostListViewControllerTests {
         UIView.setAnimationsEnabled(animationsWereEnabled)
 
         #expect(presenter.didTapRecentVisitedCount == 1)
+        #expect(sideMenu.frame.maxX <= 0.5)
+        #expect(backdrop.isHidden == true)
+
+        UIView.setAnimationsEnabled(false)
+        menuButton.sendActions(for: .touchUpInside)
+        viewController.view.layoutIfNeeded()
+        searchButton.sendActions(for: .touchUpInside)
+        viewController.view.layoutIfNeeded()
+        UIView.setAnimationsEnabled(animationsWereEnabled)
+
+        #expect(presenter.didTapSearchCount == 1)
         #expect(sideMenu.frame.maxX <= 0.5)
         #expect(backdrop.isHidden == true)
 
@@ -290,6 +305,7 @@ private final class SpyPostListPresenter: PostListPresenterProtocol {
     private(set) var toggleSortCount = 0
     private(set) var didTapLoginCount = 0
     private(set) var didTapRecentVisitedCount = 0
+    private(set) var didTapSearchCount = 0
     private(set) var didTapNewDiscussionCount = 0
     private(set) var didTapSettingsCount = 0
     private(set) var accountProfileURLs: [URL] = []
@@ -322,6 +338,10 @@ private final class SpyPostListPresenter: PostListPresenterProtocol {
 
     func didTapRecentVisited() {
         didTapRecentVisitedCount += 1
+    }
+
+    func didTapSearch() {
+        didTapSearchCount += 1
     }
 
     func didTapSettings() {

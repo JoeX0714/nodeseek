@@ -55,6 +55,10 @@ class PostListRouter: PostListRouterProtocol {
         show(NewDiscussionWebViewController())
     }
 
+    func navigateToSearch() {
+        show(SearchViewController())
+    }
+
     func navigateToRecentVisitedPosts(visitedStore: VisitedPostStoreProtocol) {
         let recentViewController = RecentVisitedPostsViewController(visitedStore: visitedStore)
         recentViewController.onSelectRecord = { [weak self, weak recentViewController] record in
