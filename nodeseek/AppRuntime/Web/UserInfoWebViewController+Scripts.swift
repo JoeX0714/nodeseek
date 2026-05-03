@@ -28,18 +28,22 @@ extension UserInfoWebViewController {
 
     private static var injectedUserInfoCSS: String {
         """
+        body > header {
+            display: none !important;
+        }
         """
     }
 
     private static func javaScriptStringLiteral(_ string: String) -> String {
-        guard
-            let data = try? JSONSerialization.data(withJSONObject: string, options: []),
-            let literal = String(data: data, encoding: .utf8)
-        else {
-            return "\"\""
-        }
-
-        return literal
+        var escaped = string
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "\\n")
+            .replacingOccurrences(of: "\r", with: "\\r")
+            .replacingOccurrences(of: "\t", with: "\\t")
+        escaped = escaped
+            .replacingOccurrences(of: "\u{2028}", with: "\\u2028")
+            .replacingOccurrences(of: "\u{2029}", with: "\\u2029")
+        return "\"\(escaped)\""
     }
 }
-
