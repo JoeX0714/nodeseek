@@ -8,6 +8,45 @@
 import Foundation
 
 class PostDetailPresenter: PostDetailPresenterProtocol {
+    private enum ReactionKind {
+        case like
+        case oppose
+
+        var successToast: String {
+            switch self {
+            case .like:
+                return "已点赞"
+            case .oppose:
+                return "已反对"
+            }
+        }
+
+        var pendingToast: String {
+            switch self {
+            case .like:
+                return "正在点赞"
+            case .oppose:
+                return "正在反对"
+            }
+        }
+
+        var alreadyActionSuffix: String {
+            switch self {
+            case .like:
+                return "已点赞"
+            case .oppose:
+                return "已反对"
+            }
+        }
+
+        var postAlreadyToast: String {
+            "该帖子\(alreadyActionSuffix)"
+        }
+
+        var commentAlreadyToast: String {
+            "该评论\(alreadyActionSuffix)"
+        }
+    }
     
     // MARK: - Properties
     private weak var view: PostDetailViewProtocol?
@@ -100,45 +139,45 @@ class PostDetailPresenter: PostDetailPresenterProtocol {
 
     func didTapCommentLike(_ comment: Comment) {
         guard comment.isLikeClicked == false else {
-            view?.showToast(message: "该评论已点赞")
+            view?.showToast(message: ReactionKind.like.commentAlreadyToast)
             return
         }
         guard submittingCommentLikeIDs.contains(comment.id) == false else { return }
         submittingCommentLikeIDs.insert(comment.id)
-        view?.showToast(message: "正在点赞")
+        view?.showToast(message: ReactionKind.like.pendingToast)
         interactor.addCommentLike(commentID: comment.id)
     }
 
     func didTapCommentOppose(_ comment: Comment) {
         guard comment.isOpposeClicked == false else {
-            view?.showToast(message: "该评论已反对")
+            view?.showToast(message: ReactionKind.oppose.commentAlreadyToast)
             return
         }
         guard submittingCommentOpposeIDs.contains(comment.id) == false else { return }
         submittingCommentOpposeIDs.insert(comment.id)
-        view?.showToast(message: "正在反对")
+        view?.showToast(message: ReactionKind.oppose.pendingToast)
         interactor.addCommentOppose(commentID: comment.id)
     }
 
     func didTapPostLike() {
         guard currentDetail?.isLikeClicked != true else {
-            view?.showToast(message: "该帖子已点赞")
+            view?.showToast(message: ReactionKind.like.postAlreadyToast)
             return
         }
         guard isSubmittingPostLike == false else { return }
         isSubmittingPostLike = true
-        view?.showToast(message: "正在点赞")
+        view?.showToast(message: ReactionKind.like.pendingToast)
         interactor.addPostLike()
     }
 
     func didTapPostOppose() {
         guard currentDetail?.isOpposeClicked != true else {
-            view?.showToast(message: "该帖子已反对")
+            view?.showToast(message: ReactionKind.oppose.postAlreadyToast)
             return
         }
         guard isSubmittingPostOppose == false else { return }
         isSubmittingPostOppose = true
-        view?.showToast(message: "正在反对")
+        view?.showToast(message: ReactionKind.oppose.pendingToast)
         interactor.addPostOppose()
     }
 
@@ -199,6 +238,85 @@ class PostDetailPresenter: PostDetailPresenterProtocol {
         guard currentDetail != rollback else { return }
         currentDetail = rollback
         view?.updatePostBody(detail: rollback)
+    }
+
+    private func normalizedReactionToast(message: String?, kind: ReactionKind) -> String {
+        let trimmed = message?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let trimmed, trimmed.isEmpty == false, trimmed != "added" else {
+            return kind.successToast
+        }
+        return trimmed
+    }
+
+    private func reactionNextCount(current: Int?, serverCount: Int?) -> Int {
+        serverCount ?? max(1, (current ?? 0) + 1)
+    }
+
+    private func applyPostReactionSuccess(response: CommentUpvoteResponse, kind: ReactionKind) {
+        if let currentDetail {
+            let currentCount: Int?
+            let nextDetail: PostDetail
+            switch kind {
+            case .like:
+                currentCount = currentDetail.likeCount
+                nextDetail = currentDetail.updatingPostLikeState(
+                    count: reactionNextCount(current: currentCount, serverCount: response.current),
+                    isClicked: true
+                )
+            case .oppose:
+                currentCount = currentDetail.opposeCount
+                nextDetail = currentDetail.updatingPostOpposeState(
+                    count: reactionNextCount(current: currentCount, serverCount: response.current),
+                    isClicked: true
+                )
+            }
+            self.currentDetail = nextDetail
+            view?.updatePostBody(detail: nextDetail)
+        }
+        view?.showToast(message: normalizedReactionToast(message: response.message, kind: kind))
+    }
+
+    private func applyCommentReactionSuccess(
+        commentID: String,
+        response: CommentUpvoteResponse,
+        kind: ReactionKind
+    ) {
+        if let currentDetail,
+           let comment = currentDetail.comments.first(where: { $0.id == commentID }) {
+            let currentCount: Int?
+            let nextDetail: PostDetail
+            let nextCount: Int
+            switch kind {
+            case .like:
+                currentCount = comment.likeCount
+                nextCount = reactionNextCount(current: currentCount, serverCount: response.current)
+                nextDetail = currentDetail.updatingCommentLikeState(
+                    commentID: commentID,
+                    count: nextCount,
+                    isClicked: true
+                )
+                view?.updateCommentLike(commentID: commentID, count: nextCount, isClicked: true)
+            case .oppose:
+                currentCount = comment.opposeCount
+                nextCount = reactionNextCount(current: currentCount, serverCount: response.current)
+                nextDetail = currentDetail.updatingCommentOpposeState(
+                    commentID: commentID,
+                    count: nextCount,
+                    isClicked: true
+                )
+                view?.updateCommentOppose(commentID: commentID, count: nextCount, isClicked: true)
+            }
+            self.currentDetail = nextDetail
+        }
+        view?.showToast(message: normalizedReactionToast(message: response.message, kind: kind))
+    }
+
+    private func handleReactionFailure(error: String, kind: ReactionKind) {
+        if error.contains(kind.alreadyActionSuffix) {
+            view?.showToast(message: error)
+            return
+        }
+        view?.showError(message: error)
     }
 }
 
@@ -306,99 +424,41 @@ extension PostDetailPresenter: PostDetailInteractorOutput {
 
     func didAddPostLike(_ response: PostUpvoteResponse) {
         isSubmittingPostLike = false
-        if let currentDetail {
-            let nextCount = response.current ?? max(1, (currentDetail.likeCount ?? 0) + 1)
-            let nextDetail = currentDetail.updatingPostLikeState(count: nextCount, isClicked: true)
-            self.currentDetail = nextDetail
-            view?.updatePostBody(detail: nextDetail)
-        }
-        let trimmed = response.message?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let message = trimmed == "added" || trimmed?.isEmpty != false ? "已点赞" : trimmed!
-        view?.showToast(message: message)
+        applyPostReactionSuccess(response: response, kind: .like)
     }
 
     func didFailAddPostLike(error: String) {
         isSubmittingPostLike = false
-        if error.contains("已点赞") {
-            view?.showToast(message: error)
-            return
-        }
-        view?.showError(message: error)
+        handleReactionFailure(error: error, kind: .like)
     }
 
     func didAddCommentLike(commentID: String, response: CommentUpvoteResponse) {
         submittingCommentLikeIDs.remove(commentID)
-        if let currentDetail,
-           let comment = currentDetail.comments.first(where: { $0.id == commentID }) {
-            let nextCount = response.current ?? max(1, (comment.likeCount ?? 0) + 1)
-            let nextDetail = currentDetail.updatingCommentLikeState(
-                commentID: commentID,
-                count: nextCount,
-                isClicked: true
-            )
-            self.currentDetail = nextDetail
-            view?.updateCommentLike(commentID: commentID, count: nextCount, isClicked: true)
-        }
-        let trimmed = response.message?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let message = trimmed == "added" || trimmed?.isEmpty != false ? "已点赞" : trimmed!
-        view?.showToast(message: message)
+        applyCommentReactionSuccess(commentID: commentID, response: response, kind: .like)
     }
 
     func didFailAddCommentLike(commentID: String, error: String) {
         submittingCommentLikeIDs.remove(commentID)
-        if error.contains("已点赞") {
-            view?.showToast(message: error)
-            return
-        }
-        view?.showError(message: error)
+        handleReactionFailure(error: error, kind: .like)
     }
 
     func didAddPostOppose(_ response: PostDislikeResponse) {
         isSubmittingPostOppose = false
-        if let currentDetail {
-            let nextCount = response.current ?? max(1, (currentDetail.opposeCount ?? 0) + 1)
-            let nextDetail = currentDetail.updatingPostOpposeState(count: nextCount, isClicked: true)
-            self.currentDetail = nextDetail
-            view?.updatePostBody(detail: nextDetail)
-        }
-        let trimmed = response.message?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let message = trimmed == "added" || trimmed?.isEmpty != false ? "已反对" : trimmed!
-        view?.showToast(message: message)
+        applyPostReactionSuccess(response: response, kind: .oppose)
     }
 
     func didFailAddPostOppose(error: String) {
         isSubmittingPostOppose = false
-        if error.contains("已反对") {
-            view?.showToast(message: error)
-            return
-        }
-        view?.showError(message: error)
+        handleReactionFailure(error: error, kind: .oppose)
     }
 
     func didAddCommentOppose(commentID: String, response: CommentDislikeResponse) {
         submittingCommentOpposeIDs.remove(commentID)
-        if let currentDetail,
-           let comment = currentDetail.comments.first(where: { $0.id == commentID }) {
-            let nextCount = response.current ?? max(1, (comment.opposeCount ?? 0) + 1)
-            let nextDetail = currentDetail.updatingCommentOpposeState(
-                commentID: commentID,
-                count: nextCount,
-                isClicked: true
-            )
-            self.currentDetail = nextDetail
-            view?.updateCommentOppose(commentID: commentID, count: nextCount, isClicked: true)
-        }
-        let trimmed = response.message?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let message = trimmed == "added" || trimmed?.isEmpty != false ? "已反对" : trimmed!
-        view?.showToast(message: message)
+        applyCommentReactionSuccess(commentID: commentID, response: response, kind: .oppose)
     }
 
     func didFailAddCommentOppose(commentID: String, error: String) {
         submittingCommentOpposeIDs.remove(commentID)
-        if error.contains("已反对") {
-            view?.showToast(message: error)
-            return
-        }
-        view?.showError(message: error)
+        handleReactionFailure(error: error, kind: .oppose)
     }
 }

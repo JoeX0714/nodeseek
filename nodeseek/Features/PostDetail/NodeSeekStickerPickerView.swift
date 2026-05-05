@@ -99,8 +99,8 @@ final class NodeSeekStickerPickerView: UIView {
     }
 
     private enum Layout {
-        static let cellSide: CGFloat = 48
-        static let cellSpacing: CGFloat = 8
+        static let cellSide: CGFloat = 72
+        static let cellSpacing: CGFloat = 12
     }
 }
 
