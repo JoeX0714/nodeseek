@@ -8,6 +8,8 @@
 import Foundation
 
 class PostDetailPresenter: PostDetailPresenterProtocol {
+    private static let replyRefreshDelayNanoseconds: UInt64 = 300_000_000
+
     private enum ReactionKind {
         case like
         case oppose
@@ -373,10 +375,10 @@ extension PostDetailPresenter: PostDetailInteractorOutput {
                 toastMessage = "评论已发布"
             }
             view?.showToast(message: toastMessage)
-            isRefreshingAfterReplySubmission = true
-            interactor.loadPostDetail(page: currentPage)
+            scheduleCurrentPageRefreshAfterReplySubmission()
         } else {
             view?.showToast(message: "评论已发布，可到最后一页查看")
+            scheduleCurrentPageRefreshAfterReplySubmission()
         }
     }
 
@@ -384,6 +386,16 @@ extension PostDetailPresenter: PostDetailInteractorOutput {
         isSubmittingReply = false
         view?.setReplySubmitting(false)
         view?.showError(message: error)
+    }
+
+    private func scheduleCurrentPageRefreshAfterReplySubmission() {
+        let page = currentPage
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: Self.replyRefreshDelayNanoseconds)
+            guard let self else { return }
+            self.isRefreshingAfterReplySubmission = true
+            self.interactor.loadPostDetail(page: page)
+        }
     }
 
     func didAddFavorite(_ response: PostCollectionResponse) {

@@ -100,7 +100,7 @@ struct PostDetailPresenterTests {
         #expect(interactor.loadedPages == [2, 2])
     }
 
-    @Test func replySubmissionSuccessFinishesComposerAndReloadsCurrentPage() {
+    @Test func replySubmissionSuccessFinishesComposerAndReloadsCurrentPage() async throws {
         let interactor = SpyPostDetailInteractor()
         let router = SpyPostDetailRouter()
         let presenter = PostDetailPresenter(interactor: interactor, router: router, initialPage: 2)
@@ -125,11 +125,43 @@ struct PostDetailPresenterTests {
         #expect(view.replySubmittingStates == [true, false])
         #expect(view.finishReplySubmissionCount == 1)
         #expect(view.toastMessage == "已发布")
+        #expect(interactor.loadedPages.isEmpty)
+
+        try await Task.sleep(nanoseconds: 350_000_000)
+
         #expect(interactor.loadedPages == [2])
         #expect(view.loadingCount == 0)
     }
 
-    @Test func cancelledRefreshAfterReplySubmissionDoesNotShowError() {
+    @Test func replySubmissionOnEarlierPageRefreshesCurrentPageAfterDelay() async throws {
+        let interactor = SpyPostDetailInteractor()
+        let router = SpyPostDetailRouter()
+        let presenter = PostDetailPresenter(interactor: interactor, router: router, initialPage: 2)
+        let view = SpyPostDetailView()
+        presenter.setView(view)
+        presenter.didLoadPostDetail(PostDetailResponse(detail: PostDetail(
+            id: "706958",
+            title: "标题",
+            authorName: "mist",
+            avatarURL: nil,
+            metadataText: nil,
+            contentHTML: "<p>正文</p>",
+            comments: [],
+            page: 2,
+            isLastPage: false
+        )))
+
+        presenter.didTapSendReply(content: "测试回复")
+        presenter.didSubmitReply(PostDetailSubmitReplyResponse(message: "已发布"))
+
+        #expect(interactor.loadedPages.isEmpty)
+
+        try await Task.sleep(nanoseconds: 350_000_000)
+
+        #expect(interactor.loadedPages == [2])
+    }
+
+    @Test func cancelledRefreshAfterReplySubmissionDoesNotShowError() async throws {
         let interactor = SpyPostDetailInteractor()
         let router = SpyPostDetailRouter()
         let presenter = PostDetailPresenter(interactor: interactor, router: router, initialPage: 2)
@@ -149,10 +181,14 @@ struct PostDetailPresenterTests {
 
         presenter.didTapSendReply(content: "测试回复")
         presenter.didSubmitReply(PostDetailSubmitReplyResponse(message: "已发布"))
+
+        try await Task.sleep(nanoseconds: 350_000_000)
+
         presenter.didCancelLoadPostDetail()
 
         #expect(view.errorMessage == nil)
         #expect(view.toastMessage == "已发布")
+        #expect(interactor.loadedPages == [2])
         #expect(view.hideLoadingCount == 2)
     }
 
@@ -171,7 +207,7 @@ struct PostDetailPresenterTests {
         #expect(interactor.loadedPages == [2])
     }
 
-    @Test func failedRefreshAfterReplySubmissionKeepsPublishedToast() {
+    @Test func failedRefreshAfterReplySubmissionKeepsPublishedToast() async throws {
         let interactor = SpyPostDetailInteractor()
         let router = SpyPostDetailRouter()
         let presenter = PostDetailPresenter(interactor: interactor, router: router, initialPage: 2)
@@ -191,6 +227,9 @@ struct PostDetailPresenterTests {
 
         presenter.didTapSendReply(content: "测试回复")
         presenter.didSubmitReply(PostDetailSubmitReplyResponse(message: "已发布"))
+
+        try await Task.sleep(nanoseconds: 350_000_000)
+
         presenter.didFailLoadPostDetail(error: "网络错误")
 
         #expect(view.errorMessage == nil)
