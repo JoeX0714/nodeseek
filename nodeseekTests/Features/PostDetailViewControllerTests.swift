@@ -719,6 +719,32 @@ struct PostDetailViewControllerTests {
         #expect(title.foregroundColor(for: "1") == .systemRed)
     }
 
+    @Test func postBodyMetadataSplitsCategoryAndTimeAcrossTwoLines() {
+        let header = PostDetailHeaderContent(
+            postID: "714386",
+            title: "详情标题",
+            authorName: "mist",
+            avatarURL: nil,
+            metadataText: "2days ago · 日常",
+            contentHTML: "<p>正文</p>"
+        )
+        let node = PostBodyCellNode(
+            content: header,
+            renderedContent: [],
+            onImageTapped: { _, _ in },
+            onTextLayoutInvalidated: {}
+        )
+
+        _ = node.layoutThatFits(ASSizeRange(
+            min: .zero,
+            max: CGSize(width: 360, height: CGFloat.greatestFiniteMagnitude)
+        ))
+
+        #expect(node.debugIdentityMetadataIsBelowAuthor)
+        #expect(node.debugIdentityTopLineText == "mist · 日常")
+        #expect(node.debugIdentityTimeLineText == "2days ago")
+    }
+
     @Test func postBodyCellShowsReactionAndFavoriteCountsWhenAvailable() {
         let header = PostDetailHeaderContent(
             postID: "710379",
@@ -736,6 +762,8 @@ struct PostDetailViewControllerTests {
         var likeTapCount = 0
         var opposeTapCount = 0
         var favoriteTapCount = 0
+        var replyTapCount = 0
+        var commentTapCount = 0
         let node = PostBodyCellNode(
             content: header,
             renderedContent: [],
@@ -749,6 +777,12 @@ struct PostDetailViewControllerTests {
             onFavoriteTapped: {
                 favoriteTapCount += 1
             },
+            onReplyTapped: {
+                replyTapCount += 1
+            },
+            onCommentTapped: {
+                commentTapCount += 1
+            },
             onTextLayoutInvalidated: {}
         )
         _ = node.layoutThatFits(ASSizeRange(
@@ -758,13 +792,17 @@ struct PostDetailViewControllerTests {
         node.debugTapLikeAction()
         node.debugTapOpposeAction()
         node.debugTapFavoriteAction()
+        node.debugTapReplyAction()
+        node.debugTapCommentAction()
 
         #expect(node.debugReactionActionTitles == [nil, "1", nil, "2"])
-        #expect(node.debugFooterActionAccessibilityLabels == ["点赞", "加鸡腿 1", "反对", "收藏 2"])
+        #expect(node.debugFooterActionAccessibilityLabels == ["点赞", "加鸡腿 1", "反对", "收藏 2", "回复楼主", "评论帖子"])
         #expect(node.debugFavoriteActionColor == .systemYellow)
         #expect(likeTapCount == 1)
         #expect(opposeTapCount == 1)
         #expect(favoriteTapCount == 1)
+        #expect(replyTapCount == 1)
+        #expect(commentTapCount == 1)
     }
 
     @Test func postBodyCellUpdatesLikeReactionInPlace() {
@@ -836,7 +874,7 @@ struct PostDetailViewControllerTests {
         )
 
         #expect(node.debugReactionActionTitles == ["1.2万", "12.3万", "1亿", "20亿"])
-        #expect(node.debugFooterActionAccessibilityLabels == ["点赞 12345", "加鸡腿 123456", "反对 100000000", "收藏 2000000000"])
+        #expect(node.debugFooterActionAccessibilityLabels == ["点赞 12345", "加鸡腿 123456", "反对 100000000", "收藏 2000000000", "回复楼主", "评论帖子"])
     }
 
     @Test func postBodyCellKeepsFavoriteIconStyleWhileSubmitting() {
@@ -1993,6 +2031,36 @@ struct PostDetailLoginViewControllerTests {
         #expect(presenter.sentReplyContent?.contains("> @netcup [#10]") == true)
         #expect(presenter.sentReplyContent?.contains("第一段") == true)
         #expect(presenter.sentReplyContent?.contains("第二段") == false)
+    }
+
+    @Test func postHeaderReplyActionUsesPosterContext() async throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter)
+        let detail = PostDetail(
+            id: "714386",
+            title: "详情标题",
+            authorName: "楼主",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "<p>正文</p>",
+            comments: []
+        )
+
+        viewController.loadViewIfNeeded()
+        viewController.render(detail: detail)
+        await waitForDetailContent(in: viewController, expectedRowCount: 1)
+        viewController.handleReply(toPostHeader: PostDetailHeaderContent(detail: detail))
+
+        let contextLabel = try #require(viewController.view.firstLabel(accessibilityIdentifier: "post-detail-reply-context-label"))
+        #expect(contextLabel.text == "回复 楼主 #0")
+
+        let replyTextView = try #require(viewController.view.firstTextView(accessibilityIdentifier: "post-detail-reply-text-view"))
+        replyTextView.text = "收到"
+        let sendButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-reply-send-button"))
+        sendButton.sendActions(for: .touchUpInside)
+        #expect(presenter.sentReplyContent?.contains("@楼主 [#0]") == true)
+        #expect(presenter.sentReplyContent?.contains("#0") == true)
+        #expect(presenter.sentReplyContent?.contains("收到") == true)
     }
 
     @Test func inlineReplyEditorPlacesStickerButtonBelowSendButton() throws {

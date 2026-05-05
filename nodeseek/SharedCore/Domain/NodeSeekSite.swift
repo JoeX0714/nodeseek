@@ -24,6 +24,10 @@ enum NodeSeekSite {
         baseURL.appendingPathComponent("new-discussion")
     }
 
+    nonisolated static var boardURL: URL {
+        baseURL.appendingPathComponent("board")
+    }
+
     nonisolated static var defaultPostListURL: URL {
         var components = URLComponents(
             url: baseURL.appendingPathComponent("page-1"),

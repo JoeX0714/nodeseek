@@ -19,7 +19,7 @@ final class PostBodyCellNode: ASCellNode {
         )
         static let verticalSpacing: CGFloat = 12
         static let bodySpacing: CGFloat = 18
-        static let stableReactionActionWidth: CGFloat = 84
+        static let reactionActionWidth: CGFloat = 52
     }
 
     private var content: PostDetailHeaderContent
@@ -29,7 +29,10 @@ final class PostBodyCellNode: ASCellNode {
     private let onLikeTapped: () -> Void
     private let onOpposeTapped: () -> Void
     private let onFavoriteTapped: () -> Void
+    private let onReplyTapped: () -> Void
+    private let onCommentTapped: () -> Void
     private let onTextLayoutInvalidated: () -> Void
+    private let showsReplyActions: Bool
     private let avatarLoader = AvatarImageLoader.shared
     private weak var avatarImageView: UIImageView?
     private var hasRequestedAvatar = false
@@ -42,20 +45,27 @@ final class PostBodyCellNode: ASCellNode {
 
     private let titleNode = ASTextNode()
     private let authorButtonNode = ASButtonNode()
+    private let inlineMetadataNode = ASTextNode()
     private let metadataNode = ASTextNode()
     private let likeButtonNode = ASButtonNode()
     private let chickenLegButtonNode = ASButtonNode()
     private let opposeButtonNode = ASButtonNode()
     private let favoriteButtonNode = ASButtonNode()
+    private let replyButtonNode = ASButtonNode()
+    private let commentButtonNode = ASButtonNode()
     private let bodyNodes: [ASDisplayNode]
     private var lastAppliedUserInterfaceStyle: UIUserInterfaceStyle?
-    private var hasFooterActions: Bool {
+    private(set) var debugIdentityMetadataIsBelowAuthor = false
+    private var hasReactionActions: Bool {
         [
             content.likeCount,
             content.chickenLegCount,
             content.opposeCount,
             content.favoriteCount
         ].contains { $0 != nil }
+    }
+    private var hasFooterActions: Bool {
+        hasReactionActions || showsReplyActions
     }
 
     private lazy var avatarNode: ASDisplayNode = {
@@ -88,6 +98,9 @@ final class PostBodyCellNode: ASCellNode {
         onLikeTapped: @escaping () -> Void = {},
         onOpposeTapped: @escaping () -> Void = {},
         onFavoriteTapped: @escaping () -> Void = {},
+        onReplyTapped: @escaping () -> Void = {},
+        onCommentTapped: @escaping () -> Void = {},
+        showsReplyActions: Bool = true,
         onTextLayoutInvalidated: @escaping () -> Void,
         imageSizeProvider: @escaping (URL) -> CGSize? = { _ in nil },
         onImageSizeResolved: @escaping (URL, CGSize) -> Void = { _, _ in }
@@ -99,6 +112,9 @@ final class PostBodyCellNode: ASCellNode {
         self.onLikeTapped = onLikeTapped
         self.onOpposeTapped = onOpposeTapped
         self.onFavoriteTapped = onFavoriteTapped
+        self.onReplyTapped = onReplyTapped
+        self.onCommentTapped = onCommentTapped
+        self.showsReplyActions = showsReplyActions
         self.onTextLayoutInvalidated = onTextLayoutInvalidated
         self.bodyNodes = DetailContentBlockNodeFactory.makeNodes(
             from: renderedContent ?? [],
@@ -141,19 +157,36 @@ final class PostBodyCellNode: ASCellNode {
     override func layoutSpecThatFits(_ constrainedSize: ASSizeRange) -> ASLayoutSpec {
         titleNode.style.flexShrink = 1
         authorButtonNode.style.flexShrink = 0
+        inlineMetadataNode.style.flexShrink = 1
         metadataNode.style.flexShrink = 1
 
-        let identityStack = ASStackLayoutSpec.horizontal()
-        identityStack.spacing = 5
-        identityStack.alignItems = .center
-        var identityChildren: [ASLayoutElement] = []
+        let identityTopLine = ASStackLayoutSpec.horizontal()
+        identityTopLine.spacing = 5
+        identityTopLine.alignItems = .center
+        var topLineChildren: [ASLayoutElement] = []
         if hasDisplayableAuthor {
-            identityChildren.append(authorButtonNode)
+            topLineChildren.append(authorButtonNode)
         }
-        if Self.metadataText(for: content).isEmpty == false {
+        if Self.inlineMetadataText(for: content).isEmpty == false {
+            topLineChildren.append(inlineMetadataNode)
+        }
+        identityTopLine.children = topLineChildren
+        identityTopLine.style.flexShrink = 1
+        identityTopLine.style.flexGrow = 1
+
+        let identityStack = ASStackLayoutSpec.vertical()
+        identityStack.spacing = 3
+        identityStack.alignItems = .start
+        var identityChildren: [ASLayoutElement] = []
+        if topLineChildren.isEmpty == false {
+            identityChildren.append(identityTopLine)
+        }
+        let hasTimeMetadata = Self.timeMetadataText(for: content).isEmpty == false
+        if hasTimeMetadata {
             identityChildren.append(metadataNode)
         }
         identityStack.children = identityChildren
+        debugIdentityMetadataIsBelowAuthor = hasDisplayableAuthor && hasTimeMetadata
         identityStack.style.flexShrink = 1
         identityStack.style.flexGrow = 1
 
@@ -196,9 +229,18 @@ final class PostBodyCellNode: ASCellNode {
         )
         authorButtonNode.accessibilityLabel = "查看 \(AuthorDisplayPolicy.displayName(from: content.authorName) ?? "作者") 的主页"
 
+        inlineMetadataNode.maximumNumberOfLines = 1
+        inlineMetadataNode.attributedText = NSAttributedString(
+            string: Self.inlineMetadataText(for: content),
+            attributes: [
+                .font: UIFont.preferredFont(forTextStyle: .subheadline),
+                .foregroundColor: UIColor.secondaryLabel
+            ]
+        )
+
         metadataNode.maximumNumberOfLines = 0
         metadataNode.attributedText = NSAttributedString(
-            string: Self.metadataText(for: content),
+            string: Self.timeMetadataText(for: content),
             attributes: [
                 .font: UIFont.preferredFont(forTextStyle: .subheadline),
                 .foregroundColor: UIColor.secondaryLabel
@@ -209,6 +251,8 @@ final class PostBodyCellNode: ASCellNode {
         configureActionButton(chickenLegButtonNode, systemImageName: "fork.knife", accessibilityLabel: "加鸡腿", count: content.chickenLegCount)
         configureOpposeActionButton(count: content.opposeCount, isClicked: content.isOpposeClicked)
         configureFavoriteActionButton(count: content.favoriteCount, isCollected: content.isFavoriteCollected)
+        configureActionButton(replyButtonNode, systemImageName: "arrowshape.turn.up.left", accessibilityLabel: "回复楼主")
+        configureActionButton(commentButtonNode, systemImageName: "text.bubble", accessibilityLabel: "评论帖子")
     }
 
     private static func titleAttributedText(for content: PostDetailHeaderContent) -> NSAttributedString {
@@ -253,6 +297,20 @@ final class PostBodyCellNode: ASCellNode {
         titleNode.attributedText
     }
 
+    var debugIdentityTopLineText: String {
+        [
+            AuthorDisplayPolicy.displayName(from: content.authorName),
+            inlineMetadataNode.attributedText?.string
+        ]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { $0.isEmpty == false }
+            .joined(separator: " ")
+    }
+
+    var debugIdentityTimeLineText: String {
+        metadataNode.attributedText?.string ?? ""
+    }
+
     private func configureActions() {
         authorButtonNode.isUserInteractionEnabled = hasAuthorProfileLink
         if hasAuthorProfileLink {
@@ -261,6 +319,8 @@ final class PostBodyCellNode: ASCellNode {
         likeButtonNode.addTarget(self, action: #selector(likeTapped), forControlEvents: .touchUpInside)
         opposeButtonNode.addTarget(self, action: #selector(opposeTapped), forControlEvents: .touchUpInside)
         favoriteButtonNode.addTarget(self, action: #selector(favoriteTapped), forControlEvents: .touchUpInside)
+        replyButtonNode.addTarget(self, action: #selector(replyTapped), forControlEvents: .touchUpInside)
+        commentButtonNode.addTarget(self, action: #selector(commentTapped), forControlEvents: .touchUpInside)
     }
 
     private func makeFooterActionStack() -> ASLayoutSpec {
@@ -268,15 +328,24 @@ final class PostBodyCellNode: ASCellNode {
         spacer.style.flexGrow = 1
 
         let actionStack = ASStackLayoutSpec.horizontal()
-        actionStack.spacing = 8
+        actionStack.spacing = 4
         actionStack.alignItems = .center
-        actionStack.children = [
-            spacer,
-            likeButtonNode,
-            chickenLegButtonNode,
-            opposeButtonNode,
-            favoriteButtonNode
-        ]
+        var actionChildren: [ASLayoutElement] = [spacer]
+        if hasReactionActions {
+            actionChildren.append(contentsOf: [
+                likeButtonNode,
+                chickenLegButtonNode,
+                opposeButtonNode,
+                favoriteButtonNode
+            ])
+        }
+        if showsReplyActions {
+            actionChildren.append(contentsOf: [
+                replyButtonNode,
+                commentButtonNode
+            ])
+        }
+        actionStack.children = actionChildren
         return actionStack
     }
 
@@ -338,7 +407,7 @@ final class PostBodyCellNode: ASCellNode {
 
     private static func actionButtonWidth(for countText: String, font: UIFont) -> CGFloat {
         let textWidth = (countText as NSString).size(withAttributes: [.font: font]).width
-        return max(Layout.stableReactionActionWidth, ceil(15 + 4 + textWidth + 16))
+        return max(Layout.reactionActionWidth, ceil(15 + 4 + textWidth + 16))
     }
 
     private static func favoriteActionColor(isCollected: Bool) -> UIColor {
@@ -361,7 +430,7 @@ final class PostBodyCellNode: ASCellNode {
             count: count,
             color: Self.likeActionColor(isClicked: isClicked)
         )
-        likeButtonNode.style.preferredSize = CGSize(width: Layout.stableReactionActionWidth, height: 32)
+        likeButtonNode.style.preferredSize = CGSize(width: Layout.reactionActionWidth, height: 32)
     }
 
     private func configureOpposeActionButton(count: Int?, isClicked: Bool) {
@@ -372,7 +441,7 @@ final class PostBodyCellNode: ASCellNode {
             count: count,
             color: Self.opposeActionColor(isClicked: isClicked)
         )
-        opposeButtonNode.style.preferredSize = CGSize(width: Layout.stableReactionActionWidth, height: 32)
+        opposeButtonNode.style.preferredSize = CGSize(width: Layout.reactionActionWidth, height: 32)
     }
 
     private func configureFavoriteActionButton(count: Int?, isCollected: Bool) {
@@ -383,7 +452,7 @@ final class PostBodyCellNode: ASCellNode {
             count: count,
             color: Self.favoriteActionColor(isCollected: isCollected)
         )
-        favoriteButtonNode.style.preferredSize = CGSize(width: Layout.stableReactionActionWidth, height: 32)
+        favoriteButtonNode.style.preferredSize = CGSize(width: Layout.reactionActionWidth, height: 32)
     }
 
     private func updateFavoriteActionPresentation(count: Int?, isCollected: Bool) {
@@ -514,6 +583,14 @@ final class PostBodyCellNode: ASCellNode {
         onFavoriteTapped()
     }
 
+    @objc private func replyTapped() {
+        onReplyTapped()
+    }
+
+    @objc private func commentTapped() {
+        onCommentTapped()
+    }
+
     private func requestAvatarIfNeeded() {
         guard hasDisplayableAuthor else { return }
         guard !hasRequestedAvatar else { return }
@@ -527,19 +604,62 @@ final class PostBodyCellNode: ASCellNode {
         avatarLoader.cancel(on: avatarImageView)
     }
 
-    private static func metadataText(for content: PostDetailHeaderContent) -> String {
+    private struct IdentityMetadata {
+        let timeText: String
+        let inlineText: String
+    }
+
+    private static func identityMetadata(for content: PostDetailHeaderContent) -> IdentityMetadata {
         let metadata = content.metadataText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard metadata.isEmpty == false else { return "" }
-        return AuthorDisplayPolicy.isDisplayable(content.authorName) ? "· \(metadata)" : metadata
+        guard metadata.isEmpty == false else {
+            return IdentityMetadata(timeText: "", inlineText: "")
+        }
+
+        let parts = metadata
+            .split(separator: "·")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { $0.isEmpty == false }
+        guard let timeText = parts.first else {
+            return IdentityMetadata(timeText: "", inlineText: "")
+        }
+
+        let remainingText = parts.dropFirst().joined(separator: " · ")
+        let inlineText: String
+        if remainingText.isEmpty {
+            inlineText = ""
+        } else if AuthorDisplayPolicy.isDisplayable(content.authorName) {
+            inlineText = "· \(remainingText)"
+        } else {
+            inlineText = remainingText
+        }
+
+        return IdentityMetadata(timeText: timeText, inlineText: inlineText)
+    }
+
+    private static func inlineMetadataText(for content: PostDetailHeaderContent) -> String {
+        identityMetadata(for: content).inlineText
+    }
+
+    private static func timeMetadataText(for content: PostDetailHeaderContent) -> String {
+        identityMetadata(for: content).timeText
     }
 
     var debugFooterActionAccessibilityLabels: [String] {
-        [
-            likeButtonNode,
-            chickenLegButtonNode,
-            opposeButtonNode,
-            favoriteButtonNode
-        ].map { $0.accessibilityLabel ?? "" }
+        let reactionLabels = hasReactionActions
+            ? [
+                likeButtonNode,
+                chickenLegButtonNode,
+                opposeButtonNode,
+                favoriteButtonNode
+            ].map { $0.accessibilityLabel ?? "" }
+            : []
+        let replyLabels = showsReplyActions
+            ? [
+                replyButtonNode,
+                commentButtonNode
+            ].map { $0.accessibilityLabel ?? "" }
+            : []
+        return reactionLabels + replyLabels
     }
 
     var debugReactionActionTitles: [String?] {
@@ -577,6 +697,14 @@ final class PostBodyCellNode: ASCellNode {
 
     func debugTapOpposeAction() {
         opposeTapped()
+    }
+
+    func debugTapReplyAction() {
+        replyTapped()
+    }
+
+    func debugTapCommentAction() {
+        commentTapped()
     }
 }
 

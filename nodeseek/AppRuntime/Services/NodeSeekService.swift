@@ -12,12 +12,14 @@ struct NodeSeekService: Sendable {
     private let htmlClient: any HTMLClient
     private let parser: any NodeSeekParser
     private let challengeDetector: ChallengeDetector
+    private let currentAccountStore: CurrentAccountStore?
 
     init(
         baseURL: URL = NodeSeekSite.baseURL,
         htmlClient: any HTMLClient = HiddenWebViewHTMLClient(),
         parser: (any NodeSeekParser)? = nil,
-        challengeDetector: ChallengeDetector = ChallengeDetector()
+        challengeDetector: ChallengeDetector = ChallengeDetector(),
+        currentAccountStore: CurrentAccountStore? = .shared
     ) {
         self.baseURL = baseURL
         self.htmlClient = htmlClient
@@ -26,6 +28,7 @@ struct NodeSeekService: Sendable {
             debugLogger: { AppLog.debug(.account, $0) }
         )
         self.challengeDetector = challengeDetector
+        self.currentAccountStore = currentAccountStore
     }
 
     func loadPostList(
@@ -43,6 +46,7 @@ struct NodeSeekService: Sendable {
             return .challenge(challenge)
         }
 
+        await updateCurrentAccountIfPresent(in: response.html)
         let posts = try parser.parsePostList(html: response.html)
         AppLog.info(.service, "列表解析完成，帖子数量: \(posts.count)")
         return .value(posts)
@@ -63,6 +67,7 @@ struct NodeSeekService: Sendable {
             return .challenge(challenge)
         }
 
+        await updateCurrentAccountIfPresent(in: response.html)
         let posts = try parser.parsePostList(html: response.html)
         AppLog.info(.service, "搜索解析完成，帖子数量: \(posts.count)")
         return .value(posts)
@@ -86,6 +91,7 @@ struct NodeSeekService: Sendable {
         }
 
         let account = try parser.parseAccount(html: response.html)
+        await currentAccountStore?.save(account)
         AppLog.info(.service, "账号信息解析完成，loggedIn=\(account.isLoggedIn), displayName=\(account.displayName)")
         AppLog.debug(.account, "service: parsed loggedIn=\(account.isLoggedIn) name=\(account.displayName) avatar=\(account.avatarURL?.path ?? "nil") profile=\(account.profileURL?.path ?? "nil") stats=\(account.stats.joined(separator: "|"))")
         return .value(account)
@@ -102,6 +108,7 @@ struct NodeSeekService: Sendable {
             return .challenge(challenge)
         }
 
+        await updateCurrentAccountIfPresent(in: response.html)
         let detail = try parser.parsePostDetail(html: response.html, url: targetURL)
         AppLog.info(.service, "详情解析完成，postID=\(detail.id), 评论数量: \(detail.comments.count)")
         return .value(detail)
@@ -139,6 +146,27 @@ struct NodeSeekService: Sendable {
         }
         components.queryItems = queryItems
         return components.url ?? baseURL.appendingPathComponent("search")
+    }
+
+    private func updateCurrentAccountIfPresent(in html: String) async {
+        guard let currentAccountStore else { return }
+        guard htmlContainsCurrentAccountSignal(html) else { return }
+
+        do {
+            let account = try parser.parseAccount(html: html)
+            guard account.isLoggedIn else { return }
+            await currentAccountStore.save(account)
+            AppLog.debug(.account, "service: opportunistic account save -> loggedIn=\(account.isLoggedIn) name=\(account.displayName)")
+        } catch {
+            AppLog.debug(.account, "service: opportunistic account parse failed \(error.localizedDescription)")
+        }
+    }
+
+    private func htmlContainsCurrentAccountSignal(_ html: String) -> Bool {
+        html.contains("user-card")
+            || html.contains(#"id="temp-script""#)
+            || html.contains(#"id='temp-script'"#)
+            || html.contains("nodeseek-captured-config")
     }
 }
 

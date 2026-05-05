@@ -11,24 +11,24 @@ final class NewDiscussionWebViewController: UIViewController, WKNavigationDelega
     static let newDiscussionURL = NodeSeekSite.newDiscussionURL
 
     private let targetURL: URL
+    private let automaticallyLoadsPage: Bool
+    private let webViewContext: NodeSeekWebViewContext
     private let webView: WKWebView
-    private let cookieBridge: CookieBridge
     private let loadingIndicator = UIActivityIndicatorView(style: .medium)
     private var loadTask: Task<Void, Never>?
     private var lastResponseStatusCode: Int?
     private var hasPresentedLoginRequiredHint = false
 
-    init(targetURL: URL = NewDiscussionWebViewController.newDiscussionURL) {
+    init(
+        targetURL: URL = NewDiscussionWebViewController.newDiscussionURL,
+        automaticallyLoadsPage: Bool = true
+    ) {
         self.targetURL = targetURL
+        self.automaticallyLoadsPage = automaticallyLoadsPage
 
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .default()
-        self.webView = WKWebView(frame: .zero, configuration: configuration)
-        self.cookieBridge = CookieBridge(
-            webCookieStore: WKWebCookieStoreAdapter(
-                store: configuration.websiteDataStore.httpCookieStore
-            )
-        )
+        let webViewContext = NodeSeekWebViewContext()
+        self.webViewContext = webViewContext
+        self.webView = webViewContext.webView
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -48,31 +48,24 @@ final class NewDiscussionWebViewController: UIViewController, WKNavigationDelega
         view.backgroundColor = .systemBackground
         configureNavigationItems()
         configureWebView()
-        loadNewDiscussionPage()
+        if automaticallyLoadsPage {
+            loadNewDiscussionPage()
+        }
     }
 
     private func configureNavigationItems() {
-        let copyAction = UIAction(
-            title: "复制链接",
-            image: UIImage(systemName: "doc.on.doc")
-        ) { [weak self] _ in
-            self?.copyCurrentPageURL()
-        }
-        let openAction = UIAction(
-            title: "系统浏览器打开",
-            image: UIImage(systemName: "safari")
-        ) { [weak self] _ in
-            self?.openInSystemBrowser()
-        }
-
-        let menu = UIMenu(children: [copyAction, openAction])
-        let moreButton = UIBarButtonItem(
-            image: UIImage(systemName: "ellipsis.circle"),
-            primaryAction: nil,
-            menu: menu
+        navigationItem.rightBarButtonItem = WebPageMoreMenuFactory.makeMoreButton(
+            accessibilityLabel: "发帖页更多操作",
+            onRefresh: { [weak self] in
+                self?.reloadCurrentPage()
+            },
+            onCopyLink: { [weak self] in
+                self?.copyCurrentPageURL()
+            },
+            onOpenInSystemBrowser: { [weak self] in
+                self?.openInSystemBrowser()
+            }
         )
-        moreButton.accessibilityLabel = "发帖页更多操作"
-        navigationItem.rightBarButtonItem = moreButton
     }
 
     private func configureWebView() {
@@ -100,12 +93,13 @@ final class NewDiscussionWebViewController: UIViewController, WKNavigationDelega
     }
 
     private func loadNewDiscussionPage() {
+        cancelLoad()
         loadingIndicator.startAnimating()
         lastResponseStatusCode = nil
         hasPresentedLoginRequiredHint = false
         loadTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            await cookieBridge.syncURLSessionCookiesToWebView()
+            await webViewContext.prepareForInitialLoad(userInterfaceStyle: traitCollection.userInterfaceStyle)
             guard !Task.isCancelled else { return }
 
             var request = URLRequest(url: targetURL)
@@ -119,6 +113,15 @@ final class NewDiscussionWebViewController: UIViewController, WKNavigationDelega
     private func cancelLoad() {
         loadTask?.cancel()
         loadTask = nil
+    }
+
+    private func reloadCurrentPage() {
+        guard webView.url != nil else {
+            loadNewDiscussionPage()
+            return
+        }
+        loadingIndicator.startAnimating()
+        webView.reload()
     }
 
     private func currentPageURL() -> URL {

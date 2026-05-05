@@ -12,24 +12,20 @@ import WebKit
 final class UserInfoWebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
     private let profileURL: URL
     private let pageTitle: String
+    private let automaticallyLoadsPage: Bool
+    private let webViewContext: NodeSeekWebViewContext
     private let webView: WKWebView
-    private let cookieBridge: CookieBridge
     private let loadingIndicator = UIActivityIndicatorView(style: .medium)
     private var loadTask: Task<Void, Never>?
 
-    init(profileURL: URL, title: String = "用户主页") {
+    init(profileURL: URL, title: String = "用户主页", automaticallyLoadsPage: Bool = true) {
         self.profileURL = Self.normalizedProfileURL(profileURL)
         self.pageTitle = title
+        self.automaticallyLoadsPage = automaticallyLoadsPage
 
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .default()
-        configuration.userContentController = Self.makeUserContentController()
-        self.webView = WKWebView(frame: .zero, configuration: configuration)
-        self.cookieBridge = CookieBridge(
-            webCookieStore: WKWebCookieStoreAdapter(
-                store: configuration.websiteDataStore.httpCookieStore
-            )
-        )
+        let webViewContext = NodeSeekWebViewContext(additionalUserScripts: Self.makeUserScripts())
+        self.webViewContext = webViewContext
+        self.webView = webViewContext.webView
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -49,7 +45,9 @@ final class UserInfoWebViewController: UIViewController, WKNavigationDelegate, W
         view.backgroundColor = .systemBackground
         configureNavigationItems()
         configureWebView()
-        loadProfilePage()
+        if automaticallyLoadsPage {
+            loadProfilePage()
+        }
     }
 
     static func normalizedProfileURL(_ url: URL) -> URL {
@@ -62,36 +60,19 @@ final class UserInfoWebViewController: UIViewController, WKNavigationDelegate, W
         return components.url ?? absoluteURL
     }
 
-    private static func makeUserContentController() -> WKUserContentController {
-        let controller = WKUserContentController()
-        for script in makeUserScripts() {
-            controller.addUserScript(script)
-        }
-        return controller
-    }
-
     private func configureNavigationItems() {
-        let copyAction = UIAction(
-            title: "复制链接",
-            image: UIImage(systemName: "doc.on.doc")
-        ) { [weak self] _ in
-            self?.copyCurrentPageURL()
-        }
-        let openAction = UIAction(
-            title: "系统浏览器打开",
-            image: UIImage(systemName: "safari")
-        ) { [weak self] _ in
-            self?.openInSystemBrowser()
-        }
-
-        let menu = UIMenu(children: [copyAction, openAction])
-        let moreButton = UIBarButtonItem(
-            image: UIImage(systemName: "ellipsis.circle"),
-            primaryAction: nil,
-            menu: menu
+        navigationItem.rightBarButtonItem = WebPageMoreMenuFactory.makeMoreButton(
+            accessibilityLabel: "用户页更多操作",
+            onRefresh: { [weak self] in
+                self?.reloadCurrentPage()
+            },
+            onCopyLink: { [weak self] in
+                self?.copyCurrentPageURL()
+            },
+            onOpenInSystemBrowser: { [weak self] in
+                self?.openInSystemBrowser()
+            }
         )
-        moreButton.accessibilityLabel = "用户页更多操作"
-        navigationItem.rightBarButtonItem = moreButton
     }
 
     private func configureWebView() {
@@ -119,10 +100,11 @@ final class UserInfoWebViewController: UIViewController, WKNavigationDelegate, W
     }
 
     private func loadProfilePage() {
+        cancelLoad()
         loadingIndicator.startAnimating()
         loadTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            await cookieBridge.syncURLSessionCookiesToWebView()
+            await webViewContext.prepareForInitialLoad(userInterfaceStyle: traitCollection.userInterfaceStyle)
             guard !Task.isCancelled else { return }
 
             var request = URLRequest(url: profileURL)
@@ -136,6 +118,15 @@ final class UserInfoWebViewController: UIViewController, WKNavigationDelegate, W
     private func cancelLoad() {
         loadTask?.cancel()
         loadTask = nil
+    }
+
+    private func reloadCurrentPage() {
+        guard webView.url != nil else {
+            loadProfilePage()
+            return
+        }
+        loadingIndicator.startAnimating()
+        webView.reload()
     }
 
     private func currentPageURL() -> URL {

@@ -11,20 +11,18 @@ import WebKit
 
 final class CookieSharedWebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
     private let url: URL
+    private let automaticallyLoadsPage: Bool
+    private let webViewContext: NodeSeekWebViewContext
     private let webView: WKWebView
-    private let cookieBridge: CookieBridge
     private let loadingIndicator = UIActivityIndicatorView(style: .medium)
+    private var loadTask: Task<Void, Never>?
 
-    init(url: URL) {
+    init(url: URL, automaticallyLoadsPage: Bool = true) {
         self.url = url
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .default()
-        self.webView = WKWebView(frame: .zero, configuration: configuration)
-        self.cookieBridge = CookieBridge(
-            webCookieStore: WKWebCookieStoreAdapter(
-                store: configuration.websiteDataStore.httpCookieStore
-            )
-        )
+        self.automaticallyLoadsPage = automaticallyLoadsPage
+        let webViewContext = NodeSeekWebViewContext()
+        self.webViewContext = webViewContext
+        self.webView = webViewContext.webView
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -33,6 +31,7 @@ final class CookieSharedWebViewController: UIViewController, WKNavigationDelegat
     }
 
     deinit {
+        cancelLoad()
         webView.navigationDelegate = nil
         webView.uiDelegate = nil
     }
@@ -51,8 +50,6 @@ final class CookieSharedWebViewController: UIViewController, WKNavigationDelegat
         loadingIndicator.hidesWhenStopped = true
         loadingIndicator.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(loadingIndicator)
-        loadingIndicator.startAnimating()
-
         NSLayoutConstraint.activate([
             webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -62,9 +59,33 @@ final class CookieSharedWebViewController: UIViewController, WKNavigationDelegat
             loadingIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor)
         ])
 
-        Task { @MainActor [weak self] in
+        if automaticallyLoadsPage {
+            loadPage()
+        }
+    }
+
+    private func configureNavigationItems() {
+        navigationItem.rightBarButtonItem = WebPageMoreMenuFactory.makeMoreButton(
+            accessibilityLabel: "网页更多操作",
+            onRefresh: { [weak self] in
+                self?.reloadCurrentPage()
+            },
+            onCopyLink: { [weak self] in
+                self?.copyCurrentPageURL()
+            },
+            onOpenInSystemBrowser: { [weak self] in
+                self?.openInSystemBrowser()
+            }
+        )
+    }
+
+    private func loadPage() {
+        cancelLoad()
+        loadingIndicator.startAnimating()
+        loadTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            await cookieBridge.syncURLSessionCookiesToWebView()
+            await webViewContext.prepareForInitialLoad(userInterfaceStyle: traitCollection.userInterfaceStyle)
+            guard !Task.isCancelled else { return }
 
             var request = URLRequest(url: url)
             request.timeoutInterval = 20
@@ -74,28 +95,18 @@ final class CookieSharedWebViewController: UIViewController, WKNavigationDelegat
         }
     }
 
-    private func configureNavigationItems() {
-        let copyAction = UIAction(
-            title: "复制链接",
-            image: UIImage(systemName: "doc.on.doc")
-        ) { [weak self] _ in
-            self?.copyCurrentPageURL()
-        }
-        let openAction = UIAction(
-            title: "系统浏览器打开",
-            image: UIImage(systemName: "safari")
-        ) { [weak self] _ in
-            self?.openInSystemBrowser()
-        }
+    private func cancelLoad() {
+        loadTask?.cancel()
+        loadTask = nil
+    }
 
-        let menu = UIMenu(children: [copyAction, openAction])
-        let moreButton = UIBarButtonItem(
-            image: UIImage(systemName: "ellipsis.circle"),
-            primaryAction: nil,
-            menu: menu
-        )
-        moreButton.accessibilityLabel = "网页更多操作"
-        navigationItem.rightBarButtonItem = moreButton
+    private func reloadCurrentPage() {
+        guard webView.url != nil else {
+            loadPage()
+            return
+        }
+        loadingIndicator.startAnimating()
+        webView.reload()
     }
 
     private func currentPageURL() -> URL {

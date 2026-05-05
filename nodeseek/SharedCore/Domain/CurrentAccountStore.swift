@@ -13,7 +13,7 @@ actor CurrentAccountStore {
         let updatedAt: Date
     }
 
-    static let shared = CurrentAccountStore()
+    nonisolated static let shared = CurrentAccountStore()
 
     private let userDefaults: UserDefaults
     private let storageKey: String

@@ -6,16 +6,9 @@
 import UIKit
 import WebKit
 
-@MainActor
-protocol LoginCookieSynchronizing: AnyObject {
-    func syncURLSessionCookiesToWebView() async
-    func syncWebViewCookiesToURLSession() async
-}
-
-extension CookieBridge: LoginCookieSynchronizing {}
-
 final class LoginWebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate {
-    private let cookieSynchronizer: LoginCookieSynchronizing
+    private let automaticallyLoadsPage: Bool
+    private let webViewContext: NodeSeekWebViewContext
     private let onClose: @MainActor () -> Void
     private let webView: WKWebView
     private let loadingIndicator = UIActivityIndicatorView(style: .medium)
@@ -54,17 +47,16 @@ final class LoginWebViewController: UIViewController, WKNavigationDelegate, WKUI
     }()
 
     init(
-        cookieSynchronizer: LoginCookieSynchronizing? = nil,
+        cookieSynchronizer: NodeSeekWebCookieSynchronizing? = nil,
+        automaticallyLoadsPage: Bool = true,
         onClose: @escaping @MainActor () -> Void = {}
     ) {
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .default()
-        self.webView = WKWebView(frame: .zero, configuration: configuration)
-        self.cookieSynchronizer = cookieSynchronizer ?? CookieBridge(
-            webCookieStore: WKWebCookieStoreAdapter(
-                store: configuration.websiteDataStore.httpCookieStore
-            )
+        self.automaticallyLoadsPage = automaticallyLoadsPage
+        let webViewContext = NodeSeekWebViewContext(
+            cookieSynchronizer: cookieSynchronizer
         )
+        self.webViewContext = webViewContext
+        self.webView = webViewContext.webView
         self.onClose = onClose
         super.init(nibName: nil, bundle: nil)
     }
@@ -85,7 +77,9 @@ final class LoginWebViewController: UIViewController, WKNavigationDelegate, WKUI
         view.backgroundColor = .systemBackground
         configureNavigationItems()
         configureWebView()
-        loadLoginPage()
+        if automaticallyLoadsPage {
+            loadLoginPage()
+        }
     }
 
     private func configureNavigationItems() {
@@ -145,7 +139,7 @@ final class LoginWebViewController: UIViewController, WKNavigationDelegate, WKUI
         loadingIndicator.startAnimating()
         loadTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            await cookieSynchronizer.syncURLSessionCookiesToWebView()
+            await webViewContext.prepareForInitialLoad(userInterfaceStyle: traitCollection.userInterfaceStyle)
             guard !Task.isCancelled else { return }
 
             var request = URLRequest(url: NodeSeekSite.loginURL)
@@ -165,7 +159,7 @@ final class LoginWebViewController: UIViewController, WKNavigationDelegate, WKUI
 
         Task { @MainActor [weak self] in
             guard let self else { return }
-            await cookieSynchronizer.syncWebViewCookiesToURLSession()
+            await webViewContext.syncCookiesToURLSession()
             NotificationCenter.default.post(name: .nodeSeekLoginSessionDidClose, object: nil)
             onClose()
             closeSelf()

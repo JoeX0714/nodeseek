@@ -88,6 +88,10 @@ class PostListPresenter: PostListPresenterProtocol {
         router.navigateToNewDiscussion()
     }
 
+    func didTapCheckIn() {
+        router.navigateToCheckIn(boardURL: NodeSeekSite.boardURL)
+    }
+
     func didTapNotification(url: URL) {
         router.navigateToNotification(notificationURL: url)
     }

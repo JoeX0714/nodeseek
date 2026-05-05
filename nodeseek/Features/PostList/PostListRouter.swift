@@ -55,6 +55,10 @@ class PostListRouter: PostListRouterProtocol {
         show(NewDiscussionWebViewController())
     }
 
+    func navigateToCheckIn(boardURL: URL) {
+        show(UserInfoWebViewController(profileURL: boardURL, title: "签到"))
+    }
+
     func navigateToNotification(notificationURL: URL) {
         show(UserInfoWebViewController(profileURL: notificationURL, title: "通知"))
     }

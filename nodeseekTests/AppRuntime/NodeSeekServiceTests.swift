@@ -151,6 +151,63 @@ struct NodeSeekServiceTests {
         }
     }
 
+    @Test func loadPostListStoresAccountParsedFromSameHTML() async throws {
+        let html = try FixtureLoader.html(named: "post-list-basic")
+            .replacingOccurrences(of: "</body>", with: accountHTML(displayName: "缭雾") + "</body>")
+        let url = URL(string: "https://www.nodeseek.com/")!
+        let store = CurrentAccountStore(
+            userDefaults: try #require(UserDefaults(suiteName: "NodeSeekServiceTests.\(UUID().uuidString)")),
+            storageKey: "account"
+        )
+        let service = NodeSeekService(
+            baseURL: url,
+            htmlClient: StaticHTMLClient(response: HTMLResponse(
+                statusCode: 200,
+                headers: [:],
+                finalURL: url,
+                html: html
+            )),
+            parser: KannaNodeSeekParser(baseURL: url),
+            currentAccountStore: store
+        )
+
+        _ = try await service.loadPostList()
+        let snapshot = await store.snapshot()
+
+        #expect(snapshot?.account.displayName == "缭雾")
+        #expect(snapshot?.account.isLoggedIn == true)
+        #expect(snapshot?.account.profileURL?.path == "/space/31037")
+        #expect(snapshot?.account.notification?.url.absoluteString == "https://www.nodeseek.com/notification")
+        #expect(snapshot?.account.notification?.iconColorCSS == "rgb(243, 17, 17)")
+    }
+
+    @Test func loadPostListDoesNotOverwriteCachedAccountWhenHTMLHasNoAccountSignal() async throws {
+        let html = try FixtureLoader.html(named: "post-list-basic")
+        let url = URL(string: "https://www.nodeseek.com/")!
+        let store = CurrentAccountStore(
+            userDefaults: try #require(UserDefaults(suiteName: "NodeSeekServiceTests.\(UUID().uuidString)")),
+            storageKey: "account"
+        )
+        await store.save(AccountResponse(displayName: "已缓存", isLoggedIn: true))
+        let service = NodeSeekService(
+            baseURL: url,
+            htmlClient: StaticHTMLClient(response: HTMLResponse(
+                statusCode: 200,
+                headers: [:],
+                finalURL: url,
+                html: html
+            )),
+            parser: KannaNodeSeekParser(baseURL: url),
+            currentAccountStore: store
+        )
+
+        _ = try await service.loadPostList()
+        let snapshot = await store.snapshot()
+
+        #expect(snapshot?.account.displayName == "已缓存")
+        #expect(snapshot?.account.isLoggedIn == true)
+    }
+
     @Test func parsesPostListWhenServerHeaderIsCloudflareButPageIsNormal() async throws {
         let html = try FixtureLoader.html(named: "post-list-basic")
         let url = URL(string: "https://www.nodeseek.com/")!
@@ -425,6 +482,36 @@ struct NodeSeekServiceTests {
         default:
             Issue.record("注册用户可见的详情页应返回 loginRequired，而不是进入普通详情解析")
         }
+    }
+
+    private func accountHTML(displayName: String) -> String {
+        """
+        <header>
+            <div id="nsk-head" class="nsk-container">
+                <a href="/notification">
+                    <svg class="iconpark-icon" style="color:rgb(243, 17, 17)">
+                        <use href="#remind"></use>
+                    </svg>
+                </a>
+            </div>
+        </header>
+        <div id="nsk-right-panel-container">
+            <div class="user-card">
+                <div class="user-head">
+                    <a title="\(displayName)" href="/space/31037">
+                        <img src="/avatar/31037.png" alt="\(displayName)" class="avatar-normal skeleton">
+                    </a>
+                    <div class="menu">
+                        <a href="/space/31037" class="Username">\(displayName)</a>
+                    </div>
+                </div>
+                <div class="user-stat">
+                    <span>等级 Lv 1</span>
+                    <span>鸡腿 306</span>
+                </div>
+            </div>
+        </div>
+        """
     }
 }
 

@@ -39,6 +39,21 @@ extension PostDetailViewController {
         presentReplyEditor(action: "回复", for: comment)
     }
 
+    func handleReply(toPostHeader header: PostDetailHeaderContent) {
+        let comment = Comment(
+            id: header.postID,
+            anchorID: "0",
+            authorName: header.authorName,
+            isPoster: true,
+            avatarURL: header.avatarURL,
+            authorProfileURL: header.authorProfileURL,
+            floorText: "#0",
+            createdAtText: header.metadataText,
+            contentHTML: header.contentHTML
+        )
+        presentReplyEditor(mode: .reply(comment))
+    }
+
     func handleQuote(_ comment: Comment) {
         presentReplyEditor(action: "引用", for: comment)
     }

@@ -130,6 +130,13 @@ extension PostDetailViewController: ASTableDataSource, ASTableDelegate {
                     onFavoriteTapped: {
                         self?.presenter.didTapFavorite()
                     },
+                    onReplyTapped: {
+                        self?.handleReply(toPostHeader: header)
+                    },
+                    onCommentTapped: {
+                        self?.presentReplyEditor(mode: .plain)
+                    },
+                    showsReplyActions: self?.showsReplyEntry == true,
                     onTextLayoutInvalidated: {
                         self?.scheduleAttachmentLayoutRefresh()
                     },

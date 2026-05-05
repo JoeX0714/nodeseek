@@ -13,6 +13,7 @@ final class PostListSideMenuViewController: UIViewController {
     var onLoginTapped: (() -> Void)?
     var onAccountProfileTapped: ((URL) -> Void)?
     var onNewDiscussionTapped: (() -> Void)?
+    var onCheckInTapped: (() -> Void)?
     var onNotificationTapped: ((URL) -> Void)?
     var onRecentVisitedTapped: (() -> Void)?
     var onSearchTapped: (() -> Void)?
@@ -117,6 +118,12 @@ final class PostListSideMenuViewController: UIViewController {
     private let newDiscussionButton: UIButton = {
         let button = PostListSideMenuViewController.makeMenuButton(title: "发帖", systemImageName: "square.and.pencil")
         button.accessibilityIdentifier = "post-list-side-menu-new-discussion-button"
+        return button
+    }()
+
+    private let checkInButton: UIButton = {
+        let button = PostListSideMenuViewController.makeMenuButton(title: "签到", systemImageName: "checkmark.seal")
+        button.accessibilityIdentifier = "post-list-side-menu-check-in-button"
         return button
     }()
 
@@ -277,6 +284,7 @@ final class PostListSideMenuViewController: UIViewController {
         accountHeaderButton.addTarget(self, action: #selector(accountHeaderTapped), for: .touchUpInside)
         settingsButton.addTarget(self, action: #selector(settingsButtonTapped), for: .touchUpInside)
         newDiscussionButton.addTarget(self, action: #selector(newDiscussionButtonTapped), for: .touchUpInside)
+        checkInButton.addTarget(self, action: #selector(checkInButtonTapped), for: .touchUpInside)
         notificationButton.addTarget(self, action: #selector(notificationButtonTapped), for: .touchUpInside)
         recentVisitedButton.addTarget(self, action: #selector(recentVisitedButtonTapped), for: .touchUpInside)
         searchButton.addTarget(self, action: #selector(searchButtonTapped), for: .touchUpInside)
@@ -288,6 +296,7 @@ final class PostListSideMenuViewController: UIViewController {
         sideMenuView.addSubview(statsLabel)
         sideMenuView.addSubview(accountHeaderButton)
         sideMenuView.addSubview(newDiscussionButton)
+        sideMenuView.addSubview(checkInButton)
         sideMenuView.addSubview(notificationButton)
         sideMenuView.addSubview(searchButton)
         sideMenuView.addSubview(recentVisitedButton)
@@ -348,16 +357,23 @@ final class PostListSideMenuViewController: UIViewController {
             notificationButton.bottomAnchor.constraint(equalTo: searchButton.topAnchor, constant: -8),
             notificationButton.heightAnchor.constraint(equalToConstant: 48),
 
+            checkInButton.leadingAnchor.constraint(equalTo: sideMenuView.leadingAnchor, constant: SideMenuLayout.horizontalInset),
+            checkInButton.trailingAnchor.constraint(equalTo: sideMenuView.trailingAnchor, constant: -SideMenuLayout.horizontalInset),
+            checkInButton.bottomAnchor.constraint(equalTo: notificationButton.topAnchor, constant: -8),
+            checkInButton.heightAnchor.constraint(equalToConstant: 48),
+
             newDiscussionButton.leadingAnchor.constraint(equalTo: sideMenuView.leadingAnchor, constant: SideMenuLayout.horizontalInset),
             newDiscussionButton.trailingAnchor.constraint(equalTo: sideMenuView.trailingAnchor, constant: -SideMenuLayout.horizontalInset),
-            newDiscussionButton.bottomAnchor.constraint(equalTo: notificationButton.topAnchor, constant: -8),
+            newDiscussionButton.bottomAnchor.constraint(equalTo: checkInButton.topAnchor, constant: -8),
             newDiscussionButton.heightAnchor.constraint(equalToConstant: 48)
         ])
     }
 
     private func applyNotificationColor(_ cssColor: String?) {
         var configuration = notificationButton.configuration
-        configuration?.baseForegroundColor = Self.color(fromCSSColor: cssColor) ?? .label
+        let iconColor = Self.color(fromCSSColor: cssColor) ?? .label
+        configuration?.baseForegroundColor = .label
+        configuration?.imageColorTransformer = UIConfigurationColorTransformer { _ in iconColor }
         notificationButton.configuration = configuration
     }
 
@@ -386,6 +402,15 @@ final class PostListSideMenuViewController: UIViewController {
         hide(animated: true)
         if accountController.isLoggedIn {
             onNewDiscussionTapped?()
+        } else {
+            onLoginTapped?()
+        }
+    }
+
+    @objc private func checkInButtonTapped() {
+        hide(animated: true)
+        if accountController.isLoggedIn {
+            onCheckInTapped?()
         } else {
             onLoginTapped?()
         }

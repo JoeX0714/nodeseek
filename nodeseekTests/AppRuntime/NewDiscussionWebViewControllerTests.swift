@@ -5,6 +5,7 @@
 
 import Foundation
 import Testing
+import UIKit
 @testable import nodeseek
 
 @MainActor
@@ -29,5 +30,14 @@ struct NewDiscussionWebViewControllerTests {
         )
 
         #expect(message == nil)
+    }
+
+    @Test func moreMenuIncludesWebRefreshAction() {
+        let viewController = NewDiscussionWebViewController(automaticallyLoadsPage: false)
+
+        viewController.loadViewIfNeeded()
+
+        let moreButton = viewController.navigationItem.rightBarButtonItem
+        #expect(moreButton?.menu?.children.contains { $0.title == "刷新" } == true)
     }
 }

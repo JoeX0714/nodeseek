@@ -124,7 +124,6 @@ class PostDetailViewController: UIViewController {
 
     enum Layout {
         static let horizontalInset: CGFloat = PostDetailContentLayout.horizontalInset
-        static let bottomContentPadding: CGFloat = 96
     }
 
     let presenter: PostDetailPresenterProtocol
@@ -398,6 +397,11 @@ class PostDetailViewController: UIViewController {
         presenter.viewDidLoad()
     }
 
+    override func viewSafeAreaInsetsDidChange() {
+        super.viewSafeAreaInsetsDidChange()
+        updateTableContentInsets()
+    }
+
     func configureNavigationItems() {
         title = nil
         navigationItem.titleView = navigationAuthorTitleView
@@ -443,6 +447,12 @@ class PostDetailViewController: UIViewController {
         navigationItem.rightBarButtonItems = [moreButton, browserButton].compactMap { $0 }
     }
 
+    func updateTableContentInsets() {
+        let bottomInset = view.safeAreaInsets.bottom
+        tableNode.contentInset = UIEdgeInsets(top: 0, left: 0, bottom: bottomInset, right: 0)
+        tableNode.view.verticalScrollIndicatorInsets.bottom = bottomInset
+    }
+
     func setupUI() {
         view.backgroundColor = .systemBackground
         tableNode.dataSource = self
@@ -450,8 +460,7 @@ class PostDetailViewController: UIViewController {
         tableNode.view.backgroundColor = .systemBackground
         tableNode.view.separatorStyle = .none
         tableNode.view.showsVerticalScrollIndicator = true
-        tableNode.contentInset = UIEdgeInsets(top: 0, left: 0, bottom: Layout.bottomContentPadding, right: 0)
-        tableNode.view.verticalScrollIndicatorInsets.bottom = Layout.bottomContentPadding
+        updateTableContentInsets()
         tableNode.view.translatesAutoresizingMaskIntoConstraints = false
 
         view.addSubview(tableNode.view)

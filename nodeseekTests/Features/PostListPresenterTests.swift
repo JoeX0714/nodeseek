@@ -120,6 +120,16 @@ struct PostListPresenterTests {
         #expect(router.notificationURL == url)
     }
 
+    @Test func tappingCheckInRoutesToBoardPage() throws {
+        let interactor = SpyPostListInteractor()
+        let router = SpyPostListRouter()
+        let presenter = PostListPresenter(interactor: interactor, router: router)
+
+        presenter.didTapCheckIn()
+
+        #expect(router.checkInURL == URL(string: "https://www.nodeseek.com/board"))
+    }
+
     @Test func tappingSettingsRoutesToSettingsPage() {
         let interactor = SpyPostListInteractor()
         let router = SpyPostListRouter()
@@ -760,6 +770,7 @@ private final class SpyPostListRouter: PostListRouterProtocol {
     var recentVisitedStore: VisitedPostStoreProtocol?
     var userProfileURL: URL?
     var notificationURL: URL?
+    var checkInURL: URL?
     var navigateToLoginCount = 0
     var navigateToNewDiscussionCount = 0
     var navigateToSearchCount = 0
@@ -794,6 +805,10 @@ private final class SpyPostListRouter: PostListRouterProtocol {
 
     func navigateToNotification(notificationURL: URL) {
         self.notificationURL = notificationURL
+    }
+
+    func navigateToCheckIn(boardURL: URL) {
+        checkInURL = boardURL
     }
 
     func navigateToSearch() {

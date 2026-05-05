@@ -11,7 +11,10 @@ import UIKit
 struct LoginWebViewControllerTests {
     @Test func showsHintAndCloseButton() throws {
         let synchronizer = SpyLoginCookieSynchronizer()
-        let viewController = LoginWebViewController(cookieSynchronizer: synchronizer)
+        let viewController = LoginWebViewController(
+            cookieSynchronizer: synchronizer,
+            automaticallyLoadsPage: false
+        )
 
         viewController.loadViewIfNeeded()
         viewController.view.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
@@ -72,7 +75,7 @@ struct LoginWebViewControllerTests {
 }
 
 @MainActor
-private final class SpyLoginCookieSynchronizer: LoginCookieSynchronizing {
+private final class SpyLoginCookieSynchronizer: NodeSeekWebCookieSynchronizing {
     private(set) var syncURLSessionToWebCount = 0
     private(set) var syncWebToURLSessionCount = 0
     var suspendURLSessionSync = false

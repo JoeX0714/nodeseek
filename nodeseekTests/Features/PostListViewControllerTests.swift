@@ -130,6 +130,7 @@ struct PostListViewControllerTests {
         let statsLabel = try #require(viewController.view.firstLabel(accessibilityIdentifier: "post-list-side-menu-stats-label"))
         let accountHeaderButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-list-side-menu-account-header-button"))
         let newDiscussionButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-list-side-menu-new-discussion-button"))
+        let checkInButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-list-side-menu-check-in-button"))
         let notificationButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-list-side-menu-notification-button"))
         let searchButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-list-side-menu-search-button"))
         let recentVisitedButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-list-side-menu-recent-visited-button"))
@@ -152,6 +153,8 @@ struct PostListViewControllerTests {
         #expect(accountHeaderButton.accessibilityLabel == "登录账号")
         #expect(newDiscussionButton.configuration?.title == "发帖")
         #expect(newDiscussionButton.configuration?.image != nil)
+        #expect(checkInButton.configuration?.title == "签到")
+        #expect(checkInButton.configuration?.image != nil)
         #expect(notificationButton.configuration?.title == "通知")
         #expect(notificationButton.configuration?.image != nil)
         #expect(searchButton.configuration?.title == "搜一搜")
@@ -174,7 +177,8 @@ struct PostListViewControllerTests {
         #expect(recentVisitedButton.frame.maxY < settingsButton.frame.minY)
         #expect(searchButton.frame.maxY < recentVisitedButton.frame.minY)
         #expect(notificationButton.frame.maxY < searchButton.frame.minY)
-        #expect(newDiscussionButton.frame.maxY < notificationButton.frame.minY)
+        #expect(checkInButton.frame.maxY < notificationButton.frame.minY)
+        #expect(newDiscussionButton.frame.maxY < checkInButton.frame.minY)
         #expect(settingsButton.frame.maxY < viewController.view.bounds.maxY)
 
         UIView.setAnimationsEnabled(false)
@@ -211,6 +215,17 @@ struct PostListViewControllerTests {
         UIView.setAnimationsEnabled(false)
         menuButton.sendActions(for: .touchUpInside)
         viewController.view.layoutIfNeeded()
+        checkInButton.sendActions(for: .touchUpInside)
+        viewController.view.layoutIfNeeded()
+        UIView.setAnimationsEnabled(animationsWereEnabled)
+
+        #expect(presenter.didTapLoginCount == 2)
+        #expect(presenter.didTapCheckInCount == 0)
+        #expect(sideMenu.frame.maxX <= 0.5)
+
+        UIView.setAnimationsEnabled(false)
+        menuButton.sendActions(for: .touchUpInside)
+        viewController.view.layoutIfNeeded()
         settingsButton.sendActions(for: .touchUpInside)
         viewController.view.layoutIfNeeded()
         UIView.setAnimationsEnabled(animationsWereEnabled)
@@ -226,7 +241,7 @@ struct PostListViewControllerTests {
         viewController.view.layoutIfNeeded()
         UIView.setAnimationsEnabled(animationsWereEnabled)
 
-        #expect(presenter.didTapLoginCount == 2)
+        #expect(presenter.didTapLoginCount == 3)
         #expect(sideMenu.frame.maxX <= 0.5)
         #expect(backdrop.isHidden == true)
     }
@@ -255,6 +270,34 @@ struct PostListViewControllerTests {
         button.sendActions(for: .touchUpInside)
 
         #expect(newDiscussionTapCount == 1)
+        #expect(loginTapCount == 0)
+    }
+
+    @Test func loggedInSideMenuCheckInRoutesToBoardInsteadOfLogin() async throws {
+        let defaults = try #require(UserDefaults(suiteName: "post-list-side-menu-\(UUID().uuidString)"))
+        let store = CurrentAccountStore(userDefaults: defaults, storageKey: "account")
+        await store.save(AccountResponse(displayName: "mistj", isLoggedIn: true))
+        let viewController = PostListSideMenuViewController(
+            currentAccountStore: store,
+            accountRefresher: StubCurrentAccountRefresher()
+        )
+        var checkInTapCount = 0
+        var loginTapCount = 0
+        viewController.onCheckInTapped = {
+            checkInTapCount += 1
+        }
+        viewController.onLoginTapped = {
+            loginTapCount += 1
+        }
+
+        viewController.loadViewIfNeeded()
+        try await waitUntil {
+            viewController.view.firstLabel(accessibilityIdentifier: "post-list-side-menu-name-label")?.text == "mistj"
+        }
+        let button = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-list-side-menu-check-in-button"))
+        button.sendActions(for: .touchUpInside)
+
+        #expect(checkInTapCount == 1)
         #expect(loginTapCount == 0)
     }
 
@@ -297,7 +340,7 @@ struct PostListViewControllerTests {
         #expect(loginTapCount == 0)
     }
 
-    @Test func loggedInSideMenuNotificationButtonUsesUnreadColorAndRoutesToNotificationPage() async throws {
+    @Test func loggedInSideMenuNotificationButtonUsesUnreadIconColorAndRoutesToNotificationPage() async throws {
         let defaults = try #require(UserDefaults(suiteName: "post-list-side-menu-\(UUID().uuidString)"))
         let store = CurrentAccountStore(userDefaults: defaults, storageKey: "account")
         let notificationURL = try #require(URL(string: "https://www.nodeseek.com/notification"))
@@ -327,7 +370,9 @@ struct PostListViewControllerTests {
 
         let button = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-list-side-menu-notification-button"))
         #expect(button.configuration?.title == "通知")
-        #expect(button.configuration?.baseForegroundColor?.isClose(to: UIColor(red: 243 / 255, green: 17 / 255, blue: 17 / 255, alpha: 1)) == true)
+        #expect(button.configuration?.baseForegroundColor == .label)
+        let iconColor = button.configuration?.imageColorTransformer?(UIColor.label)
+        #expect(iconColor?.isClose(to: UIColor(red: 243 / 255, green: 17 / 255, blue: 17 / 255, alpha: 1)) == true)
 
         button.sendActions(for: .touchUpInside)
 
@@ -348,6 +393,7 @@ private final class SpyPostListPresenter: PostListPresenterProtocol {
     private(set) var didTapRecentVisitedCount = 0
     private(set) var didTapSearchCount = 0
     private(set) var didTapNewDiscussionCount = 0
+    private(set) var didTapCheckInCount = 0
     private(set) var notificationURLs: [URL] = []
     private(set) var didTapSettingsCount = 0
     private(set) var accountProfileURLs: [URL] = []
@@ -392,6 +438,10 @@ private final class SpyPostListPresenter: PostListPresenterProtocol {
 
     func didTapNewDiscussion() {
         didTapNewDiscussionCount += 1
+    }
+
+    func didTapCheckIn() {
+        didTapCheckInCount += 1
     }
 
     func didTapNotification(url: URL) {
