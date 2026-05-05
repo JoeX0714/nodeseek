@@ -14,12 +14,24 @@ struct RenderedTableBlock: Equatable {
     }
 
     struct Cell: Equatable {
+        struct Link: Equatable {
+            let location: Int
+            let length: Int
+            let url: URL
+
+            var nsRange: NSRange {
+                NSRange(location: location, length: length)
+            }
+        }
+
         let text: String
+        let links: [Link]
         let imageURL: URL?
         let isHeader: Bool
 
-        init(text: String, imageURL: URL? = nil, isHeader: Bool) {
+        init(text: String, links: [Link] = [], imageURL: URL? = nil, isHeader: Bool) {
             self.text = text
+            self.links = links
             self.imageURL = imageURL
             self.isHeader = isHeader
         }

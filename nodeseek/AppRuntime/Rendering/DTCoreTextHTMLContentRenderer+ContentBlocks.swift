@@ -211,11 +211,12 @@ extension DTCoreTextHTMLContentRenderer {
         let rows = tableNode.css("tr").compactMap { rowNode -> RenderedTableBlock.Row? in
             let cells = rowNode.xpath("./th|./td").compactMap { cellNode -> RenderedTableBlock.Cell? in
                 guard isTableCellElement(cellNode) else { return nil }
-                let text = normalizedCellText(from: cellNode)
+                let content = tableCellContent(from: cellNode, baseURL: baseURL)
                 let imageURL = imageURL(from: cellNode, baseURL: baseURL)
-                guard text.isEmpty == false || imageURL != nil else { return nil }
+                guard content.text.isEmpty == false || imageURL != nil else { return nil }
                 return RenderedTableBlock.Cell(
-                    text: text,
+                    text: content.text,
+                    links: content.links,
                     imageURL: imageURL,
                     isHeader: tagName(of: cellNode) == "th"
                 )
@@ -284,45 +285,168 @@ extension DTCoreTextHTMLContentRenderer {
             .trimmingCharacters(in: .newlines)
     }
 
-    func normalizedCellText(from node: XMLElement) -> String {
-        let rawText = htmlTextPreservingLineBreaks(from: node)
-        return rawText
-            .replacingOccurrences(of: "[ \\t\\r\\u{00A0}]+", with: " ", options: .regularExpression)
-            .replacingOccurrences(of: " *\\n+ *", with: "\n", options: .regularExpression)
-            .replacingOccurrences(of: "\\n{2,}", with: "\n", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    func htmlTextPreservingLineBreaks(from node: XMLElement) -> String {
-        let html = node.innerHTML ?? node.text ?? ""
-        let withoutHiddenContent = html
+    private func tableCellContent(from node: XMLElement, baseURL: URL) -> (text: String, links: [RenderedTableBlock.Cell.Link]) {
+        let html = (node.innerHTML ?? node.text ?? "")
             .replacingOccurrences(
                 of: "(?is)<(script|style)\\b[^>]*>.*?</\\1>",
                 with: "",
                 options: .regularExpression
             )
-            .replacingOccurrences(
-                of: "(?is)<img\\b[^>]*>",
-                with: "",
-                options: .regularExpression
-            )
-        let withLineBreaks = withoutHiddenContent
-            .replacingOccurrences(
-                of: "(?i)<br\\s*/?>",
-                with: "\n",
-                options: .regularExpression
-            )
-            .replacingOccurrences(
-                of: "(?i)</?(p|div|section|article|header|footer|blockquote|pre|ul|ol|li|h[1-6])\\b[^>]*>",
-                with: "\n",
-                options: .regularExpression
-            )
-        let stripped = withLineBreaks.replacingOccurrences(
-            of: "<[^>]+>",
-            with: "",
-            options: .regularExpression
-        )
-        return decodedHTMLEntities(in: stripped)
+        let source = html as NSString
+        let fullRange = NSRange(location: 0, length: source.length)
+        var currentLocation = 0
+        var currentLinkURL: URL?
+        var units: [TableCellTextUnit] = []
+
+        for match in Self.htmlTagRegex.matches(in: html, options: [], range: fullRange) {
+            let textRange = NSRange(location: currentLocation, length: match.range.location - currentLocation)
+            appendTableCellText(source.substring(with: textRange), url: currentLinkURL, into: &units)
+
+            let tag = source.substring(with: match.range)
+            handleTableCellTag(tag, baseURL: baseURL, currentLinkURL: &currentLinkURL, units: &units)
+            currentLocation = NSMaxRange(match.range)
+        }
+
+        let remainingRange = NSRange(location: currentLocation, length: fullRange.length - currentLocation)
+        appendTableCellText(source.substring(with: remainingRange), url: currentLinkURL, into: &units)
+
+        return normalizedTableCellContent(from: units)
+    }
+
+    private func appendTableCellText(_ text: String, url: URL?, into units: inout [TableCellTextUnit]) {
+        for character in decodedHTMLEntities(in: text) {
+            units.append(TableCellTextUnit(character: character, url: url))
+        }
+    }
+
+    private func handleTableCellTag(
+        _ tag: String,
+        baseURL: URL,
+        currentLinkURL: inout URL?,
+        units: inout [TableCellTextUnit]
+    ) {
+        guard let name = htmlTagName(in: tag) else { return }
+        if name == "a" {
+            currentLinkURL = isHTMLClosingTag(tag)
+                ? nil
+                : hrefURL(in: tag, baseURL: baseURL)
+            return
+        }
+
+        guard name != "img" else { return }
+        if name == "br" || Self.tableCellLineBreakTags.contains(name) {
+            units.append(TableCellTextUnit(character: "\n", url: nil))
+        }
+    }
+
+    private func normalizedTableCellContent(from units: [TableCellTextUnit]) -> (text: String, links: [RenderedTableBlock.Cell.Link]) {
+        var normalized: [TableCellTextUnit] = []
+        var index = 0
+
+        while index < units.count {
+            let unit = units[index]
+            guard unit.character.isTableCellWhitespace else {
+                normalized.append(unit)
+                index += 1
+                continue
+            }
+
+            var run: [TableCellTextUnit] = []
+            var containsNewline = false
+            while index < units.count, units[index].character.isTableCellWhitespace {
+                containsNewline = containsNewline || units[index].character == "\n"
+                run.append(units[index])
+                index += 1
+            }
+            normalized.append(TableCellTextUnit(
+                character: containsNewline ? "\n" : " ",
+                url: commonLinkURL(in: run)
+            ))
+        }
+
+        while normalized.first?.character.isTableCellWhitespace == true {
+            normalized.removeFirst()
+        }
+        while normalized.last?.character.isTableCellWhitespace == true {
+            normalized.removeLast()
+        }
+
+        return tableCellContent(fromNormalizedUnits: normalized)
+    }
+
+    private func tableCellContent(fromNormalizedUnits units: [TableCellTextUnit]) -> (text: String, links: [RenderedTableBlock.Cell.Link]) {
+        var text = ""
+        var links: [RenderedTableBlock.Cell.Link] = []
+        var activeURL: URL?
+        var activeLocation = 0
+        var activeLength = 0
+        var location = 0
+
+        func flushActiveLink() {
+            guard let activeURL, activeLength > 0 else { return }
+            links.append(RenderedTableBlock.Cell.Link(
+                location: activeLocation,
+                length: activeLength,
+                url: activeURL
+            ))
+        }
+
+        for unit in units {
+            let characterText = String(unit.character)
+            let length = (characterText as NSString).length
+            text.append(unit.character)
+
+            if unit.url == activeURL {
+                activeLength += unit.url == nil ? 0 : length
+            } else {
+                flushActiveLink()
+                activeURL = unit.url
+                activeLocation = location
+                activeLength = unit.url == nil ? 0 : length
+            }
+            location += length
+        }
+        flushActiveLink()
+
+        return (text, links)
+    }
+
+    private func commonLinkURL(in units: [TableCellTextUnit]) -> URL? {
+        var commonURL: URL?
+        for unit in units {
+            guard let url = unit.url else { return nil }
+            if let current = commonURL, current != url {
+                return nil
+            }
+            commonURL = url
+        }
+        return commonURL
+    }
+
+    private func htmlTagName(in tag: String) -> String? {
+        var text = tag.dropFirst()
+        if text.first == "/" {
+            text = text.dropFirst()
+        }
+        text = text.drop { $0 == " " || $0 == "\t" || $0 == "\n" || $0 == "\r" }
+        let name = text.prefix { $0.isLetter || $0.isNumber }
+        return name.isEmpty ? nil : name.lowercased()
+    }
+
+    private func isHTMLClosingTag(_ tag: String) -> Bool {
+        tag.dropFirst().drop { $0 == " " || $0 == "\t" || $0 == "\n" || $0 == "\r" }.first == "/"
+    }
+
+    private func hrefURL(in tag: String, baseURL: URL) -> URL? {
+        let source = tag as NSString
+        let fullRange = NSRange(location: 0, length: source.length)
+        guard let match = Self.hrefAttributeRegex.firstMatch(in: tag, options: [], range: fullRange),
+              match.numberOfRanges >= 3,
+              match.range(at: 2).location != NSNotFound else {
+            return nil
+        }
+        let href = decodedHTMLEntities(in: source.substring(with: match.range(at: 2)))
+        return URL(string: href, relativeTo: baseURL)?.absoluteURL
     }
 
     func decodedHTMLEntities(in text: String) -> String {
@@ -590,5 +714,20 @@ extension DTCoreTextHTMLContentRenderer {
 
     func tagName(of node: XMLElement) -> String {
         node.tagName?.lowercased() ?? ""
+    }
+}
+
+private struct TableCellTextUnit {
+    let character: Character
+    let url: URL?
+}
+
+private extension Character {
+    var isTableCellWhitespace: Bool {
+        self == " "
+            || self == "\t"
+            || self == "\r"
+            || self == "\n"
+            || self == "\u{00A0}"
     }
 }

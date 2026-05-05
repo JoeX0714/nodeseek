@@ -13,14 +13,16 @@ final class DetailTableNode: ASDisplayNode {
 
     init(
         table: RenderedTableBlock,
-        onImageTapped: @escaping ([URL], Int) -> Void
+        onImageTapped: @escaping ([URL], Int) -> Void,
+        onLinkTapped: @escaping (URL) -> Void = { _ in }
     ) {
         self.table = table
         super.init()
         setViewBlock {
             DetailTableScrollView(
                 table: table,
-                onImageTapped: onImageTapped
+                onImageTapped: onImageTapped,
+                onLinkTapped: onLinkTapped
             )
         }
         style.flexGrow = 1
@@ -29,6 +31,10 @@ final class DetailTableNode: ASDisplayNode {
 
     override func calculateSizeThatFits(_ constrainedSize: CGSize) -> CGSize {
         DetailTableLayout.measure(table: table, constrainedSize: constrainedSize)
+    }
+
+    func debugTapFirstLink() {
+        (view as? DetailTableScrollView)?.debugTapFirstLink()
     }
 }
 
@@ -62,7 +68,8 @@ enum DetailContentBlockNodeFactory {
                 guard table.rows.isEmpty == false else { return nil }
                 return DetailTableNode(
                     table: table,
-                    onImageTapped: onImageTapped
+                    onImageTapped: onImageTapped,
+                    onLinkTapped: onLinkTapped
                 )
             case .codeBlock(let codeBlock):
                 guard codeBlock.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
@@ -337,6 +344,7 @@ private final class DetailTableScrollView: UIScrollView {
     private let table: RenderedTableBlock
     private let tableImageURLs: [URL]
     private let onImageTapped: ([URL], Int) -> Void
+    private let onLinkTapped: (URL) -> Void
     private let contentContainer = UIView()
     private let contentWidthConstraint: NSLayoutConstraint
     private var cellWidthConstraints: [[NSLayoutConstraint]] = []
@@ -344,11 +352,13 @@ private final class DetailTableScrollView: UIScrollView {
 
     init(
         table: RenderedTableBlock,
-        onImageTapped: @escaping ([URL], Int) -> Void
+        onImageTapped: @escaping ([URL], Int) -> Void,
+        onLinkTapped: @escaping (URL) -> Void
     ) {
         self.table = table
         self.tableImageURLs = table.imageURLs
         self.onImageTapped = onImageTapped
+        self.onLinkTapped = onLinkTapped
         self.contentWidthConstraint = contentContainer.widthAnchor.constraint(equalToConstant: 0)
         super.init(frame: .zero)
         configureScrollView()
@@ -424,7 +434,8 @@ private final class DetailTableScrollView: UIScrollView {
                     columnWidth: columnWidths[columnIndex],
                     isHeader: row.isHeader || (cell?.isHeader == true),
                     tableImageURLs: tableImageURLs,
-                    onImageTapped: onImageTapped
+                    onImageTapped: onImageTapped,
+                    onLinkTapped: onLinkTapped
                 )
                 let widthConstraint = cellView.widthAnchor.constraint(equalToConstant: columnWidths[columnIndex])
                 widthConstraint.isActive = true
@@ -452,6 +463,10 @@ private final class DetailTableScrollView: UIScrollView {
             rowHeightConstraints[rowIndex].constant = rowHeights[safe: rowIndex] ?? DetailTableLayout.defaultRowHeight
         }
     }
+
+    func debugTapFirstLink() {
+        _ = contentContainer.debugTapFirstTableLink()
+    }
 }
 
 private final class DetailTableCellView: UIView {
@@ -459,12 +474,15 @@ private final class DetailTableCellView: UIView {
         static let contentInsets = UIEdgeInsets(top: 8, left: 10, bottom: 8, right: 10)
     }
 
+    private var linkTapHandler: DetailTableLinkTapHandler?
+
     init(
         cell: RenderedTableBlock.Cell?,
         columnWidth: CGFloat,
         isHeader: Bool,
         tableImageURLs: [URL],
-        onImageTapped: @escaping ([URL], Int) -> Void
+        onImageTapped: @escaping ([URL], Int) -> Void,
+        onLinkTapped: @escaping (URL) -> Void
     ) {
         super.init(frame: .zero)
         backgroundColor = isHeader ? .secondarySystemBackground : .systemBackground
@@ -495,11 +513,26 @@ private final class DetailTableCellView: UIView {
             let label = UILabel()
             label.numberOfLines = 0
             label.lineBreakMode = .byCharWrapping
-            label.font = isHeader
+            let font = isHeader
                 ? UIFont.preferredFont(forTextStyle: .subheadline).withWeight(.semibold)
                 : UIFont.preferredFont(forTextStyle: .subheadline)
-            label.textColor = isHeader ? .label : .secondaryLabel
-            label.text = text
+            let textColor = isHeader ? UIColor.label : UIColor.secondaryLabel
+            if let links = cell?.links, links.isEmpty == false {
+                label.attributedText = Self.attributedText(
+                    text,
+                    font: font,
+                    textColor: textColor,
+                    links: links
+                )
+                label.isUserInteractionEnabled = true
+                let handler = DetailTableLinkTapHandler(label: label, links: links, onTapped: onLinkTapped)
+                label.addGestureRecognizer(UITapGestureRecognizer(target: handler, action: #selector(DetailTableLinkTapHandler.handleTap(_:))))
+                linkTapHandler = handler
+            } else {
+                label.font = font
+                label.textColor = textColor
+                label.text = text
+            }
             stack.addArrangedSubview(label)
         }
 
@@ -513,6 +546,118 @@ private final class DetailTableCellView: UIView {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    private static func attributedText(
+        _ text: String,
+        font: UIFont,
+        textColor: UIColor,
+        links: [RenderedTableBlock.Cell.Link]
+    ) -> NSAttributedString {
+        let attributed = NSMutableAttributedString(
+            string: text,
+            attributes: [
+                .font: font,
+                .foregroundColor: textColor
+            ]
+        )
+        for link in links where NSMaxRange(link.nsRange) <= attributed.length {
+            attributed.addAttributes(NodeSeekLinkStyle.attributes(url: link.url), range: link.nsRange)
+        }
+        return attributed
+    }
+}
+
+extension DetailTableCellView: DetailTableLinkDebugTappable {
+    func debugTapFirstLink() -> Bool {
+        guard let linkTapHandler else { return false }
+        return linkTapHandler.debugTapFirstLink()
+    }
+}
+
+private protocol DetailTableLinkDebugTappable {
+    func debugTapFirstLink() -> Bool
+}
+
+private final class DetailTableLinkTapHandler: NSObject {
+    private weak var label: UILabel?
+    private let links: [RenderedTableBlock.Cell.Link]
+    private let onTapped: (URL) -> Void
+
+    init(
+        label: UILabel,
+        links: [RenderedTableBlock.Cell.Link],
+        onTapped: @escaping (URL) -> Void
+    ) {
+        self.label = label
+        self.links = links
+        self.onTapped = onTapped
+    }
+
+    @objc
+    func handleTap(_ recognizer: UITapGestureRecognizer) {
+        guard recognizer.state == .ended,
+              let label,
+              let link = DetailTableLinkHitTester.link(
+                at: recognizer.location(in: label),
+                in: label,
+                links: links
+              ) else {
+            return
+        }
+        onTapped(link.url)
+    }
+
+    func debugTapFirstLink() -> Bool {
+        guard let link = links.first else { return false }
+        onTapped(link.url)
+        return true
+    }
+}
+
+private enum DetailTableLinkHitTester {
+    static func link(
+        at point: CGPoint,
+        in label: UILabel,
+        links: [RenderedTableBlock.Cell.Link]
+    ) -> RenderedTableBlock.Cell.Link? {
+        guard let attributedText = label.attributedText,
+              attributedText.length > 0,
+              label.bounds.width > 0,
+              label.bounds.height > 0 else {
+            return nil
+        }
+
+        let textStorage = NSTextStorage(attributedString: attributedText)
+        let layoutManager = NSLayoutManager()
+        let textContainer = NSTextContainer(size: label.bounds.size)
+        textContainer.lineFragmentPadding = 0
+        textContainer.maximumNumberOfLines = label.numberOfLines
+        textContainer.lineBreakMode = label.lineBreakMode
+        layoutManager.addTextContainer(textContainer)
+        textStorage.addLayoutManager(layoutManager)
+
+        let usedRect = layoutManager.usedRect(for: textContainer)
+        let horizontalOffset: CGFloat
+        switch label.textAlignment {
+        case .center:
+            horizontalOffset = (label.bounds.width - usedRect.width) * 0.5 - usedRect.minX
+        case .right:
+            horizontalOffset = label.bounds.width - usedRect.width - usedRect.minX
+        default:
+            horizontalOffset = -usedRect.minX
+        }
+        let offset = CGPoint(
+            x: horizontalOffset,
+            y: (label.bounds.height - usedRect.height) * 0.5 - usedRect.minY
+        )
+        let textPoint = CGPoint(x: point.x - offset.x, y: point.y - offset.y)
+        let index = layoutManager.characterIndex(
+            for: textPoint,
+            in: textContainer,
+            fractionOfDistanceBetweenInsertionPoints: nil
+        )
+        return links.first { NSLocationInRange(index, $0.nsRange) }
     }
 }
 
@@ -668,6 +813,21 @@ enum DetailTableLayout {
 private extension UIFont {
     func withWeight(_ weight: UIFont.Weight) -> UIFont {
         UIFont.systemFont(ofSize: pointSize, weight: weight)
+    }
+}
+
+private extension UIView {
+    func debugTapFirstTableLink() -> Bool {
+        if let tappable = self as? DetailTableLinkDebugTappable,
+           tappable.debugTapFirstLink() {
+            return true
+        }
+        for subview in subviews {
+            if subview.debugTapFirstTableLink() {
+                return true
+            }
+        }
+        return false
     }
 }
 

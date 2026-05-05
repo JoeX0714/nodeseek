@@ -9,6 +9,17 @@ import DTCoreText
 import Foundation
 import UIKit
 
+enum NodeSeekLinkStyle {
+    static let color = UIColor(red: 15 / 255, green: 128 / 255, blue: 85 / 255, alpha: 1)
+
+    static func attributes(url: URL) -> [NSAttributedString.Key: Any] {
+        [
+            .foregroundColor: color,
+            .link: url
+        ]
+    }
+}
+
 struct DTCoreTextHTMLContentRenderer {
     enum Layout {
         static let defaultMaxImageWidth: CGFloat = 320
@@ -16,7 +27,7 @@ struct DTCoreTextHTMLContentRenderer {
         static let blockquoteTextIndent: CGFloat = 11
     }
 
-    static let linkColor = UIColor(red: 15 / 255, green: 128 / 255, blue: 85 / 255, alpha: 1)
+    static let linkColor = NodeSeekLinkStyle.color
 
     static let imageTagRegex = try! NSRegularExpression(
         pattern: "<img\\b[^>]*>",
@@ -36,6 +47,10 @@ struct DTCoreTextHTMLContentRenderer {
     )
     static let srcAttributeRegex = try! NSRegularExpression(
         pattern: "\\bsrc\\s*=\\s*([\"'])([^\"']+)\\1",
+        options: [.caseInsensitive]
+    )
+    static let hrefAttributeRegex = try! NSRegularExpression(
+        pattern: "\\bhref\\s*=\\s*([\"'])([^\"']+)\\1",
         options: [.caseInsensitive]
     )
     static let typeAttributeRegex = try! NSRegularExpression(
@@ -80,6 +95,29 @@ struct DTCoreTextHTMLContentRenderer {
         pattern: "(?:\\u001B\\[|\\[)\\d{1,3}(?:;\\d{1,3})*m",
         options: []
     )
+    static let htmlTagRegex = try! NSRegularExpression(
+        pattern: "<[^>]+>",
+        options: []
+    )
+    static let tableCellLineBreakTags: Set<String> = [
+        "p",
+        "div",
+        "section",
+        "article",
+        "header",
+        "footer",
+        "blockquote",
+        "pre",
+        "ul",
+        "ol",
+        "li",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6"
+    ]
     func render(fragment: String, baseURL: URL) -> [RenderedContentBlock] {
         render(fragment: fragment, baseURL: baseURL, maxImageWidth: Layout.defaultMaxImageWidth)
     }
@@ -115,7 +153,7 @@ struct DTCoreTextHTMLContentRenderer {
             NSBaseURLDocumentOption: baseURL,
             DTDefaultFontSize: UIFont.preferredFont(forTextStyle: .body).pointSize,
             DTDefaultTextColor: UIColor.label,
-            DTDefaultLinkColor: Self.linkColor,
+            DTDefaultLinkColor: NodeSeekLinkStyle.color,
             DTMaxImageSize: NSValue(cgSize: CGSize(width: maxImageWidth, height: DetailImageLayout.maxImageHeight)),
             DTUseiOS6Attributes: true
         ]

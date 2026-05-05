@@ -198,8 +198,7 @@ extension DTCoreTextHTMLContentRenderer {
                 raw = nil
             }
             guard let raw, let resolved = URL(string: raw, relativeTo: baseURL)?.absoluteURL else { return }
-            attributed.addAttribute(.link, value: resolved, range: range)
-            attributed.addAttribute(.foregroundColor, value: Self.linkColor, range: range)
+            attributed.addAttributes(NodeSeekLinkStyle.attributes(url: resolved), range: range)
             if dtLinkKey != .link {
                 attributed.removeAttribute(dtLinkKey, range: range)
             }

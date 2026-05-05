@@ -1165,6 +1165,64 @@ struct PostDetailViewControllerTests {
         )[1] > 70)
     }
 
+    @Test func tableNodeRoutesCellLinkTap() throws {
+        let linkURL = try #require(URL(string: "https://www.nodeseek.com/go/aff"))
+        let table = RenderedTableBlock(rows: [
+            .init(cells: [
+                .init(
+                    text: "购买链接 > #AFF",
+                    links: [
+                        .init(location: 7, length: 4, url: linkURL)
+                    ],
+                    isHeader: false
+                )
+            ], isHeader: false)
+        ])
+        var tappedURL: URL?
+        let node = DetailTableNode(
+            table: table,
+            onImageTapped: { _, _ in },
+            onLinkTapped: { url in
+                tappedURL = url
+            }
+        )
+        _ = node.view
+
+        node.debugTapFirstLink()
+
+        #expect(tappedURL == linkURL)
+    }
+
+    @Test func tableNodeUsesUnifiedLinkColor() throws {
+        let linkURL = try #require(URL(string: "https://www.nodeseek.com/go/aff"))
+        let table = RenderedTableBlock(rows: [
+            .init(cells: [
+                .init(
+                    text: "购买链接 > #AFF",
+                    links: [
+                        .init(location: 7, length: 4, url: linkURL)
+                    ],
+                    isHeader: false
+                )
+            ], isHeader: false)
+        ])
+        let node = DetailTableNode(table: table, onImageTapped: { _, _ in })
+        _ = node.layoutThatFits(ASSizeRange(
+            min: .zero,
+            max: CGSize(width: 320, height: CGFloat.greatestFiniteMagnitude)
+        ))
+        node.view.frame = CGRect(x: 0, y: 0, width: 320, height: 120)
+        node.view.setNeedsLayout()
+        node.view.layoutIfNeeded()
+
+        let label = try #require(node.view.allSubviews(of: UILabel.self).first {
+            $0.attributedText?.string.contains("#AFF") == true
+        })
+        let color = try #require(label.attributedText?.foregroundColor(for: "#AFF"))
+
+        #expect(color.isClose(to: NodeSeekLinkStyle.color))
+    }
+
     @Test func codeBlockNodeKeepsViewportWidthForLongLines() {
         let codeBlock = RenderedCodeBlock(text: String(repeating: "A", count: 160))
         let layout = DetailCodeBlockLayout.measure(
@@ -2053,6 +2111,30 @@ private extension NSAttributedString {
         let range = (string as NSString).range(of: substring)
         guard range.location != NSNotFound else { return nil }
         return attribute(.foregroundColor, at: range.location, effectiveRange: nil) as? UIColor
+    }
+}
+
+private extension UIColor {
+    func isClose(to other: UIColor) -> Bool {
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        var otherRed: CGFloat = 0
+        var otherGreen: CGFloat = 0
+        var otherBlue: CGFloat = 0
+        var otherAlpha: CGFloat = 0
+
+        guard getRed(&red, green: &green, blue: &blue, alpha: &alpha),
+              other.getRed(&otherRed, green: &otherGreen, blue: &otherBlue, alpha: &otherAlpha) else {
+            return false
+        }
+
+        let tolerance: CGFloat = 0.001
+        return abs(red - otherRed) < tolerance
+            && abs(green - otherGreen) < tolerance
+            && abs(blue - otherBlue) < tolerance
+            && abs(alpha - otherAlpha) < tolerance
     }
 }
 

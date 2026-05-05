@@ -150,6 +150,63 @@ struct DTCoreTextHTMLContentRendererTests {
         #expect(table.rows[0].cells[0].text == "第一行\n第二行\n第三行")
     }
 
+    @Test func preservesLinksInsideTableCells() throws {
+        let renderer = DTCoreTextHTMLContentRenderer()
+        let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
+        let blocks = renderer.render(
+            fragment: """
+            <table>
+            <tbody>
+            <tr><td>购买链接 &gt; <a href="/go/aff">#AFF</a></td></tr>
+            </tbody>
+            </table>
+            """,
+            baseURL: baseURL,
+            maxImageWidth: 320
+        )
+
+        let table = try #require(blocks.compactMap { block -> RenderedTableBlock? in
+            guard case .table(let table) = block else { return nil }
+            return table
+        }.first)
+        let cell = try #require(table.rows.first?.cells.first)
+        let link = try #require(cell.links.first)
+        let text = cell.text as NSString
+
+        #expect(cell.text == "购买链接 > #AFF")
+        #expect(text.substring(with: link.nsRange) == "#AFF")
+        #expect(link.url.absoluteString == "https://www.nodeseek.com/go/aff")
+    }
+
+    @Test func preservesTableCellLinkRangeWhenSameTextAppearsBeforeLink() throws {
+        let renderer = DTCoreTextHTMLContentRenderer()
+        let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
+        let blocks = renderer.render(
+            fragment: """
+            <table>
+            <tbody>
+            <tr><td>#AFF 普通文本 <a href="/go/aff">#AFF</a></td></tr>
+            </tbody>
+            </table>
+            """,
+            baseURL: baseURL,
+            maxImageWidth: 320
+        )
+
+        let table = try #require(blocks.compactMap { block -> RenderedTableBlock? in
+            guard case .table(let table) = block else { return nil }
+            return table
+        }.first)
+        let cell = try #require(table.rows.first?.cells.first)
+        let link = try #require(cell.links.first)
+        let text = cell.text as NSString
+        let linkedTextRange = text.range(of: "#AFF", options: .backwards)
+
+        #expect(cell.text == "#AFF 普通文本 #AFF")
+        #expect(link.nsRange == linkedTextRange)
+        #expect(text.substring(with: link.nsRange) == "#AFF")
+    }
+
     @Test func rendersLinkAsAbsoluteURL() throws {
         let renderer = DTCoreTextHTMLContentRenderer()
         let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
@@ -218,7 +275,7 @@ struct DTCoreTextHTMLContentRendererTests {
             at: range.location,
             effectiveRange: nil
         ) as? UIColor
-        #expect(color?.isClose(to: UIColor(red: 15 / 255, green: 128 / 255, blue: 85 / 255, alpha: 1)) == true)
+        #expect(color?.isClose(to: NodeSeekLinkStyle.color) == true)
     }
 
     @Test func rendersDeletedTextWithStandardStrikethroughAttribute() throws {
