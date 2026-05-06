@@ -12,6 +12,7 @@ final class DetailImageBlockNode: ASDisplayNode {
     private let onLayoutInvalidated: () -> Void
     private let onImageSizeResolved: (URL, CGSize) -> Void
     private let imageURL: URL
+    private let imageKind: DetailImageKind
     private var loadedImageSize: CGSize
 
     init(
@@ -26,6 +27,7 @@ final class DetailImageBlockNode: ASDisplayNode {
         self.onLayoutInvalidated = onLayoutInvalidated
         self.onImageSizeResolved = onImageSizeResolved
         self.imageURL = imageBlock.url
+        self.imageKind = DetailImageKind.resolved(isSticker: false, imageURL: imageBlock.url)
         self.loadedImageSize = initialImageSize.width > 0 && initialImageSize.height > 0 ? initialImageSize : .zero
         super.init()
         setViewBlock { [weak self] in
@@ -46,7 +48,8 @@ final class DetailImageBlockNode: ASDisplayNode {
     override func calculateSizeThatFits(_ constrainedSize: CGSize) -> CGSize {
         DetailImageBlockLayout.measure(
             originalSize: loadedImageSize,
-            constrainedSize: constrainedSize
+            constrainedSize: constrainedSize,
+            kind: imageKind
         )
     }
 
@@ -57,11 +60,13 @@ final class DetailImageBlockNode: ASDisplayNode {
         onImageSizeResolved(imageURL, imageSize)
         let previousLayout = DetailImageBlockLayout.presentationSize(
             originalSize: previousSize,
-            maxWidth: calculatedSize.width
+            maxWidth: calculatedSize.width,
+            kind: imageKind
         )
         let nextLayout = DetailImageBlockLayout.presentationSize(
             originalSize: imageSize,
-            maxWidth: calculatedSize.width
+            maxWidth: calculatedSize.width,
+            kind: imageKind
         )
         guard previousLayout != nextLayout else { return }
         invalidateCalculatedLayout()
@@ -95,13 +100,16 @@ private final class DetailImageBlockView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        let imageKind = DetailImageKind.resolved(isSticker: false, imageURL: imageBlock.url)
         imageView.frame = DetailImageBlockLayout.imageFrame(
             originalSize: imageView.image?.size ?? .zero,
-            bounds: bounds
+            bounds: bounds,
+            kind: imageKind
         )
         imageView.contentMode = DetailImageBlockLayout.contentMode(
             originalSize: imageView.image?.size ?? .zero,
-            maxWidth: bounds.width
+            maxWidth: bounds.width,
+            kind: imageKind
         )
         loadImageIfNeeded()
     }
@@ -146,18 +154,30 @@ enum DetailImageBlockLayout {
     private static let fallbackWidth: CGFloat = 320
 
     static func measure(originalSize: CGSize, constrainedSize: CGSize) -> CGSize {
+        measure(originalSize: originalSize, constrainedSize: constrainedSize, kind: .normal)
+    }
+
+    static func measure(originalSize: CGSize, constrainedSize: CGSize, kind: DetailImageKind) -> CGSize {
         let width = resolvedWidth(constrainedSize.width)
-        let size = presentationSize(originalSize: originalSize, maxWidth: width)
+        let size = presentationSize(originalSize: originalSize, maxWidth: width, kind: kind)
         return CGSize(width: width, height: ceil(size.height))
     }
 
     static func imageFrame(originalSize: CGSize, bounds: CGRect) -> CGRect {
-        let size = presentationSize(originalSize: originalSize, maxWidth: bounds.width)
+        imageFrame(originalSize: originalSize, bounds: bounds, kind: .normal)
+    }
+
+    static func imageFrame(originalSize: CGSize, bounds: CGRect, kind: DetailImageKind) -> CGRect {
+        let size = presentationSize(originalSize: originalSize, maxWidth: bounds.width, kind: kind)
         return CGRect(x: 0, y: 0, width: size.width, height: size.height)
     }
 
     static func contentMode(originalSize: CGSize, maxWidth: CGFloat) -> UIView.ContentMode {
-        switch presentation(originalSize: originalSize, maxWidth: maxWidth).mode {
+        contentMode(originalSize: originalSize, maxWidth: maxWidth, kind: .normal)
+    }
+
+    static func contentMode(originalSize: CGSize, maxWidth: CGFloat, kind: DetailImageKind) -> UIView.ContentMode {
+        switch presentation(originalSize: originalSize, maxWidth: maxWidth, kind: kind).mode {
         case .thumbnailCrop:
             return .scaleAspectFill
         case .aspectFit:
@@ -166,14 +186,22 @@ enum DetailImageBlockLayout {
     }
 
     static func presentationSize(originalSize: CGSize, maxWidth: CGFloat) -> CGSize {
-        presentation(originalSize: originalSize, maxWidth: maxWidth).size
+        presentationSize(originalSize: originalSize, maxWidth: maxWidth, kind: .normal)
     }
 
-    private static func presentation(originalSize: CGSize, maxWidth: CGFloat) -> DetailImagePresentation {
+    static func presentationSize(originalSize: CGSize, maxWidth: CGFloat, kind: DetailImageKind) -> CGSize {
+        presentation(originalSize: originalSize, maxWidth: maxWidth, kind: kind).size
+    }
+
+    private static func presentation(
+        originalSize: CGSize,
+        maxWidth: CGFloat,
+        kind: DetailImageKind = .normal
+    ) -> DetailImagePresentation {
         DetailImageLayout.presentation(
             for: originalSize,
             maxWidth: resolvedWidth(maxWidth),
-            isSticker: false
+            kind: kind
         )
     }
 

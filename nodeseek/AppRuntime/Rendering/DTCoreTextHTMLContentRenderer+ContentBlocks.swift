@@ -20,6 +20,7 @@ extension DTCoreTextHTMLContentRenderer {
             || fragment.range(of: "<pre", options: [.caseInsensitive]) != nil
             || fragment.range(of: "<img", options: [.caseInsensitive]) != nil
             || fragment.range(of: Self.unsupportedContentClassName, options: [.caseInsensitive]) != nil
+            || containsCheckPlaceReportSVGURL(in: fragment)
         guard needsStructuredParsing else {
             return renderTextBlocks(fragment: fragment, baseURL: baseURL, maxImageWidth: maxImageWidth)
         }
@@ -98,6 +99,7 @@ extension DTCoreTextHTMLContentRenderer {
             blocks.append(.table(table))
         } else if isPreElement(node), let codeBlock = codeBlock(from: node) {
             blocks.append(.codeBlock(codeBlock))
+            blocks.append(contentsOf: checkPlaceReportImageBlocks(in: codeBlock.text).map(RenderedContentBlock.image))
         }
     }
 
@@ -190,6 +192,7 @@ extension DTCoreTextHTMLContentRenderer {
             return text.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
         }
         blocks.append(contentsOf: renderedBlocks)
+        blocks.append(contentsOf: checkPlaceReportImageBlocks(in: plainCodeText(fromHTML: html)).map(RenderedContentBlock.image))
     }
 
     func unsupportedBlock(fromHTML html: String) -> RenderedContentBlock? {
@@ -469,6 +472,21 @@ extension DTCoreTextHTMLContentRenderer {
             documentAttributes: nil
         ).string) ?? text
         return decoded.replacingOccurrences(of: "__NODESEEK_CELL_LINE_BREAK__", with: "\n")
+    }
+
+    func containsCheckPlaceReportSVGURL(in text: String) -> Bool {
+        DetailImageURLRules.containsCheckPlaceReportSVGURL(in: text)
+    }
+
+    func checkPlaceReportImageBlocks(in text: String) -> [RenderedImageBlock] {
+        checkPlaceReportURLs(in: text).map {
+            RenderedImageBlock(url: $0, altText: "check.place report")
+        }
+    }
+
+    func checkPlaceReportURLs(in text: String) -> [URL] {
+        let decodedText = decodedHTMLEntities(in: text)
+        return DetailImageURLRules.checkPlaceReportSVGURLs(in: decodedText)
     }
 
     func standaloneImageBlocks(from node: XMLElement, baseURL: URL) -> [RenderedImageBlock]? {

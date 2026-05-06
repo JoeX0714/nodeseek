@@ -6,6 +6,7 @@
 //
 
 import CoreGraphics
+import Foundation
 import Testing
 #if SWIFT_PACKAGE
 @testable import NodeSeekCore
@@ -18,7 +19,7 @@ struct DetailImageLayoutTests {
         let size = DetailImageLayout.placeholderSize(
             maxWidth: 320,
             maxHeight: nil,
-            isSticker: true
+            kind: .sticker
         )
 
         #expect(size.width == 65)
@@ -29,11 +30,23 @@ struct DetailImageLayoutTests {
         let size = DetailImageLayout.placeholderSize(
             maxWidth: 320,
             maxHeight: 420,
-            isSticker: false
+            kind: .normal
         )
 
         #expect(size.width == 160)
         #expect(size.height == 160)
+    }
+
+    @Test func reportImagePlaceholderUsesFullWidth() {
+        let presentation = DetailImageLayout.presentation(
+            for: .zero,
+            maxWidth: 320,
+            kind: .report
+        )
+
+        #expect(presentation.size.width == 320)
+        #expect(presentation.size.height > 320)
+        #expect(presentation.mode == .aspectFit)
     }
 
     @Test func fixedNormalImageUsesHalfAvailableWidth() {
@@ -47,7 +60,7 @@ struct DetailImageLayoutTests {
         let presentation = DetailImageLayout.presentation(
             for: CGSize(width: 1200, height: 800),
             maxWidth: 320,
-            isSticker: false
+            kind: .normal
         )
 
         #expect(presentation.size.width == 320)
@@ -60,7 +73,7 @@ struct DetailImageLayoutTests {
         let presentation = DetailImageLayout.presentation(
             for: CGSize(width: 800, height: 2000),
             maxWidth: 320,
-            isSticker: false
+            kind: .normal
         )
 
         #expect(presentation.size == CGSize(width: 168, height: 420))
@@ -68,11 +81,35 @@ struct DetailImageLayoutTests {
         #expect(presentation.targetPointSide == 420)
     }
 
+    @Test func tallReportImageKeepsFullWidthInsteadOfHeightConstrainedThumbnail() {
+        let presentation = DetailImageLayout.presentation(
+            for: CGSize(width: 800, height: 2000),
+            maxWidth: 320,
+            kind: .report
+        )
+
+        #expect(presentation.size == CGSize(width: 320, height: 800))
+        #expect(presentation.mode == .aspectFit)
+        #expect(presentation.targetPointSide == 800)
+    }
+
+    @Test func checkPlaceReportURLIsRecognized() throws {
+        let reportURL = try #require(URL(string: "https://report.check.place/ip/NPR7IUKQC.svg"))
+        let hardwareURL = try #require(URL(string: "https://report.check.place/hardware/abc_123.svg"))
+        let otherURL = try #require(URL(string: "https://report.check.place/other/NPR7IUKQC.svg"))
+        let unsupportedSchemeURL = try #require(URL(string: "ftp://report.check.place/ip/NPR7IUKQC.svg"))
+
+        #expect(DetailImageURLRules.isCheckPlaceReportSVG(reportURL))
+        #expect(DetailImageURLRules.isCheckPlaceReportSVG(hardwareURL))
+        #expect(DetailImageURLRules.isCheckPlaceReportSVG(otherURL) == false)
+        #expect(DetailImageURLRules.isCheckPlaceReportSVG(unsupportedSchemeURL) == false)
+    }
+
     @Test func veryWideScreenshotUsesContainedPresentation() {
         let presentation = DetailImageLayout.presentation(
             for: CGSize(width: 2000, height: 800),
             maxWidth: 320,
-            isSticker: false
+            kind: .normal
         )
 
         #expect(presentation.size == CGSize(width: 320, height: 128))
@@ -84,7 +121,7 @@ struct DetailImageLayoutTests {
         #expect(DetailImageLayout.allowsInlineAnimation(
             for: CGSize(width: 1200, height: 800),
             maxWidth: 320,
-            isSticker: false
+            kind: .normal
         ))
     }
 
@@ -92,7 +129,7 @@ struct DetailImageLayoutTests {
         #expect(DetailImageLayout.allowsInlineAnimation(
             for: CGSize(width: 800, height: 2000),
             maxWidth: 320,
-            isSticker: false
+            kind: .normal
         ) == false)
     }
 
@@ -100,7 +137,7 @@ struct DetailImageLayoutTests {
         #expect(DetailImageLayout.allowsInlineAnimation(
             for: CGSize(width: 65, height: 65),
             maxWidth: 320,
-            isSticker: true
+            kind: .sticker
         ))
     }
 
@@ -108,7 +145,7 @@ struct DetailImageLayoutTests {
         #expect(DetailImageLayout.allowsInlineAnimation(
             for: .zero,
             maxWidth: 320,
-            isSticker: true
+            kind: .sticker
         ))
     }
 }

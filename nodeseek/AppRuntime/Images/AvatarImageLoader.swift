@@ -7,7 +7,6 @@
 
 import Foundation
 import Kingfisher
-import SwiftDraw
 import UIKit
 
 @MainActor
@@ -337,7 +336,7 @@ final class AvatarImageLoader {
                     return
                 }
 
-                throw SVGRenderError.unsupportedData
+                throw SVGImageRenderer.RenderError.unsupportedData
             } catch {
                 guard self.isCurrent(token, for: imageView) else { return }
                 self.logAvatar(.error, "SVG 快速路径失败 id=\(postID), url=\(avatarURL.absoluteString), error=\(error.localizedDescription)")
@@ -369,10 +368,9 @@ final class AvatarImageLoader {
         }
 
         do {
-            let renderedImage = try await Self.renderSVGImage(
+            let renderedImage = try await SVGImageRenderer.renderAsync(
                 data: data,
-                targetSize: AvatarRender.size,
-                scale: displayScale(for: imageView)
+                targetSize: AvatarRender.size
             )
             guard isCurrent(token, for: imageView) else { return }
             imageView.image = renderedImage
@@ -452,13 +450,6 @@ final class AvatarImageLoader {
         WebRequestFingerprint.applyImageHeaders(to: &request)
     }
 
-    private func displayScale(for imageView: UIImageView) -> CGFloat {
-        if let screenScale = imageView.window?.windowScene?.screen.scale {
-            return screenScale
-        }
-        return max(imageView.traitCollection.displayScale, 1)
-    }
-
     private func isCurrent(_ token: UUID, for imageView: UIImageView) -> Bool {
         requestTokens[ObjectIdentifier(imageView)] == token
     }
@@ -536,27 +527,4 @@ final class AvatarImageLoader {
             || (prefix.contains("<?xml") && prefix.contains("svg"))
     }
 
-    private static func renderSVGImage(data: Data, targetSize: CGSize, scale: CGFloat) async throws -> UIImage {
-        try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                guard let svg = SVG(data: data) else {
-                    continuation.resume(throwing: SVGRenderError.unsupportedData)
-                    return
-                }
-                let image = svg.rasterize(size: targetSize, scale: scale)
-                continuation.resume(returning: image)
-            }
-        }
-    }
-}
-
-private enum SVGRenderError: LocalizedError {
-    case unsupportedData
-
-    var errorDescription: String? {
-        switch self {
-        case .unsupportedData:
-            return "SVG/位图数据均无法解析"
-        }
-    }
 }

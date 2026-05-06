@@ -22,7 +22,7 @@
 
 文件放置规则：
 
-- `nodeseek/SharedCore/`：App 与 SwiftPM tests 共享的纯逻辑。允许 Foundation、CoreGraphics、Kanna 等 macOS SwiftPM 可运行依赖；不得依赖 UIKit、WebKit、Texture、DTCoreText、Kingfisher、SwiftDraw、App 生命周期或模拟器。
+- `nodeseek/SharedCore/`：App 与 SwiftPM tests 共享的纯逻辑。允许 Foundation、CoreGraphics、Kanna 等 macOS SwiftPM 可运行依赖；不得依赖 UIKit、WebKit、Texture、DTCoreText、Kingfisher、SVGKit、App 生命周期或模拟器。
 - `nodeseek/SharedCore/Domain/`：纯数据模型、结果类型、跨 feature 共享的业务实体。
 - `nodeseek/SharedCore/Parsing/`：HTML 解析协议、Kanna parser 和解析规则。解析规则优先放在 `XPathRules.swift` 或 parser 内，不要散落到 ViewController。
 - `nodeseek/SharedCore/HTTP/`：网络协议、表单编码、challenge 检测、请求指纹等不依赖 App host 的 HTTP 辅助逻辑。
@@ -31,7 +31,7 @@
 - `nodeseek/AppRuntime/`：需要 iOS App runtime 或第三方 UI/runtime 框架的基础设施。只走 Xcode 构建和 App-hosted 测试。
 - `nodeseek/AppRuntime/Web/`：URLSession、WebKit、Cookie、网页登录、页面加载、发帖提交和 Web 宿主相关 runtime 网络实现。
 - `nodeseek/AppRuntime/Rendering/`：依赖 UIKit、Texture、DTCoreText 等 App runtime 的渲染实现。
-- `nodeseek/AppRuntime/Images/`：图片下载、预览、SVG/GIF、Kingfisher、SwiftDraw 等 runtime 相关图片能力。
+- `nodeseek/AppRuntime/Images/`：图片下载、预览、SVG/GIF、Kingfisher、SVGKit 等 runtime 相关图片能力。
 - `nodeseek/AppRuntime/UI/`：UIKit/Texture 共享控件和 UI 基础设施。
 - `nodeseek/AppRuntime/Services/`：依赖 App runtime、WebKit 或 Xcode App target 的服务实现。
 - `nodeseek/Features/`：VIPER feature 层。Presenter/Interactor 可以用 Xcode 单测；ViewController、Router、Texture node 走 App-hosted tests。
@@ -115,7 +115,7 @@ xcodebuild -showdestinations -project nodeseek.xcodeproj -scheme nodeseek
 `Package.swift` 是测试加速入口，不是 App 工程迁移入口。维护时遵守以下规则：
 
 - 新增到 `NodeSeekCore` target 的源码必须能脱离 App host 编译。
-- 如果某个文件 import 了 UIKit、WebKit、Texture、DTCoreText、Kingfisher、SwiftDraw，默认不要加入 `NodeSeekCore`。
+- 如果某个文件 import 了 UIKit、WebKit、Texture、DTCoreText、Kingfisher、SVGKit，默认不要加入 `NodeSeekCore`。
 - 如果测试因为缺少 UIKit/WebKit 类型失败，优先把该测试留在 Xcode 路径，不要为了让 `swift test` 通过而扩大 SwiftPM target。
 - fixture 放在 `nodeseekTests/Fixtures/`，测试读取要同时兼容 `Bundle.module` 和 Xcode test bundle。
 - SharedCore 测试文件如需同时支持 SwiftPM 和 Xcode，使用：

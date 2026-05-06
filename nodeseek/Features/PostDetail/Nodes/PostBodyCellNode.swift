@@ -856,10 +856,11 @@ final class DetailRichTextNode: ASDisplayNode {
 
             let isSticker = DetailAttachmentAttributes.hasClass("sticker", in: attachment.attributes)
                 || contentURL.absoluteString.lowercased().contains("sticker")
+            let imageKind = DetailImageKind.resolved(isSticker: isSticker, imageURL: contentURL)
             let displaySize = DetailImageLayout.presentation(
                 for: originalSize,
-                maxWidth: isSticker ? min(maxWidth, DetailImageLayout.fixedStickerWidth) : maxWidth,
-                isSticker: isSticker
+                maxWidth: imageKind == .sticker ? min(maxWidth, DetailImageLayout.fixedStickerWidth) : maxWidth,
+                kind: imageKind
             ).size
             guard displaySize.width > 0, displaySize.height > 0 else { return }
             attachment.originalSize = originalSize

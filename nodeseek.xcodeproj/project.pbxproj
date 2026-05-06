@@ -10,9 +10,9 @@
 		7A1000012FA0000000000001 /* Kanna in Frameworks */ = {isa = PBXBuildFile; productRef = 7A1000022FA0000000000001 /* Kanna */; };
 		7A1000042FA0000000000001 /* AsyncDisplayKit in Frameworks */ = {isa = PBXBuildFile; productRef = 7A1000052FA0000000000001 /* AsyncDisplayKit */; };
 		7A1000092FA0000000000001 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = 7A1000082FA0000000000001 /* Kingfisher */; };
-		7A10000C2FA0000000000001 /* SwiftDraw in Frameworks */ = {isa = PBXBuildFile; productRef = 7A10000B2FA0000000000001 /* SwiftDraw */; };
 		7A1000152FA0000000000001 /* JXPhotoBrowser in Frameworks */ = {isa = PBXBuildFile; productRef = 7A1000172FA0000000000001 /* JXPhotoBrowser */; };
 		7A1000182FA0000000000001 /* DTCoreText in Frameworks */ = {isa = PBXBuildFile; productRef = 7A1000192FA0000000000001 /* DTCoreText */; };
+		7A10001C2FA0000000000001 /* SVGKit in Frameworks */ = {isa = PBXBuildFile; productRef = 7A10001D2FA0000000000001 /* SVGKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -64,9 +64,9 @@
 				7A1000012FA0000000000001 /* Kanna in Frameworks */,
 				7A1000042FA0000000000001 /* AsyncDisplayKit in Frameworks */,
 				7A1000092FA0000000000001 /* Kingfisher in Frameworks */,
-				7A10000C2FA0000000000001 /* SwiftDraw in Frameworks */,
 				7A1000152FA0000000000001 /* JXPhotoBrowser in Frameworks */,
 				7A1000182FA0000000000001 /* DTCoreText in Frameworks */,
+				7A10001C2FA0000000000001 /* SVGKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -121,9 +121,9 @@
 				7A1000022FA0000000000001 /* Kanna */,
 				7A1000052FA0000000000001 /* AsyncDisplayKit */,
 				7A1000082FA0000000000001 /* Kingfisher */,
-				7A10000B2FA0000000000001 /* SwiftDraw */,
 				7A1000172FA0000000000001 /* JXPhotoBrowser */,
 				7A1000192FA0000000000001 /* DTCoreText */,
+				7A10001D2FA0000000000001 /* SVGKit */,
 			);
 			productName = nodeseek;
 			productReference = 5CD3D9512F9EFACE008DB075 /* nodeseek.app */;
@@ -184,9 +184,9 @@
 				7A1000032FA0000000000001 /* XCRemoteSwiftPackageReference "Kanna" */,
 				7A1000062FA0000000000001 /* XCRemoteSwiftPackageReference "Texture" */,
 				7A1000072FA0000000000001 /* XCRemoteSwiftPackageReference "Kingfisher" */,
-				7A10000D2FA0000000000001 /* XCRemoteSwiftPackageReference "SwiftDraw" */,
 				7A1000162FA0000000000001 /* XCRemoteSwiftPackageReference "PhotoBrowser" */,
 				7A10001A2FA0000000000001 /* XCRemoteSwiftPackageReference "DTCoreText" */,
+				7A10001B2FA0000000000001 /* XCRemoteSwiftPackageReference "SVGKit" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 5CD3D9522F9EFACE008DB075 /* Products */;
@@ -532,14 +532,6 @@
 				minimumVersion = 8.0.0;
 			};
 		};
-		7A10000D2FA0000000000001 /* XCRemoteSwiftPackageReference "SwiftDraw" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/swhitty/SwiftDraw.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.27.0;
-			};
-		};
 		7A1000162FA0000000000001 /* XCRemoteSwiftPackageReference "PhotoBrowser" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/JiongXing/PhotoBrowser.git";
@@ -554,6 +546,14 @@
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 1.6.28;
+			};
+		};
+		7A10001B2FA0000000000001 /* XCRemoteSwiftPackageReference "SVGKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/SVGKit/SVGKit.git";
+			requirement = {
+				branch = 3.x;
+				kind = branch;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -574,11 +574,6 @@
 			package = 7A1000072FA0000000000001 /* XCRemoteSwiftPackageReference "Kingfisher" */;
 			productName = Kingfisher;
 		};
-		7A10000B2FA0000000000001 /* SwiftDraw */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 7A10000D2FA0000000000001 /* XCRemoteSwiftPackageReference "SwiftDraw" */;
-			productName = SwiftDraw;
-		};
 		7A1000172FA0000000000001 /* JXPhotoBrowser */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 7A1000162FA0000000000001 /* XCRemoteSwiftPackageReference "PhotoBrowser" */;
@@ -588,6 +583,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 7A10001A2FA0000000000001 /* XCRemoteSwiftPackageReference "DTCoreText" */;
 			productName = DTCoreText;
+		};
+		7A10001D2FA0000000000001 /* SVGKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7A10001B2FA0000000000001 /* XCRemoteSwiftPackageReference "SVGKit" */;
+			productName = SVGKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

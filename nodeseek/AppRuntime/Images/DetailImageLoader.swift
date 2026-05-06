@@ -8,7 +8,6 @@
 import Foundation
 import CryptoKit
 import ImageIO
-import SwiftDraw
 import UIKit
 
 struct DetailOriginalImagePayload: Equatable {
@@ -461,6 +460,10 @@ final class DetailImageLoader {
     }
 
     private func isOptimizableDetailImageURL(_ url: URL) -> Bool {
+        if DetailImageURLRules.isCheckPlaceReportSVG(url) {
+            return false
+        }
+
         let absolute = url.absoluteString.lowercased()
         if absolute.contains("sticker") {
             return false
@@ -724,27 +727,12 @@ final class DetailImageLoader {
     }
 
     private func renderSVGImage(data: Data) -> UIImage? {
-        guard let svg = SVG(data: data, options: .hideUnsupportedFilters) else {
-            return nil
-        }
-
-        let size = normalizedSVGSize(svg.size)
-        guard size.width > 0, size.height > 0 else { return nil }
-        return svg.rasterize(size: size, scale: 1)
-    }
-
-    private func normalizedSVGSize(_ size: CGSize) -> CGSize {
-        let fallbackSize = CGSize(width: 320, height: 180)
-        let sourceWidth = size.width.isFinite && size.width > 0 ? size.width : fallbackSize.width
-        let sourceHeight = size.height.isFinite && size.height > 0 ? size.height : fallbackSize.height
-        let maxSide = Limits.maxSVGPixelSide
-
-        guard max(sourceWidth, sourceHeight) > maxSide else {
-            return CGSize(width: sourceWidth, height: sourceHeight)
-        }
-
-        let scale = maxSide / max(sourceWidth, sourceHeight)
-        return CGSize(width: sourceWidth * scale, height: sourceHeight * scale)
+        guard let size = SVGImageRenderer.imageSize(
+            from: data,
+            fallbackSize: CGSize(width: 320, height: 180),
+            maxPixelSide: Limits.maxSVGPixelSide
+        ) else { return nil }
+        return SVGImageRenderer.image(from: data, size: size)
     }
 
     private static let fallbackPNGData: Data = {

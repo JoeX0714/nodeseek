@@ -1060,7 +1060,25 @@ struct DTCoreTextHTMLContentRendererTests {
         #expect(renderedText.contains("[36m") == false)
         #expect(renderedText.contains("[4m") == false)
         #expect(renderedText.contains("[0m") == false)
-        #expect(imageURLs(in: blocks).map(\.absoluteString) == ["https://i.111666.best/image/network.webp"])
+        #expect(imageURLs(in: blocks).map(\.absoluteString) == [
+            "https://Report.Check.Place/ip/demo.svg",
+            "https://i.111666.best/image/network.webp"
+        ])
+    }
+
+    @Test func promotesCheckPlaceReportSVGLinksToImageBlocks() throws {
+        let renderer = DTCoreTextHTMLContentRenderer()
+        let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
+        let blocks = renderer.render(
+            fragment: "<p>报告链接：https://report.check.place/ip/NPR7IUKQC.svg</p>",
+            baseURL: baseURL,
+            maxImageWidth: 240
+        )
+
+        #expect(combinedText(in: blocks).contains("https://report.check.place/ip/NPR7IUKQC.svg"))
+        #expect(imageURLs(in: blocks).map(\.absoluteString) == [
+            "https://report.check.place/ip/NPR7IUKQC.svg"
+        ])
     }
 
     @Test func rendersPost705039MagicTabsFixtureWithAllTabsAndImages() throws {
@@ -1090,10 +1108,12 @@ struct DTCoreTextHTMLContentRendererTests {
         #expect(renderedText.contains("[36m") == false)
         #expect(renderedText.contains("[0m") == false)
         #expect(images.map { $0.url.absoluteString } == [
+            "https://Report.Check.Place/hardware/3RZVJ2JUX.svg",
+            "https://Report.Check.Place/ip/1TZZHW387.svg",
             "https://i.111666.best/image/G9D5ncG5qndySgQtNwvFq4.webp",
             "https://i.111666.best/image/noEhdCSyuAeuREqqSWgdY5.webp"
         ])
-        #expect(images.count == 2)
+        #expect(images.count == 4)
     }
 
     @Test func splitsStandaloneImageParagraphIntoImageBlocks() throws {

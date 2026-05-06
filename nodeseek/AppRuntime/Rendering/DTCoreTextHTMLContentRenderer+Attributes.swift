@@ -248,6 +248,7 @@ extension DTCoreTextHTMLContentRenderer {
             }
 
             let isSticker = DetailAttachmentAttributes.hasClass("sticker", in: attachment.attributes) || isStickerImageURL(imageURL)
+            let imageKind = DetailImageKind.resolved(isSticker: isSticker, imageURL: imageURL)
             if isSticker {
                 stickerFixedCount += 1
             }
@@ -257,7 +258,7 @@ extension DTCoreTextHTMLContentRenderer {
             var usedPlaceholder = false
             var fixedQuoteImage = false
             let layoutSourceSize: CGSize
-            if isInBlockquote, isSticker == false, originalSize.width <= 0 || originalSize.height <= 0 {
+            if isInBlockquote, imageKind == .normal, originalSize.width <= 0 || originalSize.height <= 0 {
                 // blockquote 内未知尺寸图片固定占位，避免后续原图尺寸回流把引用块高度撑裂。
                 layoutSourceSize = DetailImageLayout.fixedNormalImageSize(maxWidth: maxImageWidth)
                 fixedQuoteImage = true
@@ -279,7 +280,7 @@ extension DTCoreTextHTMLContentRenderer {
             attachment.displaySize = DetailImageLayout.presentation(
                 for: layoutSourceSize,
                 maxWidth: maxImageWidth,
-                isSticker: isSticker
+                kind: imageKind
             ).size
 
             attachmentSummaries.append(

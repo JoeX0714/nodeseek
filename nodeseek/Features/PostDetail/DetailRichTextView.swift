@@ -156,19 +156,20 @@ final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextCon
             return nil
         }
 
+        let imageKind = DetailImageKind.resolved(isSticker: isStickerAttachment, imageURL: contentURL)
         let imageView = DetailInlineImageView(
             frame: viewFrame,
             imageURL: contentURL,
             targetPixelWidth: targetImagePointSide(
                 originalSize: attachment.originalSize,
-                isSticker: isStickerAttachment
+                kind: imageKind
             ) * displayScale,
             displayScale: displayScale,
             allowsInlineAnimation: allowsInlineAnimation(
                 originalSize: attachment.originalSize,
-                isSticker: isStickerAttachment
+                kind: imageKind
             ),
-            usesDetailImageOptimization: isStickerAttachment == false,
+            usesDetailImageOptimization: imageKind == .normal,
             onImageLoaded: { [weak self] loadedURL, imageSize in
                 self?.handleLoadedImage(loadedURL, imageSize: imageSize)
             },
@@ -178,7 +179,7 @@ final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextCon
         )
         imageView.contentMode = contentMode(
             originalSize: attachment.originalSize,
-            isSticker: isStickerAttachment
+            kind: imageKind
         )
         imageView.clipsToBounds = true
         imageView.isOpaque = false
@@ -359,17 +360,18 @@ final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextCon
             }
 
             let isSticker = isStickerAttachment(attachment, contentURL: url)
+            let imageKind = DetailImageKind.resolved(isSticker: isSticker, imageURL: url)
             let isFixedQuoteImage = (attributedString.attribute(
                 DetailAttachmentAttributes.fixedQuoteImage,
                 at: range.location,
                 effectiveRange: nil
             ) as? Bool) == true
-            if isFixedQuoteImage, isSticker == false {
+            if isFixedQuoteImage, imageKind == .normal {
                 let currentDisplaySize = attachment.displaySize
                 let hasValidDisplaySize = currentDisplaySize.width > 0 && currentDisplaySize.height > 0
                 if hasValidDisplaySize == false {
                     let fixedSize = DetailImageLayout.fixedNormalImageSize(
-                        maxWidth: maxImageWidth(isSticker: false)
+                        maxWidth: maxImageWidth(kind: .normal)
                     )
                     attachment.displaySize = fixedSize
                     updatedDisplaySize = fixedSize
@@ -382,8 +384,8 @@ final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextCon
             }
             let presentation = DetailImageLayout.presentation(
                 for: originalSize,
-                maxWidth: maxImageWidth(isSticker: isSticker),
-                isSticker: isSticker
+                maxWidth: maxImageWidth(kind: imageKind),
+                kind: imageKind
             )
             let displaySize = presentation.size
             if isSticker == false, attachment.displaySize == displaySize {
@@ -438,38 +440,38 @@ final class DetailRichTextView: DTAttributedTextContentView, DTAttributedTextCon
         return urls
     }
 
-    private func maxImageWidth(isSticker: Bool) -> CGFloat {
+    private func maxImageWidth(kind: DetailImageKind) -> CGFloat {
         let width = bounds.width > 0 ? bounds.width : 320
-        return isSticker ? min(width, DetailImageLayout.fixedStickerWidth) : width
+        return kind == .sticker ? min(width, DetailImageLayout.fixedStickerWidth) : width
     }
 
-    private func targetImagePointSide(originalSize: CGSize, isSticker: Bool) -> CGFloat {
-        let maxWidth = maxImageWidth(isSticker: isSticker)
+    private func targetImagePointSide(originalSize: CGSize, kind: DetailImageKind) -> CGFloat {
+        let maxWidth = maxImageWidth(kind: kind)
         guard originalSize.width > 0, originalSize.height > 0 else {
-            return isSticker ? maxWidth : max(maxWidth, DetailImageLayout.maxImageHeight)
+            return kind == .sticker ? maxWidth : max(maxWidth, DetailImageLayout.maxImageHeight)
         }
 
         return DetailImageLayout.presentation(
             for: originalSize,
             maxWidth: maxWidth,
-            isSticker: isSticker
+            kind: kind
         ).targetPointSide
     }
 
-    private func allowsInlineAnimation(originalSize: CGSize, isSticker: Bool) -> Bool {
-        guard isSticker || (originalSize.width > 0 && originalSize.height > 0) else { return false }
+    private func allowsInlineAnimation(originalSize: CGSize, kind: DetailImageKind) -> Bool {
+        guard kind == .sticker || (originalSize.width > 0 && originalSize.height > 0) else { return false }
         return DetailImageLayout.allowsInlineAnimation(
             for: originalSize,
-            maxWidth: maxImageWidth(isSticker: isSticker),
-            isSticker: isSticker
+            maxWidth: maxImageWidth(kind: kind),
+            kind: kind
         )
     }
 
-    private func contentMode(originalSize: CGSize, isSticker: Bool) -> UIView.ContentMode {
+    private func contentMode(originalSize: CGSize, kind: DetailImageKind) -> UIView.ContentMode {
         let mode = DetailImageLayout.presentation(
             for: originalSize,
-            maxWidth: maxImageWidth(isSticker: isSticker),
-            isSticker: isSticker
+            maxWidth: maxImageWidth(kind: kind),
+            kind: kind
         ).mode
 
         switch mode {

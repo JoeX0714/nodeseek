@@ -1,29 +1,27 @@
 //
-//  SwiftDrawPerformanceTests.swift
+//  SVGKitPerformanceTests.swift
 //  nodeseekTests
 //
 //  Created by Codex on 2026/4/27.
 //
 
-import SwiftDraw
 import UIKit
 import XCTest
+@testable import nodeseek
 
-final class SwiftDrawPerformanceTests: XCTestCase {
+final class SVGKitPerformanceTests: XCTestCase {
 
     private let avatarRenderSize = CGSize(width: 56, height: 56)
-    private let renderScale: CGFloat = 3
     private lazy var svgData: Data = makeAvatarLikeSVGData()
 
-    func testSwiftDrawParseAndRasterizePerformance() throws {
+    func testSVGKitParseAndRasterizePerformance() throws {
         measure(metrics: [XCTClockMetric(), XCTMemoryMetric()]) {
             autoreleasepool {
                 for _ in 0..<30 {
-                    guard let svg = SVG(data: svgData) else {
+                    guard SVGImageRenderer.image(from: svgData, size: avatarRenderSize) != nil else {
                         XCTFail("SVG 解析失败")
                         return
                     }
-                    _ = svg.rasterize(size: avatarRenderSize, scale: renderScale)
                 }
             }
         }

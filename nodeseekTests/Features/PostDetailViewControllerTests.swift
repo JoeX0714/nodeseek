@@ -1537,7 +1537,7 @@ struct PostDetailViewControllerTests {
         let displaySize = DetailImageLayout.presentation(
             for: CGSize(width: 1200, height: 800),
             maxWidth: 320,
-            isSticker: false
+            kind: .normal
         ).size
         let didUpdate = node.updateAttachmentLayout(
             matching: imageURL,
@@ -1804,6 +1804,17 @@ struct PostDetailViewControllerTests {
         #expect(initialLayout.height == 160)
         #expect(loadedLayout.width == 320)
         #expect(abs(loadedLayout.height - 214) < 0.01)
+    }
+
+    @Test func imageBlockUsesFullWidthPlaceholderForReportImages() {
+        let layout = DetailImageBlockLayout.measure(
+            originalSize: .zero,
+            constrainedSize: CGSize(width: 320, height: CGFloat.greatestFiniteMagnitude),
+            kind: .report
+        )
+
+        #expect(layout.width == 320)
+        #expect(layout.height > 320)
     }
 
     @Test func imageBlockNodeUsesCachedImageSizeForInitialMeasurement() throws {

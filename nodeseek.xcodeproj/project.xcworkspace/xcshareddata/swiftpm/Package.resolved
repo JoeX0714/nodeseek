@@ -1,6 +1,15 @@
 {
-  "originHash" : "221ad68390635d088c3261967424b9d3f22c429ccf44c579b3d89c03a3d19f8f",
+  "originHash" : "722e696ed5e29aac597465c635d51145eb076ec66c28732579e9cce664c761cb",
   "pins" : [
+    {
+      "identity" : "cocoalumberjack",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/CocoaLumberjack/CocoaLumberjack.git",
+      "state" : {
+        "revision" : "c5f2ed4d219866117e135cf648180dc7b66739d3",
+        "version" : "3.9.1"
+      }
+    },
     {
       "identity" : "dtcoretext",
       "kind" : "remoteSourceControl",
@@ -47,12 +56,21 @@
       }
     },
     {
-      "identity" : "swiftdraw",
+      "identity" : "svgkit",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/swhitty/SwiftDraw.git",
+      "location" : "https://github.com/SVGKit/SVGKit.git",
       "state" : {
-        "revision" : "776456051ea2b099343e18ed8a53fca9dd2e9807",
-        "version" : "0.27.0"
+        "branch" : "3.x",
+        "revision" : "f835442588b60654f977bf5b47ebd9314824dae8"
+      }
+    },
+    {
+      "identity" : "swift-log",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-log",
+      "state" : {
+        "revision" : "5073617dac96330a486245e4c0179cb0a6fd2256",
+        "version" : "1.12.0"
       }
     },
     {
