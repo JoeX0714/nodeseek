@@ -21,6 +21,7 @@ protocol PostDetailViewProtocol: AnyObject {
     func render(detail: PostDetail)
     func updatePostBody(detail: PostDetail)
     func updateCommentLike(commentID: String, count: Int?, isClicked: Bool)
+    func updateCommentChickenLeg(commentID: String, count: Int?, isClicked: Bool)
     func updateCommentOppose(commentID: String, count: Int?, isClicked: Bool)
     func renderLoginRequired(message: String)
 }
@@ -33,8 +34,10 @@ protocol PostDetailPresenterProtocol: AnyObject {
     func didTapSendReply(content: String)
     func didTapFavorite()
     func didTapPostLike()
+    func didTapPostChickenLeg()
     func didTapPostOppose()
     func didTapCommentLike(_ comment: Comment)
+    func didTapCommentChickenLeg(_ comment: Comment)
     func didTapCommentOppose(_ comment: Comment)
 }
 
@@ -47,6 +50,8 @@ protocol PostDetailInteractorInput: AnyObject {
     func removeFavorite()
     func addPostLike()
     func addCommentLike(commentID: String)
+    func addPostChickenLeg()
+    func addCommentChickenLeg(commentID: String)
     func addPostOppose()
     func addCommentOppose(commentID: String)
 }
@@ -67,6 +72,10 @@ protocol PostDetailInteractorOutput: AnyObject {
     func didFailAddPostLike(error: String)
     func didAddCommentLike(commentID: String, response: CommentUpvoteResponse)
     func didFailAddCommentLike(commentID: String, error: String)
+    func didAddPostChickenLeg(_ response: PostChickenLegResponse)
+    func didFailAddPostChickenLeg(error: String)
+    func didAddCommentChickenLeg(commentID: String, response: CommentChickenLegResponse)
+    func didFailAddCommentChickenLeg(commentID: String, error: String)
     func didAddPostOppose(_ response: PostDislikeResponse)
     func didFailAddPostOppose(error: String)
     func didAddCommentOppose(commentID: String, response: CommentDislikeResponse)

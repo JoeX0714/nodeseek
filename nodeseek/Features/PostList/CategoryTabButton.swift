@@ -6,6 +6,10 @@
 import UIKit
 
 final class CategoryTabButton: UIButton {
+    private enum Layout {
+        static let horizontalInset: CGFloat = 3
+    }
+
     var category: PostListCategory?
 
     private let indicatorView: UIView = {
@@ -20,10 +24,8 @@ final class CategoryTabButton: UIButton {
     override init(frame: CGRect) {
         super.init(frame: frame)
         translatesAutoresizingMaskIntoConstraints = false
-        var buttonConfiguration = UIButton.Configuration.plain()
-        buttonConfiguration.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 3, bottom: 0, trailing: 3)
-        buttonConfiguration.baseForegroundColor = .secondaryLabel
-        configuration = buttonConfiguration
+        titleLabel?.font = .systemFont(ofSize: 17, weight: .regular)
+        setTitleColor(.secondaryLabel, for: .normal)
         applySelectedStyle(isSelected: false)
         addSubview(indicatorView)
         NSLayoutConstraint.activate([
@@ -38,16 +40,18 @@ final class CategoryTabButton: UIButton {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override var intrinsicContentSize: CGSize {
+        let titleWidth = titleLabel?.intrinsicContentSize.width ?? 0
+        return CGSize(
+            width: ceil(titleWidth + Layout.horizontalInset * 2),
+            height: UIView.noIntrinsicMetric
+        )
+    }
+
     func applySelectedStyle(isSelected: Bool) {
-        let font = isSelected ? UIFont.systemFont(ofSize: 17, weight: .semibold) : .systemFont(ofSize: 17, weight: .regular)
-        var buttonConfiguration = configuration ?? UIButton.Configuration.plain()
-        buttonConfiguration.baseForegroundColor = isSelected ? .label : .secondaryLabel
-        buttonConfiguration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
-            var outgoing = incoming
-            outgoing.font = font
-            return outgoing
-        }
-        configuration = buttonConfiguration
+        titleLabel?.font = isSelected ? .systemFont(ofSize: 17, weight: .semibold) : .systemFont(ofSize: 17, weight: .regular)
+        setTitleColor(isSelected ? .label : .secondaryLabel, for: .normal)
+        invalidateIntrinsicContentSize()
         indicatorView.isHidden = !isSelected
     }
 }

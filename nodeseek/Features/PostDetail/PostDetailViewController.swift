@@ -16,12 +16,31 @@ enum PostDetailLinkDestination {
     case safari(URL)
 }
 
-enum PostDetailLinkResolver {
-    private static let postPathRegex = try! NSRegularExpression(
-        pattern: "^/post-([0-9]+)-([0-9]+)/?$",
-        options: []
-    )
+enum ChickenLegConfirmationContext: Equatable {
+    case post
+    case comment
 
+    var title: String {
+        switch self {
+        case .post:
+            return "给帖子投放鸡腿？"
+        case .comment:
+            return "给评论投放鸡腿？"
+        }
+    }
+
+    var message: String {
+        "将投放 1 个鸡腿，成功后会标记为已投放。"
+    }
+}
+
+typealias ChickenLegConfirmationPresenter = @MainActor (
+    _ viewController: UIViewController,
+    _ context: ChickenLegConfirmationContext,
+    _ onConfirm: @escaping @MainActor () -> Void
+) -> Void
+
+enum PostDetailLinkResolver {
     static func destination(
         for url: URL,
         baseURL: URL,
@@ -54,21 +73,14 @@ enum PostDetailLinkResolver {
             return .userProfile(resolvedURL)
         }
 
-        let range = NSRange(path.startIndex..<path.endIndex, in: path)
-        if let match = postPathRegex.firstMatch(in: path, options: [], range: range),
-           match.numberOfRanges >= 3,
-           let postIDRange = Range(match.range(at: 1), in: path),
-           let pageRange = Range(match.range(at: 2), in: path) {
-            let postID = String(path[postIDRange])
-            let page = Int(path[pageRange]) ?? 1
-            let normalizedPage = max(page, 1)
-            if let anchorID = normalizedAnchorID(from: resolvedURL),
-               postID == currentPostID,
-               normalizedPage == max(currentPage, 1) {
+        if let route = NodeSeekPostRouteResolver.route(for: resolvedURL, baseURL: baseURL) {
+            if let anchorID = route.anchorID,
+               route.postID == currentPostID,
+               route.page == max(currentPage, 1) {
                 return .currentPageAnchor(anchorID)
             }
             // TODO: 支持当前帖子跨页锚点在目标页加载完成后自动定位。
-            return .nativePost(postID: postID, page: normalizedPage, url: resolvedURL)
+            return .nativePost(postID: route.postID, page: route.page, url: route.url)
         }
 
         return .web(resolvedURL)
@@ -144,6 +156,7 @@ class PostDetailViewController: UIViewController {
     var tableReloadWorkItem: DispatchWorkItem?
     var initialContentRevealWorkItem: DispatchWorkItem?
     var pendingInitialContentRevealGeneration: Int?
+    var pendingInitialAnchorID: String?
     var pendingReloadIndexPaths: Set<IndexPath> = []
     var displayMode: DisplayMode = .skeleton
     var hasRenderedDetailContent = false
@@ -153,6 +166,20 @@ class PostDetailViewController: UIViewController {
     var replyContextBarHeightConstraint: NSLayoutConstraint?
     var replyStickerPickerHeightConstraint: NSLayoutConstraint?
     var pageLoadingTargetPage: Int?
+    var chickenLegConfirmationPresenter: ChickenLegConfirmationPresenter = { viewController, context, onConfirm in
+        let alert = UIAlertController(
+            title: context.title,
+            message: context.message,
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        alert.addAction(UIAlertAction(title: "投放 1 个", style: .default) { _ in
+            Task { @MainActor in
+                onConfirm()
+            }
+        })
+        viewController.present(alert, animated: true)
+    }
     #if DEBUG
     var pendingScrollToRow: Int?
     #endif
@@ -365,11 +392,13 @@ class PostDetailViewController: UIViewController {
         presenter: PostDetailPresenterProtocol,
         initialHeader: PostDetailHeaderContent? = nil,
         sourcePostURL: URL? = nil,
-        currentPage: Int = 1
+        currentPage: Int = 1,
+        initialAnchorID: String? = nil
     ) {
         self.presenter = presenter
         self.sourcePostURL = sourcePostURL
         self.currentPage = max(currentPage, 1)
+        self.pendingInitialAnchorID = initialAnchorID
         super.init(nibName: nil, bundle: nil)
 
         if let initialHeader {
@@ -675,6 +704,10 @@ class PostDetailViewController: UIViewController {
     #if DEBUG
     func testRowCount() -> Int {
         tableNode(tableNode, numberOfRowsInSection: 0)
+    }
+
+    var testPendingInitialAnchorID: String? {
+        pendingInitialAnchorID
     }
     #endif
 

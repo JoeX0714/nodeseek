@@ -23,6 +23,8 @@ class PostDetailInteractor: PostDetailInteractorInput {
     private let collectionSubmitter: PostCollectionSubmitting
     private let postUpvoteSubmitter: PostUpvoteSubmitting
     private let commentUpvoteSubmitter: CommentUpvoteSubmitting
+    private let postChickenLegSubmitter: PostChickenLegSubmitting
+    private let commentChickenLegSubmitter: CommentChickenLegSubmitting
     private let postDislikeSubmitter: PostDislikeSubmitting
     private let commentDislikeSubmitter: CommentDislikeSubmitting
     private let sessionStore: NodeSeekSessionStore
@@ -35,6 +37,8 @@ class PostDetailInteractor: PostDetailInteractorInput {
         collectionSubmitter: PostCollectionSubmitting? = nil,
         postUpvoteSubmitter: PostUpvoteSubmitting? = nil,
         commentUpvoteSubmitter: CommentUpvoteSubmitting? = nil,
+        postChickenLegSubmitter: PostChickenLegSubmitting? = nil,
+        commentChickenLegSubmitter: CommentChickenLegSubmitting? = nil,
         postDislikeSubmitter: PostDislikeSubmitting? = nil,
         commentDislikeSubmitter: CommentDislikeSubmitting? = nil,
         page: Int = 1,
@@ -47,6 +51,8 @@ class PostDetailInteractor: PostDetailInteractorInput {
         self.collectionSubmitter = collectionSubmitter ?? NodeSeekPostCollectionSubmitter()
         self.postUpvoteSubmitter = postUpvoteSubmitter ?? NodeSeekPostUpvoteSubmitter()
         self.commentUpvoteSubmitter = commentUpvoteSubmitter ?? NodeSeekCommentUpvoteSubmitter()
+        self.postChickenLegSubmitter = postChickenLegSubmitter ?? NodeSeekPostChickenLegSubmitter()
+        self.commentChickenLegSubmitter = commentChickenLegSubmitter ?? NodeSeekCommentChickenLegSubmitter()
         self.postDislikeSubmitter = postDislikeSubmitter ?? NodeSeekPostDislikeSubmitter()
         self.commentDislikeSubmitter = commentDislikeSubmitter ?? NodeSeekCommentDislikeSubmitter()
         self.sessionStore = sessionStore
@@ -170,6 +176,52 @@ class PostDetailInteractor: PostDetailInteractorInput {
                 AppLog.error(.postDetail, "点赞评论失败，commentID=\(commentID): \(error.localizedDescription)")
                 await MainActor.run {
                     presenter?.didFailAddCommentLike(commentID: commentID, error: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    func addPostChickenLeg() {
+        guard let post else {
+            presenter?.didFailAddPostChickenLeg(error: "缺少帖子信息，无法投放鸡腿。")
+            return
+        }
+
+        Task {
+            AppLog.info(.postDetail, "开始给帖子投放鸡腿，postID=\(post.id)")
+            do {
+                let response = try await postChickenLegSubmitter.addChickenLeg(postID: post.id, referer: post.url)
+                await sessionStore.recordSuccess()
+                await MainActor.run {
+                    presenter?.didAddPostChickenLeg(response)
+                }
+            } catch {
+                AppLog.error(.postDetail, "给帖子投放鸡腿失败，postID=\(post.id): \(error.localizedDescription)")
+                await MainActor.run {
+                    presenter?.didFailAddPostChickenLeg(error: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    func addCommentChickenLeg(commentID: String) {
+        guard let post else {
+            presenter?.didFailAddCommentChickenLeg(commentID: commentID, error: "缺少帖子信息，无法投放鸡腿。")
+            return
+        }
+
+        Task {
+            AppLog.info(.postDetail, "开始给评论投放鸡腿，postID=\(post.id), commentID=\(commentID)")
+            do {
+                let response = try await commentChickenLegSubmitter.addChickenLeg(commentID: commentID, referer: post.url)
+                await sessionStore.recordSuccess()
+                await MainActor.run {
+                    presenter?.didAddCommentChickenLeg(commentID: commentID, response: response)
+                }
+            } catch {
+                AppLog.error(.postDetail, "给评论投放鸡腿失败，commentID=\(commentID): \(error.localizedDescription)")
+                await MainActor.run {
+                    presenter?.didFailAddCommentChickenLeg(commentID: commentID, error: error.localizedDescription)
                 }
             }
         }

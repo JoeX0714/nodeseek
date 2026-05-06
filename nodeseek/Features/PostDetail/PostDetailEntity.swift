@@ -32,6 +32,7 @@ struct PostDetailHeaderContent: Equatable {
     let likeCount: Int?
     let isLikeClicked: Bool
     let chickenLegCount: Int?
+    let isChickenLegClicked: Bool
     let opposeCount: Int?
     let isOpposeClicked: Bool
     let favoriteCount: Int?
@@ -50,6 +51,7 @@ struct PostDetailHeaderContent: Equatable {
         likeCount: Int? = nil,
         isLikeClicked: Bool = false,
         chickenLegCount: Int? = nil,
+        isChickenLegClicked: Bool = false,
         opposeCount: Int? = nil,
         isOpposeClicked: Bool = false,
         favoriteCount: Int? = nil,
@@ -67,6 +69,7 @@ struct PostDetailHeaderContent: Equatable {
         self.likeCount = likeCount
         self.isLikeClicked = isLikeClicked
         self.chickenLegCount = chickenLegCount
+        self.isChickenLegClicked = isChickenLegClicked
         self.opposeCount = opposeCount
         self.isOpposeClicked = isOpposeClicked
         self.favoriteCount = favoriteCount
@@ -105,6 +108,7 @@ struct PostDetailHeaderContent: Equatable {
             likeCount: detail.likeCount,
             isLikeClicked: detail.isLikeClicked,
             chickenLegCount: detail.chickenLegCount,
+            isChickenLegClicked: detail.isChickenLegClicked,
             opposeCount: detail.opposeCount,
             isOpposeClicked: detail.isOpposeClicked,
             favoriteCount: detail.favoriteCount,
@@ -126,6 +130,7 @@ struct PostDetailHeaderContent: Equatable {
             likeCount: likeCount,
             isLikeClicked: isLikeClicked,
             chickenLegCount: chickenLegCount,
+            isChickenLegClicked: isChickenLegClicked,
             opposeCount: opposeCount,
             isOpposeClicked: isOpposeClicked,
             favoriteCount: favoriteCount,
@@ -147,6 +152,7 @@ struct PostDetailHeaderContent: Equatable {
             likeCount: likeCount,
             isLikeClicked: isLikeClicked,
             chickenLegCount: chickenLegCount,
+            isChickenLegClicked: isChickenLegClicked,
             opposeCount: opposeCount,
             isOpposeClicked: isOpposeClicked,
             favoriteCount: count,
@@ -168,6 +174,29 @@ struct PostDetailHeaderContent: Equatable {
             likeCount: count,
             isLikeClicked: isClicked,
             chickenLegCount: chickenLegCount,
+            isChickenLegClicked: isChickenLegClicked,
+            opposeCount: opposeCount,
+            isOpposeClicked: isOpposeClicked,
+            favoriteCount: favoriteCount,
+            isFavoriteCollected: isFavoriteCollected,
+            isFavoriteSubmitting: isFavoriteSubmitting
+        )
+    }
+
+    func updatingChickenLegReaction(count: Int?, isClicked: Bool) -> PostDetailHeaderContent {
+        PostDetailHeaderContent(
+            postID: postID,
+            title: title,
+            authorName: authorName,
+            avatarURL: avatarURL,
+            authorProfileURL: authorProfileURL,
+            metadataText: metadataText,
+            contentHTML: contentHTML,
+            requiredReadingLevel: requiredReadingLevel,
+            likeCount: likeCount,
+            isLikeClicked: isLikeClicked,
+            chickenLegCount: count,
+            isChickenLegClicked: isClicked,
             opposeCount: opposeCount,
             isOpposeClicked: isOpposeClicked,
             favoriteCount: favoriteCount,
@@ -189,6 +218,7 @@ struct PostDetailHeaderContent: Equatable {
             likeCount: likeCount,
             isLikeClicked: isLikeClicked,
             chickenLegCount: chickenLegCount,
+            isChickenLegClicked: isChickenLegClicked,
             opposeCount: count,
             isOpposeClicked: isClicked,
             favoriteCount: favoriteCount,

@@ -37,6 +37,7 @@ final class CommentCellNode: ASCellNode {
     private let onLinkTapped: (URL) -> Void
     private let onAuthorTapped: (URL) -> Void
     private let onLikeTapped: (Comment) -> Void
+    private let onChickenLegTapped: (Comment) -> Void
     private let onOpposeTapped: (Comment) -> Void
     private let onReplyTapped: (Comment) -> Void
     private let onQuoteTapped: (Comment) -> Void
@@ -96,6 +97,7 @@ final class CommentCellNode: ASCellNode {
         onLinkTapped: @escaping (URL) -> Void = { _ in },
         onAuthorTapped: @escaping (URL) -> Void = { _ in },
         onLikeTapped: @escaping (Comment) -> Void = { _ in },
+        onChickenLegTapped: @escaping (Comment) -> Void = { _ in },
         onOpposeTapped: @escaping (Comment) -> Void = { _ in },
         onReplyTapped: @escaping (Comment) -> Void = { _ in },
         onQuoteTapped: @escaping (Comment) -> Void = { _ in },
@@ -108,6 +110,7 @@ final class CommentCellNode: ASCellNode {
         self.onLinkTapped = onLinkTapped
         self.onAuthorTapped = onAuthorTapped
         self.onLikeTapped = onLikeTapped
+        self.onChickenLegTapped = onChickenLegTapped
         self.onOpposeTapped = onOpposeTapped
         self.onReplyTapped = onReplyTapped
         self.onQuoteTapped = onQuoteTapped
@@ -301,7 +304,7 @@ final class CommentCellNode: ASCellNode {
         )
 
         configureLikeActionButton(count: comment.likeCount, isClicked: comment.isLikeClicked)
-        configureActionButton(chickenLegButtonNode, systemImageName: "fork.knife", accessibilityLabel: "加鸡腿", count: comment.chickenLegCount)
+        configureChickenLegActionButton(count: comment.chickenLegCount, isClicked: comment.isChickenLegClicked)
         configureOpposeActionButton(count: comment.opposeCount, isClicked: comment.isOpposeClicked)
         configureActionButton(replyButtonNode, systemImageName: "arrowshape.turn.up.left", accessibilityLabel: "回复评论")
         configureActionButton(quoteButtonNode, systemImageName: "quote.bubble", accessibilityLabel: "引用评论")
@@ -313,6 +316,7 @@ final class CommentCellNode: ASCellNode {
             authorButtonNode.addTarget(self, action: #selector(authorTapped), forControlEvents: .touchUpInside)
         }
         likeButtonNode.addTarget(self, action: #selector(likeTapped), forControlEvents: .touchUpInside)
+        chickenLegButtonNode.addTarget(self, action: #selector(chickenLegTapped), forControlEvents: .touchUpInside)
         opposeButtonNode.addTarget(self, action: #selector(opposeTapped), forControlEvents: .touchUpInside)
         replyButtonNode.addTarget(self, action: #selector(replyTapped), forControlEvents: .touchUpInside)
         quoteButtonNode.addTarget(self, action: #selector(quoteTapped), forControlEvents: .touchUpInside)
@@ -398,6 +402,10 @@ final class CommentCellNode: ASCellNode {
         isClicked ? .systemRed : UIColor.secondaryLabel.withAlphaComponent(0.72)
     }
 
+    private static func chickenLegActionColor(isClicked: Bool) -> UIColor {
+        isClicked ? .systemOrange : UIColor.secondaryLabel.withAlphaComponent(0.72)
+    }
+
     private static func opposeActionColor(isClicked: Bool) -> UIColor {
         isClicked ? .systemRed : UIColor.secondaryLabel.withAlphaComponent(0.72)
     }
@@ -422,11 +430,29 @@ final class CommentCellNode: ASCellNode {
         )
     }
 
+    private func configureChickenLegActionButton(count: Int?, isClicked: Bool) {
+        configureActionButton(
+            chickenLegButtonNode,
+            systemImageName: "fork.knife",
+            accessibilityLabel: "加鸡腿",
+            count: count,
+            color: Self.chickenLegActionColor(isClicked: isClicked)
+        )
+    }
+
     func updateLikeReaction(count: Int?, isClicked: Bool) {
         let nextComment = comment.updatingLikeReaction(count: count, isClicked: isClicked)
         guard nextComment != comment else { return }
         comment = nextComment
         configureLikeActionButton(count: comment.likeCount, isClicked: comment.isLikeClicked)
+        setNeedsLayout()
+    }
+
+    func updateChickenLegReaction(count: Int?, isClicked: Bool) {
+        let nextComment = comment.updatingChickenLegReaction(count: count, isClicked: isClicked)
+        guard nextComment != comment else { return }
+        comment = nextComment
+        configureChickenLegActionButton(count: comment.chickenLegCount, isClicked: comment.isChickenLegClicked)
         setNeedsLayout()
     }
 
@@ -542,6 +568,10 @@ final class CommentCellNode: ASCellNode {
         Self.likeActionColor(isClicked: comment.isLikeClicked)
     }
 
+    var debugChickenLegActionColor: UIColor {
+        Self.chickenLegActionColor(isClicked: comment.isChickenLegClicked)
+    }
+
     var debugOpposeActionColor: UIColor {
         Self.opposeActionColor(isClicked: comment.isOpposeClicked)
     }
@@ -552,6 +582,10 @@ final class CommentCellNode: ASCellNode {
 
     @objc private func likeTapped() {
         onLikeTapped(comment)
+    }
+
+    @objc private func chickenLegTapped() {
+        onChickenLegTapped(comment)
     }
 
     @objc private func opposeTapped() {

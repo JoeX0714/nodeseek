@@ -81,6 +81,28 @@ extension PostDetailViewController {
 }
 
 extension PostDetailViewController: ASTableDataSource, ASTableDelegate {
+    func handlePostChickenLegTap(_ header: PostDetailHeaderContent) {
+        guard header.isChickenLegClicked == false else {
+            presenter.didTapPostChickenLeg()
+            return
+        }
+
+        chickenLegConfirmationPresenter(self, .post) { [weak self] in
+            self?.presenter.didTapPostChickenLeg()
+        }
+    }
+
+    func handleCommentChickenLegTap(_ comment: Comment) {
+        guard comment.isChickenLegClicked == false else {
+            presenter.didTapCommentChickenLeg(comment)
+            return
+        }
+
+        chickenLegConfirmationPresenter(self, .comment) { [weak self] in
+            self?.presenter.didTapCommentChickenLeg(comment)
+        }
+    }
+
     func tableNode(_ tableNode: ASTableNode, numberOfRowsInSection section: Int) -> Int {
         if displayMode == .skeleton {
             return 1 + skeletonCommentRowCount
@@ -123,6 +145,9 @@ extension PostDetailViewController: ASTableDataSource, ASTableDelegate {
                     },
                     onLikeTapped: {
                         self?.presenter.didTapPostLike()
+                    },
+                    onChickenLegTapped: {
+                        self?.handlePostChickenLegTap(header)
                     },
                     onOpposeTapped: {
                         self?.presenter.didTapPostOppose()
@@ -177,6 +202,9 @@ extension PostDetailViewController: ASTableDataSource, ASTableDelegate {
                     },
                     onLikeTapped: { comment in
                         self?.presenter.didTapCommentLike(comment)
+                    },
+                    onChickenLegTapped: { comment in
+                        self?.handleCommentChickenLegTap(comment)
                     },
                     onOpposeTapped: { comment in
                         self?.presenter.didTapCommentOppose(comment)

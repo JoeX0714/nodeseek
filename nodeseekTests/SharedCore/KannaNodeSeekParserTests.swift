@@ -255,7 +255,7 @@ struct KannaNodeSeekParserTests {
                                 <svg data-v-254da704 class="iconpark-icon"></svg>
                                 <span data-v-254da704>0</span>
                             </div>
-                            <div data-v-254da704 title="加鸡腿" class="menu-item">
+                            <div data-v-254da704 title="加鸡腿" class="menu-item clicked">
                                 <svg data-v-254da704 class="iconpark-icon"></svg>
                                 <span data-v-254da704>1</span>
                             </div>
@@ -278,6 +278,7 @@ struct KannaNodeSeekParserTests {
         let comment = try #require(detail.comments.first)
         #expect(comment.likeCount == 0)
         #expect(comment.chickenLegCount == 1)
+        #expect(comment.isChickenLegClicked == true)
         #expect(comment.opposeCount == 0)
         #expect(comment.isOpposeClicked == true)
     }
@@ -296,7 +297,7 @@ struct KannaNodeSeekParserTests {
                         </svg>
                         <span data-v-254da704>2</span>
                     </div>
-                    <div data-v-254da704 title="加鸡腿" class="menu-item">
+                    <div data-v-254da704 title="加鸡腿" class="menu-item clicked">
                         <svg data-v-254da704 class="iconpark-icon">
                             <use data-v-254da704 href="#chicken-leg"></use>
                         </svg>
@@ -324,6 +325,7 @@ struct KannaNodeSeekParserTests {
 
         #expect(detail.likeCount == 2)
         #expect(detail.chickenLegCount == 3)
+        #expect(detail.isChickenLegClicked == true)
         #expect(detail.opposeCount == 4)
         #expect(detail.isOpposeClicked == true)
         #expect(detail.favoriteCount == 5)

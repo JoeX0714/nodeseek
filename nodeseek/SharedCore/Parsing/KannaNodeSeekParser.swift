@@ -354,6 +354,7 @@ struct KannaNodeSeekParser: NodeSeekParser {
             likeCount: bodyItem.flatMap { parseReactionCount(in: $0, kind: .like) },
             isLikeClicked: bodyItem.map { parseReactionClicked(in: $0, kind: .like) } ?? false,
             chickenLegCount: bodyItem.flatMap { parseReactionCount(in: $0, kind: .chickenLeg) },
+            isChickenLegClicked: bodyItem.map { parseReactionClicked(in: $0, kind: .chickenLeg) } ?? false,
             opposeCount: bodyItem.flatMap { parseReactionCount(in: $0, kind: .oppose) },
             isOpposeClicked: bodyItem.map { parseReactionClicked(in: $0, kind: .oppose) } ?? false,
             favoriteCount: bodyItem.flatMap { parseReactionCount(in: $0, kind: .favorite) },
@@ -520,6 +521,7 @@ struct KannaNodeSeekParser: NodeSeekParser {
             likeCount: parseReactionCount(in: item, kind: .like),
             isLikeClicked: parseReactionClicked(in: item, kind: .like),
             chickenLegCount: parseReactionCount(in: item, kind: .chickenLeg),
+            isChickenLegClicked: parseReactionClicked(in: item, kind: .chickenLeg),
             opposeCount: parseReactionCount(in: item, kind: .oppose),
             isOpposeClicked: parseReactionClicked(in: item, kind: .oppose)
         )

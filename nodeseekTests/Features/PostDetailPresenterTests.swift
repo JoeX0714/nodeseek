@@ -537,6 +537,138 @@ struct PostDetailPresenterTests {
         #expect(view.toastMessage == "该评论已点赞")
     }
 
+    @Test func tappingPostChickenLegSubmitsAndUpdatesPostBody() {
+        let interactor = SpyPostDetailInteractor()
+        let router = SpyPostDetailRouter()
+        let presenter = PostDetailPresenter(interactor: interactor, router: router, initialPage: 1)
+        let view = SpyPostDetailView()
+        presenter.setView(view)
+        presenter.didLoadPostDetail(PostDetailResponse(detail: .init(
+            id: "712073",
+            title: "标题",
+            authorName: "mist",
+            avatarURL: nil,
+            metadataText: nil,
+            contentHTML: "<p>正文</p>",
+            chickenLegCount: 2,
+            comments: []
+        )))
+
+        presenter.didTapPostChickenLeg()
+        presenter.didAddPostChickenLeg(PostChickenLegResponse(message: "added", current: 3))
+
+        #expect(interactor.postChickenLegSubmitCount == 1)
+        #expect(view.updatedPostBodyDetails.last?.chickenLegCount == 3)
+        #expect(view.updatedPostBodyDetails.last?.isChickenLegClicked == true)
+        #expect(view.toastMessage == "已投放鸡腿")
+    }
+
+    @Test func tappingPostChickenLegFallsBackToIncrementWhenResponseHasNoCurrent() {
+        let interactor = SpyPostDetailInteractor()
+        let router = SpyPostDetailRouter()
+        let presenter = PostDetailPresenter(interactor: interactor, router: router, initialPage: 1)
+        let view = SpyPostDetailView()
+        presenter.setView(view)
+        presenter.didLoadPostDetail(PostDetailResponse(detail: .init(
+            id: "712073",
+            title: "标题",
+            authorName: "mist",
+            avatarURL: nil,
+            metadataText: nil,
+            contentHTML: "<p>正文</p>",
+            chickenLegCount: 2,
+            comments: []
+        )))
+
+        presenter.didTapPostChickenLeg()
+        presenter.didAddPostChickenLeg(PostChickenLegResponse(message: "added", current: nil))
+
+        #expect(view.updatedPostBodyDetails.last?.chickenLegCount == 3)
+        #expect(view.updatedPostBodyDetails.last?.isChickenLegClicked == true)
+    }
+
+    @Test func tappingAlreadyChickenLeggedPostOnlyShowsToast() {
+        let interactor = SpyPostDetailInteractor()
+        let router = SpyPostDetailRouter()
+        let presenter = PostDetailPresenter(interactor: interactor, router: router, initialPage: 1)
+        let view = SpyPostDetailView()
+        presenter.setView(view)
+        presenter.didLoadPostDetail(PostDetailResponse(detail: .init(
+            id: "712073",
+            title: "标题",
+            authorName: "mist",
+            avatarURL: nil,
+            metadataText: nil,
+            contentHTML: "<p>正文</p>",
+            chickenLegCount: 3,
+            isChickenLegClicked: true,
+            comments: []
+        )))
+
+        presenter.didTapPostChickenLeg()
+
+        #expect(interactor.postChickenLegSubmitCount == 0)
+        #expect(view.toastMessage == "该帖子已投放鸡腿")
+    }
+
+    @Test func tappingCommentChickenLegSubmitsAndUpdatesCell() {
+        let interactor = SpyPostDetailInteractor()
+        let router = SpyPostDetailRouter()
+        let presenter = PostDetailPresenter(interactor: interactor, router: router, initialPage: 1)
+        let view = SpyPostDetailView()
+        presenter.setView(view)
+        let comment = Comment(
+            id: "9835758",
+            authorName: "mist",
+            avatarURL: nil,
+            floorText: "#1",
+            createdAtText: "刚刚",
+            contentHTML: "<p>内容</p>",
+            chickenLegCount: 1
+        )
+        presenter.didLoadPostDetail(PostDetailResponse(detail: PostDetail(
+            id: "712073",
+            title: "标题",
+            authorName: "mist",
+            avatarURL: nil,
+            metadataText: nil,
+            contentHTML: "<p>正文</p>",
+            comments: [comment]
+        )))
+
+        presenter.didTapCommentChickenLeg(comment)
+        presenter.didAddCommentChickenLeg(commentID: "9835758", response: CommentChickenLegResponse(message: "added", current: 2))
+
+        #expect(interactor.submittedCommentChickenLegIDs == ["9835758"])
+        #expect(view.updatedCommentChickenLegEvents.last?.commentID == "9835758")
+        #expect(view.updatedCommentChickenLegEvents.last?.count == 2)
+        #expect(view.updatedCommentChickenLegEvents.last?.isClicked == true)
+        #expect(view.toastMessage == "已投放鸡腿")
+    }
+
+    @Test func tappingAlreadyChickenLeggedCommentOnlyShowsToast() {
+        let interactor = SpyPostDetailInteractor()
+        let router = SpyPostDetailRouter()
+        let presenter = PostDetailPresenter(interactor: interactor, router: router, initialPage: 1)
+        let view = SpyPostDetailView()
+        presenter.setView(view)
+        let comment = Comment(
+            id: "9835758",
+            authorName: "mist",
+            avatarURL: nil,
+            floorText: "#1",
+            createdAtText: "刚刚",
+            contentHTML: "<p>内容</p>",
+            chickenLegCount: 2,
+            isChickenLegClicked: true
+        )
+
+        presenter.didTapCommentChickenLeg(comment)
+
+        #expect(interactor.submittedCommentChickenLegIDs.isEmpty)
+        #expect(view.toastMessage == "该评论已投放鸡腿")
+    }
+
     @Test func tappingPostOpposeSubmitsDislikeAndUpdatesPostBody() {
         let interactor = SpyPostDetailInteractor()
         let router = SpyPostDetailRouter()
@@ -630,8 +762,10 @@ private final class SpyPostDetailInteractor: PostDetailInteractorInput {
     private(set) var favoriteSubmitCount = 0
     private(set) var favoriteRemoveCount = 0
     private(set) var postLikeSubmitCount = 0
+    private(set) var postChickenLegSubmitCount = 0
     private(set) var postOpposeSubmitCount = 0
     private(set) var submittedCommentLikeIDs: [String] = []
+    private(set) var submittedCommentChickenLegIDs: [String] = []
     private(set) var submittedCommentOpposeIDs: [String] = []
 
     func loadPostDetail() {
@@ -661,6 +795,14 @@ private final class SpyPostDetailInteractor: PostDetailInteractorInput {
 
     func addCommentLike(commentID: String) {
         submittedCommentLikeIDs.append(commentID)
+    }
+
+    func addPostChickenLeg() {
+        postChickenLegSubmitCount += 1
+    }
+
+    func addCommentChickenLeg(commentID: String) {
+        submittedCommentChickenLegIDs.append(commentID)
     }
 
     func addPostOppose() {
@@ -694,6 +836,7 @@ private final class SpyPostDetailView: PostDetailViewProtocol {
     private(set) var renderedDetails: [PostDetail] = []
     private(set) var updatedPostBodyDetails: [PostDetail] = []
     private(set) var updatedCommentLikeEvents: [(commentID: String, count: Int?, isClicked: Bool)] = []
+    private(set) var updatedCommentChickenLegEvents: [(commentID: String, count: Int?, isClicked: Bool)] = []
     private(set) var updatedCommentOpposeEvents: [(commentID: String, count: Int?, isClicked: Bool)] = []
 
     func showLoading() { loadingCount += 1 }
@@ -713,6 +856,9 @@ private final class SpyPostDetailView: PostDetailViewProtocol {
     func updatePostBody(detail: PostDetail) { updatedPostBodyDetails.append(detail) }
     func updateCommentLike(commentID: String, count: Int?, isClicked: Bool) {
         updatedCommentLikeEvents.append((commentID: commentID, count: count, isClicked: isClicked))
+    }
+    func updateCommentChickenLeg(commentID: String, count: Int?, isClicked: Bool) {
+        updatedCommentChickenLegEvents.append((commentID: commentID, count: count, isClicked: isClicked))
     }
     func updateCommentOppose(commentID: String, count: Int?, isClicked: Bool) {
         updatedCommentOpposeEvents.append((commentID: commentID, count: count, isClicked: isClicked))

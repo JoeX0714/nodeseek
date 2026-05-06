@@ -106,6 +106,7 @@ nonisolated struct PostDetail: Equatable, Sendable {
     let likeCount: Int?
     let isLikeClicked: Bool
     let chickenLegCount: Int?
+    let isChickenLegClicked: Bool
     let opposeCount: Int?
     let isOpposeClicked: Bool
     let favoriteCount: Int?
@@ -127,6 +128,7 @@ nonisolated struct PostDetail: Equatable, Sendable {
         likeCount: Int? = nil,
         isLikeClicked: Bool = false,
         chickenLegCount: Int? = nil,
+        isChickenLegClicked: Bool = false,
         opposeCount: Int? = nil,
         isOpposeClicked: Bool = false,
         favoriteCount: Int? = nil,
@@ -147,6 +149,7 @@ nonisolated struct PostDetail: Equatable, Sendable {
         self.likeCount = likeCount
         self.isLikeClicked = isLikeClicked
         self.chickenLegCount = chickenLegCount
+        self.isChickenLegClicked = isChickenLegClicked
         self.opposeCount = opposeCount
         self.isOpposeClicked = isOpposeClicked
         self.favoriteCount = favoriteCount
@@ -170,6 +173,7 @@ nonisolated struct PostDetail: Equatable, Sendable {
             likeCount: likeCount,
             isLikeClicked: isLikeClicked,
             chickenLegCount: chickenLegCount,
+            isChickenLegClicked: isChickenLegClicked,
             opposeCount: opposeCount,
             isOpposeClicked: isOpposeClicked,
             favoriteCount: count,
@@ -194,6 +198,7 @@ nonisolated struct PostDetail: Equatable, Sendable {
             likeCount: count,
             isLikeClicked: isClicked,
             chickenLegCount: chickenLegCount,
+            isChickenLegClicked: isChickenLegClicked,
             opposeCount: opposeCount,
             isOpposeClicked: isOpposeClicked,
             favoriteCount: favoriteCount,
@@ -224,6 +229,63 @@ nonisolated struct PostDetail: Equatable, Sendable {
             likeCount: likeCount,
             isLikeClicked: isLikeClicked,
             chickenLegCount: chickenLegCount,
+            isChickenLegClicked: isChickenLegClicked,
+            opposeCount: opposeCount,
+            isOpposeClicked: isOpposeClicked,
+            favoriteCount: favoriteCount,
+            isFavoriteCollected: isFavoriteCollected,
+            comments: nextComments,
+            page: page,
+            pagination: pagination,
+            isLastPage: isLastPage
+        )
+    }
+
+    func updatingPostChickenLegState(count: Int?, isClicked: Bool) -> PostDetail {
+        PostDetail(
+            id: id,
+            title: title,
+            requiredReadingLevel: requiredReadingLevel,
+            authorName: authorName,
+            avatarURL: avatarURL,
+            authorProfileURL: authorProfileURL,
+            metadataText: metadataText,
+            contentHTML: contentHTML,
+            likeCount: likeCount,
+            isLikeClicked: isLikeClicked,
+            chickenLegCount: count,
+            isChickenLegClicked: isClicked,
+            opposeCount: opposeCount,
+            isOpposeClicked: isOpposeClicked,
+            favoriteCount: favoriteCount,
+            isFavoriteCollected: isFavoriteCollected,
+            comments: comments,
+            page: page,
+            pagination: pagination,
+            isLastPage: isLastPage
+        )
+    }
+
+    func updatingCommentChickenLegState(commentID: String, count: Int?, isClicked: Bool) -> PostDetail {
+        let nextComments = comments.map { comment in
+            comment.id == commentID
+                ? comment.updatingChickenLegReaction(count: count, isClicked: isClicked)
+                : comment
+        }
+
+        return PostDetail(
+            id: id,
+            title: title,
+            requiredReadingLevel: requiredReadingLevel,
+            authorName: authorName,
+            avatarURL: avatarURL,
+            authorProfileURL: authorProfileURL,
+            metadataText: metadataText,
+            contentHTML: contentHTML,
+            likeCount: likeCount,
+            isLikeClicked: isLikeClicked,
+            chickenLegCount: chickenLegCount,
+            isChickenLegClicked: isChickenLegClicked,
             opposeCount: opposeCount,
             isOpposeClicked: isOpposeClicked,
             favoriteCount: favoriteCount,
@@ -248,6 +310,7 @@ nonisolated struct PostDetail: Equatable, Sendable {
             likeCount: likeCount,
             isLikeClicked: isLikeClicked,
             chickenLegCount: chickenLegCount,
+            isChickenLegClicked: isChickenLegClicked,
             opposeCount: count,
             isOpposeClicked: isClicked,
             favoriteCount: favoriteCount,
@@ -278,6 +341,7 @@ nonisolated struct PostDetail: Equatable, Sendable {
             likeCount: likeCount,
             isLikeClicked: isLikeClicked,
             chickenLegCount: chickenLegCount,
+            isChickenLegClicked: isChickenLegClicked,
             opposeCount: opposeCount,
             isOpposeClicked: isOpposeClicked,
             favoriteCount: favoriteCount,
@@ -306,6 +370,7 @@ nonisolated struct Comment: Equatable, Sendable {
     let likeCount: Int?
     let isLikeClicked: Bool
     let chickenLegCount: Int?
+    let isChickenLegClicked: Bool
     let opposeCount: Int?
     let isOpposeClicked: Bool
 
@@ -325,6 +390,7 @@ nonisolated struct Comment: Equatable, Sendable {
         likeCount: Int? = nil,
         isLikeClicked: Bool = false,
         chickenLegCount: Int? = nil,
+        isChickenLegClicked: Bool = false,
         opposeCount: Int? = nil,
         isOpposeClicked: Bool = false
     ) {
@@ -343,6 +409,7 @@ nonisolated struct Comment: Equatable, Sendable {
         self.likeCount = likeCount
         self.isLikeClicked = isLikeClicked
         self.chickenLegCount = chickenLegCount
+        self.isChickenLegClicked = isChickenLegClicked
         self.opposeCount = opposeCount
         self.isOpposeClicked = isOpposeClicked
     }
@@ -364,6 +431,30 @@ nonisolated struct Comment: Equatable, Sendable {
             likeCount: count,
             isLikeClicked: isClicked,
             chickenLegCount: chickenLegCount,
+            isChickenLegClicked: isChickenLegClicked,
+            opposeCount: opposeCount,
+            isOpposeClicked: isOpposeClicked
+        )
+    }
+
+    func updatingChickenLegReaction(count: Int?, isClicked: Bool) -> Comment {
+        Comment(
+            id: id,
+            anchorID: anchorID,
+            authorName: authorName,
+            isPoster: isPoster,
+            avatarURL: avatarURL,
+            authorProfileURL: authorProfileURL,
+            authorBadgeTexts: authorBadgeTexts,
+            floorText: floorText,
+            createdAtText: createdAtText,
+            createdAtTitleText: createdAtTitleText,
+            contentHTML: contentHTML,
+            isHot: isHot,
+            likeCount: likeCount,
+            isLikeClicked: isLikeClicked,
+            chickenLegCount: count,
+            isChickenLegClicked: isClicked,
             opposeCount: opposeCount,
             isOpposeClicked: isOpposeClicked
         )
@@ -386,6 +477,7 @@ nonisolated struct Comment: Equatable, Sendable {
             likeCount: likeCount,
             isLikeClicked: isLikeClicked,
             chickenLegCount: chickenLegCount,
+            isChickenLegClicked: isChickenLegClicked,
             opposeCount: count,
             isOpposeClicked: isClicked
         )

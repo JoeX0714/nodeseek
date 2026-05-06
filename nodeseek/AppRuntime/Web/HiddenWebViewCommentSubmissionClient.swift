@@ -88,6 +88,48 @@ struct HiddenWebViewPostUpvoteClient {
     }
 }
 
+struct HiddenWebViewCommentChickenLegClient {
+    private let timeoutInterval: TimeInterval
+
+    init(timeoutInterval: TimeInterval = 20) {
+        self.timeoutInterval = timeoutInterval
+    }
+
+    func submitChickenLeg(commentID: Int, action: String, referer: URL) async throws -> CommentChickenLegAutomationResponse {
+        try await withSharedHiddenWebViewLoader(
+            logMessage: "准备通过隐藏 WebView 提交评论鸡腿: commentID=\(commentID), action=\(action), referer=\(referer.absoluteString)"
+        ) { loader in
+            try await loader.submitCommentChickenLeg(
+                pageURL: referer,
+                commentID: commentID,
+                action: action,
+                timeoutInterval: timeoutInterval
+            )
+        }
+    }
+}
+
+struct HiddenWebViewPostChickenLegClient {
+    private let timeoutInterval: TimeInterval
+
+    init(timeoutInterval: TimeInterval = 20) {
+        self.timeoutInterval = timeoutInterval
+    }
+
+    func submitChickenLeg(postID: Int, action: String, referer: URL) async throws -> PostChickenLegAutomationResponse {
+        try await withSharedHiddenWebViewLoader(
+            logMessage: "准备通过隐藏 WebView 提交帖子鸡腿: postID=\(postID), action=\(action), referer=\(referer.absoluteString)"
+        ) { loader in
+            try await loader.submitPostChickenLeg(
+                pageURL: referer,
+                postID: postID,
+                action: action,
+                timeoutInterval: timeoutInterval
+            )
+        }
+    }
+}
+
 struct HiddenWebViewCommentDislikeClient {
     private let timeoutInterval: TimeInterval
 

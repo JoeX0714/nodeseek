@@ -161,6 +161,8 @@ struct CommentUpvoteResponse: Equatable, Sendable {
 }
 
 typealias PostUpvoteResponse = CommentUpvoteResponse
+typealias CommentChickenLegResponse = CommentUpvoteResponse
+typealias PostChickenLegResponse = CommentUpvoteResponse
 typealias CommentDislikeResponse = CommentUpvoteResponse
 typealias PostDislikeResponse = CommentUpvoteResponse
 
@@ -209,6 +211,8 @@ struct CommentUpvoteAutomationResponse: Equatable, Sendable {
 }
 
 typealias PostUpvoteAutomationResponse = CommentUpvoteAutomationResponse
+typealias CommentChickenLegAutomationResponse = CommentUpvoteAutomationResponse
+typealias PostChickenLegAutomationResponse = CommentUpvoteAutomationResponse
 typealias CommentDislikeAutomationResponse = CommentUpvoteAutomationResponse
 typealias PostDislikeAutomationResponse = CommentUpvoteAutomationResponse
 
@@ -225,6 +229,16 @@ protocol CommentUpvoteAutomating: AnyObject {
 @MainActor
 protocol PostUpvoteAutomating: AnyObject {
     func submitUpvote(postID: Int, action: String, referer: URL) async throws -> PostUpvoteAutomationResponse
+}
+
+@MainActor
+protocol CommentChickenLegAutomating: AnyObject {
+    func submitChickenLeg(commentID: Int, action: String, referer: URL) async throws -> CommentChickenLegAutomationResponse
+}
+
+@MainActor
+protocol PostChickenLegAutomating: AnyObject {
+    func submitChickenLeg(postID: Int, action: String, referer: URL) async throws -> PostChickenLegAutomationResponse
 }
 
 @MainActor
@@ -273,6 +287,30 @@ final class WebViewPostUpvoteAutomator: PostUpvoteAutomating {
     }
 }
 
+final class WebViewCommentChickenLegAutomator: CommentChickenLegAutomating {
+    private let client: HiddenWebViewCommentChickenLegClient
+
+    init(client: HiddenWebViewCommentChickenLegClient = HiddenWebViewCommentChickenLegClient()) {
+        self.client = client
+    }
+
+    func submitChickenLeg(commentID: Int, action: String, referer: URL) async throws -> CommentChickenLegAutomationResponse {
+        try await client.submitChickenLeg(commentID: commentID, action: action, referer: referer)
+    }
+}
+
+final class WebViewPostChickenLegAutomator: PostChickenLegAutomating {
+    private let client: HiddenWebViewPostChickenLegClient
+
+    init(client: HiddenWebViewPostChickenLegClient = HiddenWebViewPostChickenLegClient()) {
+        self.client = client
+    }
+
+    func submitChickenLeg(postID: Int, action: String, referer: URL) async throws -> PostChickenLegAutomationResponse {
+        try await client.submitChickenLeg(postID: postID, action: action, referer: referer)
+    }
+}
+
 final class WebViewCommentDislikeAutomator: CommentDislikeAutomating {
     private let client: HiddenWebViewCommentDislikeClient
 
@@ -311,6 +349,16 @@ protocol CommentUpvoteSubmitting: AnyObject {
 @MainActor
 protocol PostUpvoteSubmitting: AnyObject {
     func addUpvote(postID: String, referer: URL) async throws -> PostUpvoteResponse
+}
+
+@MainActor
+protocol CommentChickenLegSubmitting: AnyObject {
+    func addChickenLeg(commentID: String, referer: URL) async throws -> CommentChickenLegResponse
+}
+
+@MainActor
+protocol PostChickenLegSubmitting: AnyObject {
+    func addChickenLeg(postID: String, referer: URL) async throws -> PostChickenLegResponse
 }
 
 @MainActor
@@ -370,6 +418,40 @@ enum NodeSeekPostUpvoteSubmitterError: LocalizedError, Equatable {
             return message
         case .httpStatus(let statusCode):
             return "点赞失败，状态码 \(statusCode)。"
+        }
+    }
+}
+
+enum NodeSeekCommentChickenLegSubmitterError: LocalizedError, Equatable {
+    case invalidCommentID
+    case serverMessage(String)
+    case httpStatus(Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidCommentID:
+            return "评论 ID 无效，无法投放鸡腿。"
+        case .serverMessage(let message):
+            return message
+        case .httpStatus(let statusCode):
+            return "投放鸡腿失败，状态码 \(statusCode)。"
+        }
+    }
+}
+
+enum NodeSeekPostChickenLegSubmitterError: LocalizedError, Equatable {
+    case invalidPostID
+    case serverMessage(String)
+    case httpStatus(Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidPostID:
+            return "帖子 ID 无效，无法投放鸡腿。"
+        case .serverMessage(let message):
+            return message
+        case .httpStatus(let statusCode):
+            return "投放鸡腿失败，状态码 \(statusCode)。"
         }
     }
 }
@@ -562,6 +644,90 @@ final class NodeSeekPostUpvoteSubmitter: PostUpvoteSubmitting {
         }
 
         return upvoteResponse
+    }
+}
+
+@MainActor
+final class NodeSeekCommentChickenLegSubmitter: CommentChickenLegSubmitting {
+    private let automation: CommentChickenLegAutomating
+
+    init(automation: CommentChickenLegAutomating? = nil) {
+        self.automation = automation ?? WebViewCommentChickenLegAutomator()
+    }
+
+    func addChickenLeg(commentID: String, referer: URL) async throws -> CommentChickenLegResponse {
+        try await submit(commentID: commentID, action: "add", referer: referer)
+    }
+
+    private func submit(commentID: String, action: String, referer: URL) async throws -> CommentChickenLegResponse {
+        guard let numericCommentID = Int(commentID) else {
+            throw NodeSeekCommentChickenLegSubmitterError.invalidCommentID
+        }
+
+        let automationResponse = try await automation.submitChickenLeg(
+            commentID: numericCommentID,
+            action: action,
+            referer: referer
+        )
+        let response = automationResponse.response
+
+        if let statusCode = automationResponse.statusCode, !(200..<300).contains(statusCode) {
+            if let message = response.message {
+                throw NodeSeekCommentChickenLegSubmitterError.serverMessage(message)
+            }
+            throw NodeSeekCommentChickenLegSubmitterError.httpStatus(statusCode)
+        }
+
+        guard automationResponse.ok, response.success != false else {
+            if let message = response.message {
+                throw NodeSeekCommentChickenLegSubmitterError.serverMessage(message)
+            }
+            throw NodeSeekCommentChickenLegSubmitterError.serverMessage("投放鸡腿失败，请稍后重试。")
+        }
+
+        return response
+    }
+}
+
+@MainActor
+final class NodeSeekPostChickenLegSubmitter: PostChickenLegSubmitting {
+    private let automation: PostChickenLegAutomating
+
+    init(automation: PostChickenLegAutomating? = nil) {
+        self.automation = automation ?? WebViewPostChickenLegAutomator()
+    }
+
+    func addChickenLeg(postID: String, referer: URL) async throws -> PostChickenLegResponse {
+        try await submit(postID: postID, action: "add", referer: referer)
+    }
+
+    private func submit(postID: String, action: String, referer: URL) async throws -> PostChickenLegResponse {
+        guard let numericPostID = Int(postID) else {
+            throw NodeSeekPostChickenLegSubmitterError.invalidPostID
+        }
+
+        let automationResponse = try await automation.submitChickenLeg(
+            postID: numericPostID,
+            action: action,
+            referer: referer
+        )
+        let response = automationResponse.response
+
+        if let statusCode = automationResponse.statusCode, !(200..<300).contains(statusCode) {
+            if let message = response.message {
+                throw NodeSeekPostChickenLegSubmitterError.serverMessage(message)
+            }
+            throw NodeSeekPostChickenLegSubmitterError.httpStatus(statusCode)
+        }
+
+        guard automationResponse.ok, response.success != false else {
+            if let message = response.message {
+                throw NodeSeekPostChickenLegSubmitterError.serverMessage(message)
+            }
+            throw NodeSeekPostChickenLegSubmitterError.serverMessage("投放鸡腿失败，请稍后重试。")
+        }
+
+        return response
     }
 }
 

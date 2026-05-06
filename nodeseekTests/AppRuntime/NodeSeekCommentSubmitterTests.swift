@@ -212,6 +212,69 @@ struct NodeSeekCommentSubmitterTests {
         #expect(source.contains("postId: postID") == false)
     }
 
+    @Test func addCommentChickenLegUsesPageAutomation() async throws {
+        let automation = CapturingCommentChickenLegAutomation(response: .init(
+            ok: true,
+            statusCode: 200,
+            response: CommentChickenLegResponse(
+                success: true,
+                message: "added",
+                current: 2
+            ),
+            reason: "submitted"
+        ))
+        let submitter = NodeSeekCommentChickenLegSubmitter(automation: automation)
+
+        let response = try await submitter.addChickenLeg(
+            commentID: "9835758",
+            referer: URL(string: "https://www.nodeseek.com/post-712073-1")!
+        )
+
+        let submission = try #require(automation.submissions.first)
+        #expect(response.success == true)
+        #expect(response.message == "added")
+        #expect(response.current == 2)
+        #expect(submission.commentID == 9835758)
+        #expect(submission.action == "add")
+        #expect(submission.referer.absoluteString == "https://www.nodeseek.com/post-712073-1")
+    }
+
+    @Test func addPostChickenLegUsesPageAutomation() async throws {
+        let automation = CapturingPostChickenLegAutomation(response: .init(
+            ok: true,
+            statusCode: 200,
+            response: PostChickenLegResponse(
+                success: true,
+                message: "added",
+                current: 3
+            ),
+            reason: "submitted"
+        ))
+        let submitter = NodeSeekPostChickenLegSubmitter(automation: automation)
+
+        let response = try await submitter.addChickenLeg(
+            postID: "712073",
+            referer: URL(string: "https://www.nodeseek.com/post-712073-1")!
+        )
+
+        let submission = try #require(automation.submissions.first)
+        #expect(response.success == true)
+        #expect(response.message == "added")
+        #expect(response.current == 3)
+        #expect(submission.postID == 712073)
+        #expect(submission.action == "add")
+        #expect(submission.referer.absoluteString == "https://www.nodeseek.com/post-712073-1")
+    }
+
+    @Test func postChickenLegScriptSubmitsMainContentCommentID() {
+        let source = PostChickenLegAutomationScript.source
+
+        #expect(source.contains("/api/statistics/like"))
+        #expect(source.contains("data-comment-id"))
+        #expect(source.contains("commentId: commentID"))
+        #expect(source.contains("postId: postID") == false)
+    }
+
     @Test func addCommentDislikeUsesPageAutomation() async throws {
         let automation = CapturingCommentDislikeAutomation(response: .init(
             ok: true,
@@ -330,6 +393,36 @@ private final class CapturingPostUpvoteAutomation: PostUpvoteAutomating {
     }
 
     func submitUpvote(postID: Int, action: String, referer: URL) async throws -> PostUpvoteAutomationResponse {
+        submissions.append((postID: postID, action: action, referer: referer))
+        return response
+    }
+}
+
+@MainActor
+private final class CapturingCommentChickenLegAutomation: CommentChickenLegAutomating {
+    private(set) var submissions: [(commentID: Int, action: String, referer: URL)] = []
+    private let response: CommentChickenLegAutomationResponse
+
+    init(response: CommentChickenLegAutomationResponse) {
+        self.response = response
+    }
+
+    func submitChickenLeg(commentID: Int, action: String, referer: URL) async throws -> CommentChickenLegAutomationResponse {
+        submissions.append((commentID: commentID, action: action, referer: referer))
+        return response
+    }
+}
+
+@MainActor
+private final class CapturingPostChickenLegAutomation: PostChickenLegAutomating {
+    private(set) var submissions: [(postID: Int, action: String, referer: URL)] = []
+    private let response: PostChickenLegAutomationResponse
+
+    init(response: PostChickenLegAutomationResponse) {
+        self.response = response
+    }
+
+    func submitChickenLeg(postID: Int, action: String, referer: URL) async throws -> PostChickenLegAutomationResponse {
         submissions.append((postID: postID, action: action, referer: referer))
         return response
     }

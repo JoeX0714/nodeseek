@@ -74,7 +74,11 @@ extension PostDetailViewController {
                 replyCount: 0,
                 lastActivityText: nil
             )
-            let viewController = PostDetailRouter.createModule(post: post, page: page)
+            let viewController = PostDetailRouter.createModule(
+                post: post,
+                page: page,
+                initialAnchorID: NodeSeekPostRouteResolver.route(for: url, baseURL: baseURL)?.anchorID
+            )
             showDetailDestination(viewController)
         case .userProfile(let url):
             openUserInfo(profileURL: url)
@@ -89,6 +93,14 @@ extension PostDetailViewController {
     func openUserInfo(profileURL: URL) {
         let viewController = UserInfoWebViewController(profileURL: profileURL)
         showDetailDestination(viewController)
+    }
+
+    func consumeInitialAnchorIfNeeded() {
+        guard let anchorID = pendingInitialAnchorID else { return }
+        pendingInitialAnchorID = nil
+        DispatchQueue.main.async { [weak self] in
+            self?.scrollToCurrentPageAnchor(anchorID)
+        }
     }
 
     func scrollToCurrentPageAnchor(_ anchorID: String) {

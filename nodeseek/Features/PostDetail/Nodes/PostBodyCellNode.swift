@@ -27,6 +27,7 @@ final class PostBodyCellNode: ASCellNode {
     private let onLinkTapped: (URL) -> Void
     private let onAuthorTapped: (URL) -> Void
     private let onLikeTapped: () -> Void
+    private let onChickenLegTapped: () -> Void
     private let onOpposeTapped: () -> Void
     private let onFavoriteTapped: () -> Void
     private let onReplyTapped: () -> Void
@@ -94,6 +95,7 @@ final class PostBodyCellNode: ASCellNode {
         onLinkTapped: @escaping (URL) -> Void = { _ in },
         onAuthorTapped: @escaping (URL) -> Void = { _ in },
         onLikeTapped: @escaping () -> Void = {},
+        onChickenLegTapped: @escaping () -> Void = {},
         onOpposeTapped: @escaping () -> Void = {},
         onFavoriteTapped: @escaping () -> Void = {},
         onReplyTapped: @escaping () -> Void = {},
@@ -108,6 +110,7 @@ final class PostBodyCellNode: ASCellNode {
         self.onLinkTapped = onLinkTapped
         self.onAuthorTapped = onAuthorTapped
         self.onLikeTapped = onLikeTapped
+        self.onChickenLegTapped = onChickenLegTapped
         self.onOpposeTapped = onOpposeTapped
         self.onFavoriteTapped = onFavoriteTapped
         self.onReplyTapped = onReplyTapped
@@ -220,7 +223,7 @@ final class PostBodyCellNode: ASCellNode {
         )
 
         configureLikeActionButton(count: content.likeCount, isClicked: content.isLikeClicked)
-        configureActionButton(chickenLegButtonNode, systemImageName: "fork.knife", accessibilityLabel: "加鸡腿", count: content.chickenLegCount)
+        configureChickenLegActionButton(count: content.chickenLegCount, isClicked: content.isChickenLegClicked)
         configureOpposeActionButton(count: content.opposeCount, isClicked: content.isOpposeClicked)
         configureFavoriteActionButton(count: content.favoriteCount, isCollected: content.isFavoriteCollected)
         configureActionButton(replyButtonNode, systemImageName: "arrowshape.turn.up.left", accessibilityLabel: "回复楼主")
@@ -275,6 +278,7 @@ final class PostBodyCellNode: ASCellNode {
             authorButtonNode.addTarget(self, action: #selector(authorTapped), forControlEvents: .touchUpInside)
         }
         likeButtonNode.addTarget(self, action: #selector(likeTapped), forControlEvents: .touchUpInside)
+        chickenLegButtonNode.addTarget(self, action: #selector(chickenLegTapped), forControlEvents: .touchUpInside)
         opposeButtonNode.addTarget(self, action: #selector(opposeTapped), forControlEvents: .touchUpInside)
         favoriteButtonNode.addTarget(self, action: #selector(favoriteTapped), forControlEvents: .touchUpInside)
         replyButtonNode.addTarget(self, action: #selector(replyTapped), forControlEvents: .touchUpInside)
@@ -376,6 +380,10 @@ final class PostBodyCellNode: ASCellNode {
         isClicked ? .systemRed : UIColor.secondaryLabel.withAlphaComponent(0.72)
     }
 
+    private static func chickenLegActionColor(isClicked: Bool) -> UIColor {
+        isClicked ? .systemOrange : UIColor.secondaryLabel.withAlphaComponent(0.72)
+    }
+
     private static func opposeActionColor(isClicked: Bool) -> UIColor {
         isClicked ? .systemRed : UIColor.secondaryLabel.withAlphaComponent(0.72)
     }
@@ -400,6 +408,17 @@ final class PostBodyCellNode: ASCellNode {
             color: Self.opposeActionColor(isClicked: isClicked)
         )
         opposeButtonNode.style.preferredSize = CGSize(width: Layout.reactionActionWidth, height: 32)
+    }
+
+    private func configureChickenLegActionButton(count: Int?, isClicked: Bool) {
+        configureActionButton(
+            chickenLegButtonNode,
+            systemImageName: "fork.knife",
+            accessibilityLabel: "加鸡腿",
+            count: count,
+            color: Self.chickenLegActionColor(isClicked: isClicked)
+        )
+        chickenLegButtonNode.style.preferredSize = CGSize(width: Layout.reactionActionWidth, height: 32)
     }
 
     private func configureFavoriteActionButton(count: Int?, isCollected: Bool) {
@@ -473,6 +492,36 @@ final class PostBodyCellNode: ASCellNode {
         }
     }
 
+    private func updateChickenLegActionPresentation(count: Int?, isClicked: Bool) {
+        let color = Self.chickenLegActionColor(isClicked: isClicked)
+        let configuration = UIImage.SymbolConfiguration(pointSize: 15, weight: .regular)
+        let image = UIImage(systemName: "fork.knife", withConfiguration: configuration)?
+            .withTintColor(color, renderingMode: .alwaysOriginal)
+        chickenLegButtonNode.setImage(image, for: .normal)
+
+        let displayCount = count.flatMap { $0 > 0 ? $0 : nil }
+        if let displayCount {
+            let countText = Self.reactionCountText(displayCount)
+            let font = UIFont.preferredFont(forTextStyle: .caption1)
+            chickenLegButtonNode.setAttributedTitle(
+                NSAttributedString(
+                    string: countText,
+                    attributes: [
+                        .font: font,
+                        .foregroundColor: color
+                    ]
+                ),
+                for: .normal
+            )
+            chickenLegButtonNode.accessibilityLabel = "加鸡腿 \(displayCount)"
+            chickenLegButtonNode.contentSpacing = 4
+        } else {
+            chickenLegButtonNode.setAttributedTitle(nil, for: .normal)
+            chickenLegButtonNode.accessibilityLabel = "加鸡腿"
+            chickenLegButtonNode.contentSpacing = 0
+        }
+    }
+
     private func updateOpposeActionPresentation(count: Int?, isClicked: Bool) {
         let color = Self.opposeActionColor(isClicked: isClicked)
         let configuration = UIImage.SymbolConfiguration(pointSize: 15, weight: .regular)
@@ -510,6 +559,13 @@ final class PostBodyCellNode: ASCellNode {
         updateLikeActionPresentation(count: content.likeCount, isClicked: content.isLikeClicked)
     }
 
+    func updateChickenLegReaction(count: Int?, isClicked: Bool) {
+        let nextContent = content.updatingChickenLegReaction(count: count, isClicked: isClicked)
+        guard nextContent != content else { return }
+        content = nextContent
+        updateChickenLegActionPresentation(count: content.chickenLegCount, isClicked: content.isChickenLegClicked)
+    }
+
     func updateOpposeReaction(count: Int?, isClicked: Bool) {
         let nextContent = content.updatingOpposeReaction(count: count, isClicked: isClicked)
         guard nextContent != content else { return }
@@ -531,6 +587,10 @@ final class PostBodyCellNode: ASCellNode {
 
     @objc private func likeTapped() {
         onLikeTapped()
+    }
+
+    @objc private func chickenLegTapped() {
+        onChickenLegTapped()
     }
 
     @objc private func opposeTapped() {
@@ -603,6 +663,10 @@ final class PostBodyCellNode: ASCellNode {
         Self.likeActionColor(isClicked: content.isLikeClicked)
     }
 
+    var debugChickenLegActionColor: UIColor {
+        Self.chickenLegActionColor(isClicked: content.isChickenLegClicked)
+    }
+
     var debugOpposeActionColor: UIColor {
         Self.opposeActionColor(isClicked: content.isOpposeClicked)
     }
@@ -617,6 +681,10 @@ final class PostBodyCellNode: ASCellNode {
 
     func debugTapLikeAction() {
         likeTapped()
+    }
+
+    func debugTapChickenLegAction() {
+        chickenLegTapped()
     }
 
     func debugTapOpposeAction() {

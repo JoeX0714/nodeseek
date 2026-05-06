@@ -163,6 +163,7 @@ extension PostDetailViewController: PostDetailViewProtocol {
             if let row = detailRows.firstIndex(where: { if case .header = $0 { return true }; return false }),
                let node = tableNode.nodeForRow(at: IndexPath(row: row, section: 0)) as? PostBodyCellNode {
                 node.updateLikeReaction(count: nextContent.likeCount, isClicked: nextContent.isLikeClicked)
+                node.updateChickenLegReaction(count: nextContent.chickenLegCount, isClicked: nextContent.isChickenLegClicked)
                 node.updateOpposeReaction(count: nextContent.opposeCount, isClicked: nextContent.isOpposeClicked)
                 node.updateFavoriteReaction(count: nextContent.favoriteCount, isCollected: nextContent.isFavoriteCollected)
             }
@@ -187,6 +188,26 @@ extension PostDetailViewController: PostDetailViewProtocol {
         let indexPath = IndexPath(row: row, section: 0)
         if let node = tableNode.nodeForRow(at: indexPath) as? CommentCellNode {
             node.updateLikeReaction(count: count, isClicked: isClicked)
+            return
+        }
+
+        scheduleRowsReload([indexPath])
+    }
+
+    func updateCommentChickenLeg(commentID: String, count: Int?, isClicked: Bool) {
+        guard let commentIndex = comments.firstIndex(where: { $0.id == commentID }) else { return }
+        comments[commentIndex] = comments[commentIndex].updatingChickenLegReaction(count: count, isClicked: isClicked)
+
+        guard let row = detailRows.firstIndex(where: {
+            if case .comment(let index) = $0 {
+                return index == commentIndex
+            }
+            return false
+        }) else { return }
+
+        let indexPath = IndexPath(row: row, section: 0)
+        if let node = tableNode.nodeForRow(at: indexPath) as? CommentCellNode {
+            node.updateChickenLegReaction(count: count, isClicked: isClicked)
             return
         }
 
@@ -378,6 +399,7 @@ extension PostDetailViewController: PostDetailViewProtocol {
             preheatCommentRender(for: comments)
         }
         updateReplyButtonVisibility()
+        consumeInitialAnchorIfNeeded()
     }
 
     private func preservedRenderedCommentSnapshot(

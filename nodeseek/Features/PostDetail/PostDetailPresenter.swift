@@ -12,12 +12,15 @@ class PostDetailPresenter: PostDetailPresenterProtocol {
 
     private enum ReactionKind {
         case like
+        case chickenLeg
         case oppose
 
         var successToast: String {
             switch self {
             case .like:
                 return "已点赞"
+            case .chickenLeg:
+                return "已投放鸡腿"
             case .oppose:
                 return "已反对"
             }
@@ -27,6 +30,8 @@ class PostDetailPresenter: PostDetailPresenterProtocol {
             switch self {
             case .like:
                 return "正在点赞"
+            case .chickenLeg:
+                return "正在投放鸡腿"
             case .oppose:
                 return "正在反对"
             }
@@ -36,6 +41,8 @@ class PostDetailPresenter: PostDetailPresenterProtocol {
             switch self {
             case .like:
                 return "已点赞"
+            case .chickenLeg:
+                return "已投放鸡腿"
             case .oppose:
                 return "已反对"
             }
@@ -62,8 +69,10 @@ class PostDetailPresenter: PostDetailPresenterProtocol {
     private var isSubmittingReply = false
     private var isSubmittingFavorite = false
     private var isSubmittingPostLike = false
+    private var isSubmittingPostChickenLeg = false
     private var isSubmittingPostOppose = false
     private var submittingCommentLikeIDs = Set<String>()
+    private var submittingCommentChickenLegIDs = Set<String>()
     private var submittingCommentOpposeIDs = Set<String>()
     private var favoriteRollbackDetail: PostDetail?
     private var favoriteRollbackCollectedState: Bool?
@@ -150,6 +159,17 @@ class PostDetailPresenter: PostDetailPresenterProtocol {
         interactor.addCommentLike(commentID: comment.id)
     }
 
+    func didTapCommentChickenLeg(_ comment: Comment) {
+        guard comment.isChickenLegClicked == false else {
+            view?.showToast(message: ReactionKind.chickenLeg.commentAlreadyToast)
+            return
+        }
+        guard submittingCommentChickenLegIDs.contains(comment.id) == false else { return }
+        submittingCommentChickenLegIDs.insert(comment.id)
+        view?.showToast(message: ReactionKind.chickenLeg.pendingToast)
+        interactor.addCommentChickenLeg(commentID: comment.id)
+    }
+
     func didTapCommentOppose(_ comment: Comment) {
         guard comment.isOpposeClicked == false else {
             view?.showToast(message: ReactionKind.oppose.commentAlreadyToast)
@@ -170,6 +190,17 @@ class PostDetailPresenter: PostDetailPresenterProtocol {
         isSubmittingPostLike = true
         view?.showToast(message: ReactionKind.like.pendingToast)
         interactor.addPostLike()
+    }
+
+    func didTapPostChickenLeg() {
+        guard currentDetail?.isChickenLegClicked != true else {
+            view?.showToast(message: ReactionKind.chickenLeg.postAlreadyToast)
+            return
+        }
+        guard isSubmittingPostChickenLeg == false else { return }
+        isSubmittingPostChickenLeg = true
+        view?.showToast(message: ReactionKind.chickenLeg.pendingToast)
+        interactor.addPostChickenLeg()
     }
 
     func didTapPostOppose() {
@@ -265,6 +296,12 @@ class PostDetailPresenter: PostDetailPresenterProtocol {
                     count: reactionNextCount(current: currentCount, serverCount: response.current),
                     isClicked: true
                 )
+            case .chickenLeg:
+                currentCount = currentDetail.chickenLegCount
+                nextDetail = currentDetail.updatingPostChickenLegState(
+                    count: reactionNextCount(current: currentCount, serverCount: response.current),
+                    isClicked: true
+                )
             case .oppose:
                 currentCount = currentDetail.opposeCount
                 nextDetail = currentDetail.updatingPostOpposeState(
@@ -298,6 +335,15 @@ class PostDetailPresenter: PostDetailPresenterProtocol {
                     isClicked: true
                 )
                 view?.updateCommentLike(commentID: commentID, count: nextCount, isClicked: true)
+            case .chickenLeg:
+                currentCount = comment.chickenLegCount
+                nextCount = reactionNextCount(current: currentCount, serverCount: response.current)
+                nextDetail = currentDetail.updatingCommentChickenLegState(
+                    commentID: commentID,
+                    count: nextCount,
+                    isClicked: true
+                )
+                view?.updateCommentChickenLeg(commentID: commentID, count: nextCount, isClicked: true)
             case .oppose:
                 currentCount = comment.opposeCount
                 nextCount = reactionNextCount(current: currentCount, serverCount: response.current)
@@ -452,6 +498,26 @@ extension PostDetailPresenter: PostDetailInteractorOutput {
     func didFailAddCommentLike(commentID: String, error: String) {
         submittingCommentLikeIDs.remove(commentID)
         handleReactionFailure(error: error, kind: .like)
+    }
+
+    func didAddPostChickenLeg(_ response: PostChickenLegResponse) {
+        isSubmittingPostChickenLeg = false
+        applyPostReactionSuccess(response: response, kind: .chickenLeg)
+    }
+
+    func didFailAddPostChickenLeg(error: String) {
+        isSubmittingPostChickenLeg = false
+        handleReactionFailure(error: error, kind: .chickenLeg)
+    }
+
+    func didAddCommentChickenLeg(commentID: String, response: CommentChickenLegResponse) {
+        submittingCommentChickenLegIDs.remove(commentID)
+        applyCommentReactionSuccess(commentID: commentID, response: response, kind: .chickenLeg)
+    }
+
+    func didFailAddCommentChickenLeg(commentID: String, error: String) {
+        submittingCommentChickenLegIDs.remove(commentID)
+        handleReactionFailure(error: error, kind: .chickenLeg)
     }
 
     func didAddPostOppose(_ response: PostDislikeResponse) {

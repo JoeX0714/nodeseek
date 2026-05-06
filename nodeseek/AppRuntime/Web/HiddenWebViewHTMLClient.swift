@@ -509,6 +509,56 @@ final class HiddenWebViewLoader: NSObject, WKNavigationDelegate {
         return result
     }
 
+    func submitCommentChickenLeg(
+        pageURL: URL,
+        commentID: Int,
+        action: String,
+        timeoutInterval: TimeInterval
+    ) async throws -> CommentChickenLegAutomationResponse {
+        let response = try await loadAutomationPage(pageURL: pageURL, timeoutInterval: timeoutInterval)
+        if let challenge = ChallengeDetector().detect(response: response) {
+            return CommentChickenLegAutomationResponse(
+                ok: false,
+                statusCode: response.statusCode,
+                response: CommentChickenLegResponse(message: Self.message(for: challenge)),
+                reason: "challenge"
+            )
+        }
+
+        let result = try await evaluateCommentChickenLegScript(
+            commentID: commentID,
+            action: action,
+            timeoutInterval: timeoutInterval
+        )
+        await cookieBridge.syncWebViewCookiesToURLSession()
+        return result
+    }
+
+    func submitPostChickenLeg(
+        pageURL: URL,
+        postID: Int,
+        action: String,
+        timeoutInterval: TimeInterval
+    ) async throws -> PostChickenLegAutomationResponse {
+        let response = try await loadAutomationPage(pageURL: pageURL, timeoutInterval: timeoutInterval)
+        if let challenge = ChallengeDetector().detect(response: response) {
+            return PostChickenLegAutomationResponse(
+                ok: false,
+                statusCode: response.statusCode,
+                response: PostChickenLegResponse(message: Self.message(for: challenge)),
+                reason: "challenge"
+            )
+        }
+
+        let result = try await evaluatePostChickenLegScript(
+            postID: postID,
+            action: action,
+            timeoutInterval: timeoutInterval
+        )
+        await cookieBridge.syncWebViewCookiesToURLSession()
+        return result
+    }
+
     func submitCommentDislike(
         pageURL: URL,
         commentID: Int,
@@ -904,6 +954,118 @@ final class HiddenWebViewLoader: NSObject, WKNavigationDelegate {
             current: Self.intValue(responseObject?["current"] as Any)
         )
         return PostUpvoteAutomationResponse(
+            ok: ok,
+            statusCode: statusCode,
+            response: response,
+            reason: reason,
+            body: body
+        )
+    }
+
+    private func evaluateCommentChickenLegScript(
+        commentID: Int,
+        action: String,
+        timeoutInterval: TimeInterval
+    ) async throws -> CommentChickenLegAutomationResponse {
+        let timeoutMilliseconds = max(5_000, Int(timeoutInterval * 1_000))
+        let result: Any?
+        do {
+            result = try await webView.callAsyncJavaScript(
+                CommentChickenLegAutomationScript.source,
+                arguments: [
+                    "commentID": commentID,
+                    "action": action,
+                    "timeoutMs": timeoutMilliseconds
+                ],
+                in: nil,
+                contentWorld: .page
+            )
+        } catch {
+            let nsError = error as NSError
+            AppLog.error(.webView, "鸡腿脚本执行异常: domain=\(nsError.domain), code=\(nsError.code), info=\(String(describing: nsError.userInfo))")
+            return CommentChickenLegAutomationResponse(
+                ok: false,
+                response: CommentChickenLegResponse(message: error.localizedDescription),
+                reason: "javascript_exception"
+            )
+        }
+
+        guard let object = result as? [String: Any] else {
+            return CommentChickenLegAutomationResponse(
+                ok: false,
+                response: CommentChickenLegResponse(),
+                reason: "invalid_script_result"
+            )
+        }
+
+        let ok = object["ok"] as? Bool ?? false
+        let statusCode = (object["statusCode"] as? NSNumber)?.intValue ?? object["statusCode"] as? Int
+        let reason = object["reason"] as? String ?? "unknown"
+        let body = object["body"] as? String
+        let responseObject = object["response"] as? [String: Any]
+        let message = responseObject?["message"] as? String ?? object["message"] as? String
+        let response = CommentChickenLegResponse(
+            success: responseObject?["success"] as? Bool,
+            message: message,
+            current: Self.intValue(responseObject?["current"] as Any)
+        )
+        return CommentChickenLegAutomationResponse(
+            ok: ok,
+            statusCode: statusCode,
+            response: response,
+            reason: reason,
+            body: body
+        )
+    }
+
+    private func evaluatePostChickenLegScript(
+        postID: Int,
+        action: String,
+        timeoutInterval: TimeInterval
+    ) async throws -> PostChickenLegAutomationResponse {
+        let timeoutMilliseconds = max(5_000, Int(timeoutInterval * 1_000))
+        let result: Any?
+        do {
+            result = try await webView.callAsyncJavaScript(
+                PostChickenLegAutomationScript.source,
+                arguments: [
+                    "postID": postID,
+                    "action": action,
+                    "timeoutMs": timeoutMilliseconds
+                ],
+                in: nil,
+                contentWorld: .page
+            )
+        } catch {
+            let nsError = error as NSError
+            AppLog.error(.webView, "帖子鸡腿脚本执行异常: domain=\(nsError.domain), code=\(nsError.code), info=\(String(describing: nsError.userInfo))")
+            return PostChickenLegAutomationResponse(
+                ok: false,
+                response: PostChickenLegResponse(message: error.localizedDescription),
+                reason: "javascript_exception"
+            )
+        }
+
+        guard let object = result as? [String: Any] else {
+            return PostChickenLegAutomationResponse(
+                ok: false,
+                response: PostChickenLegResponse(),
+                reason: "invalid_script_result"
+            )
+        }
+
+        let ok = object["ok"] as? Bool ?? false
+        let statusCode = (object["statusCode"] as? NSNumber)?.intValue ?? object["statusCode"] as? Int
+        let reason = object["reason"] as? String ?? "unknown"
+        let body = object["body"] as? String
+        let responseObject = object["response"] as? [String: Any]
+        let message = responseObject?["message"] as? String ?? object["message"] as? String
+        let response = PostChickenLegResponse(
+            success: responseObject?["success"] as? Bool,
+            message: message,
+            current: Self.intValue(responseObject?["current"] as Any)
+        )
+        return PostChickenLegAutomationResponse(
             ok: ok,
             statusCode: statusCode,
             response: response,

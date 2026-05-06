@@ -308,6 +308,48 @@ struct PostDetailInteractorTests {
         #expect(presenter.postLikeErrorMessage == "缺少帖子信息，无法点赞。")
     }
 
+    @Test func addCommentChickenLegUsesSubmitterAndReportsSuccess() async throws {
+        let submitter = SpyCommentChickenLegSubmitting(response: CommentChickenLegResponse(message: "added", current: 2))
+        let presenter = SpyPostDetailInteractorOutput()
+        let post = Self.makePost()
+        let interactor = PostDetailInteractor(
+            post: post,
+            service: Self.makeUnusedService(),
+            commentChickenLegSubmitter: submitter,
+            sessionStore: NodeSeekSessionStore()
+        )
+        interactor.presenter = presenter
+
+        interactor.addCommentChickenLeg(commentID: "9835758")
+        await waitForInteractorCallbacks()
+
+        #expect(submitter.submittedCommentID == "9835758")
+        #expect(submitter.submittedReferer == post.url)
+        #expect(presenter.commentChickenLegResponse == CommentChickenLegResponse(message: "added", current: 2))
+        #expect(presenter.commentChickenLegErrorMessage == nil)
+    }
+
+    @Test func addPostChickenLegUsesSubmitterAndReportsSuccess() async throws {
+        let submitter = SpyPostChickenLegSubmitting(response: PostChickenLegResponse(message: "added", current: 3))
+        let presenter = SpyPostDetailInteractorOutput()
+        let post = Self.makePost()
+        let interactor = PostDetailInteractor(
+            post: post,
+            service: Self.makeUnusedService(),
+            postChickenLegSubmitter: submitter,
+            sessionStore: NodeSeekSessionStore()
+        )
+        interactor.presenter = presenter
+
+        interactor.addPostChickenLeg()
+        await waitForInteractorCallbacks()
+
+        #expect(submitter.submittedPostID == post.id)
+        #expect(submitter.submittedReferer == post.url)
+        #expect(presenter.postChickenLegResponse == PostChickenLegResponse(message: "added", current: 3))
+        #expect(presenter.postChickenLegErrorMessage == nil)
+    }
+
     @Test func addCommentOpposeUsesDislikeSubmitterAndReportsSuccess() async throws {
         let dislikeSubmitter = SpyCommentDislikeSubmitting(response: CommentDislikeResponse(message: "added", current: 1))
         let presenter = SpyPostDetailInteractorOutput()
@@ -393,6 +435,10 @@ private final class SpyPostDetailInteractorOutput: PostDetailInteractorOutput {
     var postLikeErrorMessage: String?
     var commentLikeResponse: CommentUpvoteResponse?
     var commentLikeErrorMessage: String?
+    var postChickenLegResponse: PostChickenLegResponse?
+    var postChickenLegErrorMessage: String?
+    var commentChickenLegResponse: CommentChickenLegResponse?
+    var commentChickenLegErrorMessage: String?
     var postOpposeResponse: PostDislikeResponse?
     var postOpposeErrorMessage: String?
     var commentOpposeResponse: CommentDislikeResponse?
@@ -453,6 +499,22 @@ private final class SpyPostDetailInteractorOutput: PostDetailInteractorOutput {
 
     func didFailAddCommentLike(commentID: String, error: String) {
         commentLikeErrorMessage = error
+    }
+
+    func didAddPostChickenLeg(_ response: PostChickenLegResponse) {
+        postChickenLegResponse = response
+    }
+
+    func didFailAddPostChickenLeg(error: String) {
+        postChickenLegErrorMessage = error
+    }
+
+    func didAddCommentChickenLeg(commentID: String, response: CommentChickenLegResponse) {
+        commentChickenLegResponse = response
+    }
+
+    func didFailAddCommentChickenLeg(commentID: String, error: String) {
+        commentChickenLegErrorMessage = error
     }
 
     func didAddPostOppose(_ response: PostDislikeResponse) {
@@ -575,6 +637,40 @@ private final class SpyPostUpvoteSubmitting: PostUpvoteSubmitting {
     }
 
     func addUpvote(postID: String, referer: URL) async throws -> PostUpvoteResponse {
+        submittedPostID = postID
+        submittedReferer = referer
+        return response
+    }
+}
+
+@MainActor
+private final class SpyCommentChickenLegSubmitting: CommentChickenLegSubmitting {
+    private let response: CommentChickenLegResponse
+    private(set) var submittedCommentID: String?
+    private(set) var submittedReferer: URL?
+
+    init(response: CommentChickenLegResponse) {
+        self.response = response
+    }
+
+    func addChickenLeg(commentID: String, referer: URL) async throws -> CommentChickenLegResponse {
+        submittedCommentID = commentID
+        submittedReferer = referer
+        return response
+    }
+}
+
+@MainActor
+private final class SpyPostChickenLegSubmitting: PostChickenLegSubmitting {
+    private let response: PostChickenLegResponse
+    private(set) var submittedPostID: String?
+    private(set) var submittedReferer: URL?
+
+    init(response: PostChickenLegResponse) {
+        self.response = response
+    }
+
+    func addChickenLeg(postID: String, referer: URL) async throws -> PostChickenLegResponse {
         submittedPostID = postID
         submittedReferer = referer
         return response

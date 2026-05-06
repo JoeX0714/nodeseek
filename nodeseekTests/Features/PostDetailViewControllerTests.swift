@@ -563,6 +563,66 @@ struct PostDetailViewControllerTests {
         #expect(viewController.testRowCount(inSection: 0) == 3)
     }
 
+    @Test func tappingPostChickenLegRequiresConfirmationBeforeSubmitting() throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter)
+        let header = PostDetailHeaderContent(
+            postID: "710379",
+            title: "带操作区的主题",
+            authorName: "mist",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "<p>正文</p>",
+            chickenLegCount: 1
+        )
+        var confirmationContext: ChickenLegConfirmationContext?
+        var confirmAction: (() -> Void)?
+        viewController.chickenLegConfirmationPresenter = { _, context, onConfirm in
+            confirmationContext = context
+            confirmAction = onConfirm
+        }
+
+        viewController.handlePostChickenLegTap(header)
+
+        #expect(confirmationContext == .post)
+        #expect(presenter.didTapPostChickenLegCount == 0)
+
+        let action = try #require(confirmAction)
+        action()
+
+        #expect(presenter.didTapPostChickenLegCount == 1)
+    }
+
+    @Test func tappingCommentChickenLegRequiresConfirmationBeforeSubmitting() throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter)
+        let comment = Comment(
+            id: "9835758",
+            authorName: "mist",
+            avatarURL: nil,
+            floorText: "#1",
+            createdAtText: "刚刚",
+            contentHTML: "<p>内容</p>",
+            chickenLegCount: 1
+        )
+        var confirmationContext: ChickenLegConfirmationContext?
+        var confirmAction: (() -> Void)?
+        viewController.chickenLegConfirmationPresenter = { _, context, onConfirm in
+            confirmationContext = context
+            confirmAction = onConfirm
+        }
+
+        viewController.handleCommentChickenLegTap(comment)
+
+        #expect(confirmationContext == .comment)
+        #expect(presenter.chickenLeggedCommentIDs.isEmpty)
+
+        let action = try #require(confirmAction)
+        action()
+
+        #expect(presenter.chickenLeggedCommentIDs == ["9835758"])
+    }
+
     @Test func addsMoreMenuAndCanTriggerReload() throws {
         let presenter = SpyPostDetailPresenter()
         let viewController = PostDetailViewController(presenter: presenter)
@@ -734,6 +794,7 @@ struct PostDetailViewControllerTests {
             isFavoriteCollected: true
         )
         var likeTapCount = 0
+        var chickenLegTapCount = 0
         var opposeTapCount = 0
         var favoriteTapCount = 0
         var replyTapCount = 0
@@ -744,6 +805,9 @@ struct PostDetailViewControllerTests {
             onImageTapped: { _, _ in },
             onLikeTapped: {
                 likeTapCount += 1
+            },
+            onChickenLegTapped: {
+                chickenLegTapCount += 1
             },
             onOpposeTapped: {
                 opposeTapCount += 1
@@ -764,6 +828,7 @@ struct PostDetailViewControllerTests {
             max: CGSize(width: 360, height: CGFloat.greatestFiniteMagnitude)
         ))
         node.debugTapLikeAction()
+        node.debugTapChickenLegAction()
         node.debugTapOpposeAction()
         node.debugTapFavoriteAction()
         node.debugTapReplyAction()
@@ -773,6 +838,7 @@ struct PostDetailViewControllerTests {
         #expect(node.debugFooterActionAccessibilityLabels == ["点赞", "加鸡腿 1", "反对", "收藏 2", "回复楼主", "评论帖子"])
         #expect(node.debugFavoriteActionColor == .systemYellow)
         #expect(likeTapCount == 1)
+        #expect(chickenLegTapCount == 1)
         #expect(opposeTapCount == 1)
         #expect(favoriteTapCount == 1)
         #expect(replyTapCount == 1)
@@ -801,6 +867,30 @@ struct PostDetailViewControllerTests {
         #expect(node.debugReactionActionTitles.first == "1")
         #expect(node.debugFooterActionAccessibilityLabels.first == "点赞 1")
         #expect(node.debugLikeActionColor == .systemRed)
+    }
+
+    @Test func postBodyCellUpdatesChickenLegReactionInPlace() {
+        let header = PostDetailHeaderContent(
+            postID: "710379",
+            title: "带操作区的主题",
+            authorName: "mist",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "<p>正文</p>",
+            chickenLegCount: 1
+        )
+        let node = PostBodyCellNode(
+            content: header,
+            renderedContent: [],
+            onImageTapped: { _, _ in },
+            onTextLayoutInvalidated: {}
+        )
+
+        node.updateChickenLegReaction(count: 2, isClicked: true)
+
+        #expect(node.debugReactionActionTitles[1] == "2")
+        #expect(node.debugFooterActionAccessibilityLabels[1] == "加鸡腿 2")
+        #expect(node.debugChickenLegActionColor == .systemOrange)
     }
 
     @Test func postBodyCellUpdatesOpposeReactionInPlace() {
@@ -1063,6 +1153,30 @@ struct PostDetailViewControllerTests {
         #expect(node.debugReactionActionTitles.first == "1")
         #expect(node.debugFooterActionAccessibilityLabels.first == "点赞 1")
         #expect(node.debugLikeActionColor == .systemRed)
+    }
+
+    @Test func commentCellUpdatesChickenLegReactionInPlace() {
+        let comment = Comment(
+            id: "1",
+            authorName: "ipv4",
+            avatarURL: nil,
+            floorText: "#1",
+            createdAtText: "刚刚",
+            contentHTML: "<p>评论</p>",
+            chickenLegCount: 1
+        )
+        let node = CommentCellNode(
+            comment: comment,
+            renderedBody: [],
+            onImageTapped: { _, _ in },
+            onTextLayoutInvalidated: {}
+        )
+
+        node.updateChickenLegReaction(count: 2, isClicked: true)
+
+        #expect(node.debugReactionActionTitles[1] == "2")
+        #expect(node.debugFooterActionAccessibilityLabels[1] == "加鸡腿 2")
+        #expect(node.debugChickenLegActionColor == .systemOrange)
     }
 
     @Test func commentCellUpdatesOpposeReactionInPlace() {
@@ -1344,6 +1458,21 @@ struct PostDetailViewControllerTests {
         #expect(resolvedURL.absoluteString == "https://www.nodeseek.com/post-704174-2#8")
     }
 
+    @Test func resolvesNodeSeekPostLinksWithoutPageToNativeDetailPageOne() throws {
+        let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
+        let url = try #require(URL(string: "/post-704174", relativeTo: baseURL)?.absoluteURL)
+
+        let destination = try #require(PostDetailLinkResolver.destination(for: url, baseURL: baseURL))
+
+        guard case .nativePost(let postID, let page, let resolvedURL) = destination else {
+            Issue.record("Expected native post destination")
+            return
+        }
+        #expect(postID == "704174")
+        #expect(page == 1)
+        #expect(resolvedURL.absoluteString == "https://www.nodeseek.com/post-704174")
+    }
+
     @Test func resolvesCurrentPageHashLinksToCurrentPageAnchor() throws {
         let baseURL = try #require(URL(string: "https://www.nodeseek.com"))
         let url = try #require(URL(string: "#4", relativeTo: baseURL)?.absoluteURL)
@@ -1402,6 +1531,44 @@ struct PostDetailViewControllerTests {
 
         #expect(viewController.testCurrentPageAnchorRow(for: "0") == 0)
         #expect(viewController.testCurrentPageAnchorRow(for: "1") == 2)
+    }
+
+    @Test func consumesInitialAnchorAfterFirstDetailRender() async throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter, initialAnchorID: "2")
+        viewController.loadViewIfNeeded()
+
+        viewController.render(detail: PostDetail(
+            id: "703863",
+            title: "详情标题",
+            authorName: "ipv4",
+            avatarURL: nil,
+            metadataText: "刚刚",
+            contentHTML: "<p>正文</p>",
+            comments: [
+                Comment(
+                    id: "1",
+                    authorName: "a",
+                    avatarURL: nil,
+                    floorText: "#1",
+                    createdAtText: "1min ago",
+                    contentHTML: "<p>一楼</p>"
+                ),
+                Comment(
+                    id: "2",
+                    authorName: "b",
+                    avatarURL: nil,
+                    floorText: "#2",
+                    createdAtText: "2min ago",
+                    contentHTML: "<p>二楼</p>"
+                )
+            ],
+            page: 1,
+            pagination: nil
+        ))
+        await waitForDetailContent(in: viewController)
+
+        #expect(viewController.testPendingInitialAnchorID == nil)
     }
 
     @Test func resolvesCurrentPostSamePageFragmentLinksToCurrentPageAnchor() throws {
@@ -2173,8 +2340,10 @@ private final class SpyPostDetailPresenter: PostDetailPresenterProtocol {
     private(set) var sentReplyContent: String?
     private(set) var didTapFavoriteCount = 0
     private(set) var didTapPostLikeCount = 0
+    private(set) var didTapPostChickenLegCount = 0
     private(set) var didTapPostOpposeCount = 0
     private(set) var likedCommentIDs: [String] = []
+    private(set) var chickenLeggedCommentIDs: [String] = []
     private(set) var opposedCommentIDs: [String] = []
 
     func viewDidLoad() {
@@ -2201,12 +2370,20 @@ private final class SpyPostDetailPresenter: PostDetailPresenterProtocol {
         didTapPostLikeCount += 1
     }
 
+    func didTapPostChickenLeg() {
+        didTapPostChickenLegCount += 1
+    }
+
     func didTapPostOppose() {
         didTapPostOpposeCount += 1
     }
 
     func didTapCommentLike(_ comment: nodeseek.Comment) {
         likedCommentIDs.append(comment.id)
+    }
+
+    func didTapCommentChickenLeg(_ comment: nodeseek.Comment) {
+        chickenLeggedCommentIDs.append(comment.id)
     }
 
     func didTapCommentOppose(_ comment: nodeseek.Comment) {

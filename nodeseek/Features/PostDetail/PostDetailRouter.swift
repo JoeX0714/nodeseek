@@ -14,7 +14,11 @@ class PostDetailRouter: PostDetailRouterProtocol {
     weak var viewController: UIViewController?
     
     // MARK: - Static Methods
-    static func createModule(post: PostSummary? = nil, page: Int = 1) -> UIViewController {
+    static func createModule(
+        post: PostSummary? = nil,
+        page: Int = 1,
+        initialAnchorID: String? = nil
+    ) -> UIViewController {
         let router = PostDetailRouter()
         let interactor = PostDetailInteractor(post: post, page: page)
         let presenter = PostDetailPresenter(
@@ -30,7 +34,8 @@ class PostDetailRouter: PostDetailRouterProtocol {
             presenter: presenter,
             initialHeader: post.map(PostDetailHeaderContent.init(post:)),
             sourcePostURL: post?.url,
-            currentPage: page
+            currentPage: page,
+            initialAnchorID: initialAnchorID
         )
         
         presenter.setView(view)
