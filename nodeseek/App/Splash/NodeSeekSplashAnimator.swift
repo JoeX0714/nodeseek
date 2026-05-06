@@ -5,7 +5,7 @@
 
 import UIKit
 
-enum NodeSeekSplashTimeline {
+nonisolated enum NodeSeekSplashTimeline {
     static let animationDuration: CFTimeInterval = 1.65
     static let reduceMotionDuration: CFTimeInterval = 0.18
 

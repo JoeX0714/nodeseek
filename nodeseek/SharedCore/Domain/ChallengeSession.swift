@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum NodeSeekSessionState: Equatable, Sendable {
+nonisolated enum NodeSeekSessionState: Equatable, Sendable {
     case idle
     case challengeRequired(ChallengeKind, updatedAt: Date)
     case ready(lastSucceededAt: Date)

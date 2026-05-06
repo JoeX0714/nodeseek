@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct VisitedPostRecord: Equatable, Sendable {
+nonisolated struct VisitedPostRecord: Equatable, Sendable {
     let postID: String
     let title: String
     let url: URL
@@ -15,7 +15,7 @@ struct VisitedPostRecord: Equatable, Sendable {
     let avatarURL: URL?
 }
 
-struct PostListItem: Equatable, Sendable {
+nonisolated struct PostListItem: Equatable, Sendable {
     let post: PostSummary
     let isVisited: Bool
 }

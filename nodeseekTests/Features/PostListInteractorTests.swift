@@ -88,7 +88,7 @@ private actor URLCapturingHTMLClient: HTMLClient {
         return response
     }
 
-    func post(_ url: URL, formFields: [String : String]) async throws -> HTMLResponse {
+    func post(_ url: URL, formFields: [String: String]) async throws -> HTMLResponse {
         urls.append(url)
         return response
     }

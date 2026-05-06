@@ -7,18 +7,18 @@
 
 import CoreGraphics
 
-enum DetailImageDisplayMode {
+nonisolated enum DetailImageDisplayMode: Equatable, Sendable {
     case thumbnailCrop
     case aspectFit
 }
 
-enum DetailImageKind {
+nonisolated enum DetailImageKind: Equatable, Sendable {
     case normal
     case sticker
     case report
 }
 
-struct DetailImagePresentation {
+nonisolated struct DetailImagePresentation: Equatable, Sendable {
     let size: CGSize
     let mode: DetailImageDisplayMode
 
@@ -27,7 +27,7 @@ struct DetailImagePresentation {
     }
 }
 
-enum DetailImageLayout {
+nonisolated enum DetailImageLayout {
     static let fixedStickerWidth: CGFloat = 65
     static let maxImageHeight: CGFloat = 420
     private static let extremeAspectRatio: CGFloat = 1.8

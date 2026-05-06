@@ -37,7 +37,7 @@ nonisolated struct AccountResponse: Equatable, Sendable {
     }
 }
 
-struct PostSummary: Equatable, Sendable {
+nonisolated struct PostSummary: Equatable, Sendable {
     let id: String
     let title: String
     let url: URL
@@ -77,13 +77,13 @@ struct PostSummary: Equatable, Sendable {
     }
 }
 
-struct PostDetailPageItem: Equatable, Sendable {
+nonisolated struct PostDetailPageItem: Equatable, Sendable {
     let page: Int
     let url: URL?
     let isCurrent: Bool
 }
 
-struct PostDetailPagination: Equatable, Sendable {
+nonisolated struct PostDetailPagination: Equatable, Sendable {
     let currentPage: Int
     let items: [PostDetailPageItem]
     let previousPage: Int?
@@ -94,7 +94,7 @@ struct PostDetailPagination: Equatable, Sendable {
     }
 }
 
-struct PostDetail: Equatable, Sendable {
+nonisolated struct PostDetail: Equatable, Sendable {
     let id: String
     let title: String
     let requiredReadingLevel: Int?
@@ -290,7 +290,7 @@ struct PostDetail: Equatable, Sendable {
     }
 }
 
-struct Comment: Equatable, Sendable {
+nonisolated struct Comment: Equatable, Sendable {
     let id: String
     let anchorID: String?
     let authorName: String
@@ -392,19 +392,19 @@ struct Comment: Equatable, Sendable {
     }
 }
 
-struct CheckInState: Equatable, Sendable {
+nonisolated struct CheckInState: Equatable, Sendable {
     let isCheckedIn: Bool
     let message: String
     let actionURL: URL?
     let hiddenFields: [String: String]
 }
 
-struct UserSummary: Equatable, Sendable {
+nonisolated struct UserSummary: Equatable, Sendable {
     let displayName: String
     let isLoggedIn: Bool
 }
 
-enum AuthorDisplayPolicy {
+nonisolated enum AuthorDisplayPolicy {
     static func displayName(from rawName: String) -> String? {
         let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, name != "未知用户" else {

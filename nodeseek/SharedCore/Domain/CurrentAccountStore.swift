@@ -8,7 +8,7 @@
 import Foundation
 
 actor CurrentAccountStore {
-    struct Snapshot: Equatable, Sendable {
+    nonisolated struct Snapshot: Equatable, Sendable {
         let account: AccountResponse
         let updatedAt: Date
     }

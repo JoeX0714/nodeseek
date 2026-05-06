@@ -30,8 +30,8 @@ class PostDetailInteractor: PostDetailInteractorInput {
     // MARK: - Initialization
     init(
         post: PostSummary? = nil,
-        service: NodeSeekService = NodeSeekService(),
-        commentSubmitter: NodeSeekCommentSubmitter = NodeSeekCommentSubmitter(),
+        service: NodeSeekService? = nil,
+        commentSubmitter: NodeSeekCommentSubmitter? = nil,
         collectionSubmitter: PostCollectionSubmitting? = nil,
         postUpvoteSubmitter: PostUpvoteSubmitting? = nil,
         commentUpvoteSubmitter: CommentUpvoteSubmitting? = nil,
@@ -41,9 +41,9 @@ class PostDetailInteractor: PostDetailInteractorInput {
         sessionStore: NodeSeekSessionStore = .shared
     ) {
         self.post = post
-        self.service = service
+        self.service = service ?? NodeSeekService()
         self.initialPage = max(1, page)
-        self.commentSubmitter = commentSubmitter
+        self.commentSubmitter = commentSubmitter ?? NodeSeekCommentSubmitter()
         self.collectionSubmitter = collectionSubmitter ?? NodeSeekPostCollectionSubmitter()
         self.postUpvoteSubmitter = postUpvoteSubmitter ?? NodeSeekPostUpvoteSubmitter()
         self.commentUpvoteSubmitter = commentUpvoteSubmitter ?? NodeSeekCommentUpvoteSubmitter()

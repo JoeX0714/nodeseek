@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum ChallengeKind: Equatable, Sendable {
+nonisolated enum ChallengeKind: Equatable, Sendable {
     case loginRequired(URL)
     case cloudflare(URL)
     case blocked(URL)
@@ -29,7 +29,7 @@ extension ChallengeKind {
     }
 }
 
-enum NodeSeekResult<Value: Sendable>: Sendable {
+nonisolated enum NodeSeekResult<Value: Sendable>: Sendable {
     case value(Value)
     case challenge(ChallengeKind)
 }
