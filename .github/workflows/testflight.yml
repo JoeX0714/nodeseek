@@ -1,0 +1,173 @@
+name: TestFlight
+
+on:
+  push:
+    tags:
+      - "ios/v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Marketing version, for example 1.0.1"
+        required: true
+        type: string
+      build_number:
+        description: "App Store build number"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: testflight-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  testflight:
+    name: Build and upload TestFlight
+    runs-on: macos-15
+    environment: app-store
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+
+      - name: Show build tool versions
+        run: |
+          ruby -v
+          bundle exec fastlane --version
+          xcodebuild -version
+
+      - name: Prepare release inputs
+        id: release
+        env:
+          MANUAL_VERSION: ${{ inputs.version }}
+          MANUAL_BUILD_NUMBER: ${{ inputs.build_number }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            tag="${GITHUB_REF_NAME}"
+            if [[ ! "${tag}" =~ ^ios/v[0-9]+(\.[0-9]+){1,2}$ ]]; then
+              echo "Tag must match ios/v1.0 or ios/v1.0.0, got: ${tag}" >&2
+              exit 1
+            fi
+
+            git fetch --quiet origin main
+            if ! git merge-base --is-ancestor "${GITHUB_SHA}" origin/main; then
+              echo "Release tag must point to a commit reachable from origin/main." >&2
+              exit 1
+            fi
+
+            version="${tag#ios/v}"
+            build_number="${GITHUB_RUN_NUMBER}"
+          else
+            version="${MANUAL_VERSION}"
+            build_number="${MANUAL_BUILD_NUMBER}"
+          fi
+
+          if [[ -z "${version}" || -z "${build_number}" ]]; then
+            echo "version and build_number are required." >&2
+            exit 1
+          fi
+
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "build_number=${build_number}" >> "${GITHUB_OUTPUT}"
+          echo "Release version=${version} build_number=${build_number}"
+
+      - name: Build and upload to TestFlight
+        run: bundle exec fastlane beta version:${{ steps.release.outputs.version }} build_number:${{ steps.release.outputs.build_number }}
+        env:
+          APP_IDENTIFIER: com.mistj.nodeseek
+          APP_STORE_CONNECT_APP_ID: "6766863710"
+          APPLE_TEAM_ID: Z9K94479DQ
+          APP_STORE_CONNECT_TEAM_ID: ${{ secrets.APP_STORE_CONNECT_TEAM_ID }}
+          APP_STORE_CONNECT_PROVIDER_PUBLIC_ID: ${{ secrets.APP_STORE_CONNECT_PROVIDER_PUBLIC_ID }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_KEY_CONTENT }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD: ${{ secrets.FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD }}
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          MATCH_GIT_PRIVATE_KEY: ${{ secrets.MATCH_GIT_PRIVATE_KEY }}
+          TESTFLIGHT_GROUPS: ${{ vars.TESTFLIGHT_GROUPS || '' }}
+          TESTFLIGHT_CHANGELOG: ${{ vars.TESTFLIGHT_CHANGELOG || 'Please test browsing discussion lists, opening post details, signing in with a NodeSeek account, replying to posts, loading images, viewing user information, and general navigation stability.' }}
+          TESTFLIGHT_DISTRIBUTE_EXTERNAL: ${{ vars.TESTFLIGHT_DISTRIBUTE_EXTERNAL || 'false' }}
+          TESTFLIGHT_SUBMIT_BETA_REVIEW: ${{ vars.TESTFLIGHT_SUBMIT_BETA_REVIEW || 'false' }}
+          TESTFLIGHT_NOTIFY_EXTERNAL_TESTERS: ${{ vars.TESTFLIGHT_NOTIFY_EXTERNAL_TESTERS || 'false' }}
+          TESTFLIGHT_USES_NON_EXEMPT_ENCRYPTION: ${{ vars.TESTFLIGHT_USES_NON_EXEMPT_ENCRYPTION || 'false' }}
+
+      - name: Write manual Public Beta checklist
+        if: success()
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_BUILD_NUMBER: ${{ steps.release.outputs.build_number }}
+        run: |
+          {
+            echo "## TestFlight build uploaded"
+            echo
+            echo "The workflow uploaded this build to TestFlight. Public Beta submission is intentionally manual."
+            echo
+            echo "- Version: ${RELEASE_VERSION}"
+            echo "- Build number: ${RELEASE_BUILD_NUMBER}"
+            echo "- App name: NS Connect"
+            echo "- External group: Public Beta"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          cat <<'MARKDOWN' >> "$GITHUB_STEP_SUMMARY"
+
+          ### Beta App Description
+
+          ```text
+          NS Connect is an unofficial third-party iOS client for NodeSeek. It helps users browse discussions, view post details, sign in with their own NodeSeek account, and interact with forum content in a native mobile interface.
+          ```
+
+          ### What to Test
+
+          ```text
+          Please test browsing discussion lists, opening post details, signing in with a NodeSeek account, replying to posts, loading images, viewing user information, and general navigation stability.
+          ```
+
+          ### Review Notes
+
+          ```text
+          NS Connect is an unofficial third-party client for NodeSeek and is not affiliated with, sponsored by, or endorsed by NodeSeek.
+
+          The app accesses publicly available NodeSeek web content and user-authorized account sessions. Users sign in with their own NodeSeek account through the website login flow.
+          ```
+
+          ### Manual next step
+
+          Open App Store Connect, add this build to the `Public Beta` external testing group, confirm the Test Information above, then submit it for Beta App Review.
+          MARKDOWN
+
+      - name: Upload build provenance
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: build-provenance
+          path: build/build-provenance.json
+          if-no-files-found: warn
+
+      - name: Upload dSYM
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: dSYM
+          path: build/*.dSYM.zip
+          if-no-files-found: warn

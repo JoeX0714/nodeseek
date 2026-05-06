@@ -1,0 +1,11 @@
+git_url(ENV.fetch("MATCH_GIT_URL"))
+git_branch("main")
+storage_mode("git")
+
+type("appstore")
+app_identifier([ENV["APP_IDENTIFIER"] || "com.mistj.nodeseek"])
+team_id(ENV["APPLE_TEAM_ID"] || "Z9K94479DQ")
+readonly(true)
+
+git_basic_authorization(ENV["MATCH_GIT_BASIC_AUTHORIZATION"]) if ENV["MATCH_GIT_BASIC_AUTHORIZATION"]
+git_private_key(ENV["MATCH_GIT_PRIVATE_KEY"]) if ENV["MATCH_GIT_PRIVATE_KEY"] && !ENV["MATCH_GIT_PRIVATE_KEY"].empty?

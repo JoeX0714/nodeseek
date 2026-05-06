@@ -1,0 +1,277 @@
+require "digest"
+require "fileutils"
+require "json"
+require "shellwords"
+require "time"
+
+default_platform(:ios)
+
+ROOT = File.expand_path("..", __dir__)
+PROJECT = File.join(ROOT, "nodeseek.xcodeproj")
+SCHEME = "nodeseek"
+APP_IDENTIFIER = ENV["APP_IDENTIFIER"] || "com.mistj.nodeseek"
+APP_STORE_CONNECT_APP_ID = ENV["APP_STORE_CONNECT_APP_ID"] || "6766863710"
+INFO_PLIST = File.join(ROOT, "nodeseek/Resources/Info.plist")
+BUILD_DIR = File.join(ROOT, "build")
+PROVENANCE_PATH = File.join(BUILD_DIR, "build-provenance.json")
+
+def ci_value(key, fallback = nil)
+  value = ENV[key]
+  return value unless value.nil? || value.empty?
+
+  fallback
+end
+
+def shell_value(command)
+  Dir.chdir(ROOT) { sh(command, log: false).strip }
+rescue
+  nil
+end
+
+def sha256(path)
+  return nil unless path && File.exist?(path)
+
+  Digest::SHA256.file(path).hexdigest
+end
+
+def package_resolved_path
+  workspace_path = File.join(ROOT, "nodeseek.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved")
+  return workspace_path if File.exist?(workspace_path)
+
+  root_path = File.join(ROOT, "Package.resolved")
+  File.exist?(root_path) ? root_path : nil
+end
+
+def available_iphone_simulator_id
+  output = shell_value("xcrun simctl list devices available --json")
+  return nil unless output
+
+  data = JSON.parse(output)
+  devices = data.fetch("devices", {}).flat_map do |runtime, runtime_devices|
+    version = runtime.to_s.scan(/\d+/).map(&:to_i)
+    runtime_devices.map { |device| device.merge("runtimeVersion" => version) }
+  end
+
+  iphone = devices
+    .select { |device| device["isAvailable"] && device["name"].to_s.start_with?("iPhone") }
+    .sort_by { |device| [device["runtimeVersion"], device["name"].to_s] }
+    .last
+  iphone && iphone["udid"]
+rescue
+  nil
+end
+
+def write_build_metadata(options)
+  version = options[:version]
+  build_number = options[:build_number]
+
+  increment_version_number(version_number: version, xcodeproj: PROJECT) if version && !version.empty?
+  increment_build_number(build_number: build_number, xcodeproj: PROJECT) if build_number && !build_number.empty?
+
+  run_id = ci_value("GITHUB_RUN_ID")
+  run_url = ci_value("GITHUB_SERVER_URL") && ci_value("GITHUB_REPOSITORY") && run_id ?
+    "#{ci_value("GITHUB_SERVER_URL")}/#{ci_value("GITHUB_REPOSITORY")}/actions/runs/#{run_id}" : nil
+
+  metadata = {
+    "Build Git SHA" => ci_value("GITHUB_SHA", shell_value("git rev-parse HEAD")),
+    "Build GitHub Run ID" => run_id,
+    "Build GitHub Run URL" => run_url,
+    "Build Workflow" => ci_value("GITHUB_WORKFLOW"),
+    "Build Source Branch" => ci_value("GITHUB_REF_NAME", shell_value("git branch --show-current"))
+  }
+
+  metadata.each do |key, value|
+    set_info_plist_value(path: INFO_PLIST, key: key, value: value) if value && !value.empty?
+  end
+end
+
+def app_store_api_key_configured?
+  values = [
+    "APP_STORE_CONNECT_KEY_ID",
+    "APP_STORE_CONNECT_ISSUER_ID",
+    "APP_STORE_CONNECT_KEY_CONTENT"
+  ].map { |key| ENV[key] }
+
+  values.none? { |value| value.nil? || value.empty? }
+end
+
+def app_store_api_key_from_env
+  return nil unless app_store_api_key_configured?
+
+  app_store_connect_api_key(
+    key_id: ENV["APP_STORE_CONNECT_KEY_ID"],
+    issuer_id: ENV["APP_STORE_CONNECT_ISSUER_ID"],
+    key_content: ENV["APP_STORE_CONNECT_KEY_CONTENT"],
+    duration: 1200,
+    in_house: false
+  )
+end
+
+def testflight_upload_options
+  api_key = app_store_api_key_from_env
+  return { api_key: api_key } if api_key
+
+  apple_id = ENV["APPLE_ID"]
+  app_password = ENV["FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD"]
+  missing = []
+  missing << "APPLE_ID" if apple_id.nil? || apple_id.empty?
+  missing << "FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD" if app_password.nil? || app_password.empty?
+  UI.user_error!("Missing TestFlight upload secrets: #{missing.join(", ")}") unless missing.empty?
+
+  options = {
+    username: apple_id,
+    apple_id: APP_STORE_CONNECT_APP_ID
+  }
+
+  provider_public_id = ENV["APP_STORE_CONNECT_PROVIDER_PUBLIC_ID"]
+  provider_public_id = ENV["APP_STORE_CONNECT_TEAM_ID"] if provider_public_id.nil? || provider_public_id.empty?
+  options[:provider_public_id] = provider_public_id if provider_public_id && !provider_public_id.empty?
+
+  options
+end
+
+def env_bool(key, default: false)
+  value = ENV[key]
+  return default if value.nil? || value.empty?
+
+  %w[1 true yes on].include?(value.downcase)
+end
+
+def testflight_groups
+  ENV.fetch("TESTFLIGHT_GROUPS", "")
+    .split(",")
+    .map(&:strip)
+    .reject(&:empty?)
+end
+
+def testflight_distribution_options
+  groups = testflight_groups
+  distribute_external = env_bool("TESTFLIGHT_DISTRIBUTE_EXTERNAL", default: false)
+  submit_beta_review = env_bool("TESTFLIGHT_SUBMIT_BETA_REVIEW", default: false)
+
+  options = {
+    skip_waiting_for_build_processing: !distribute_external || groups.empty?,
+    uses_non_exempt_encryption: env_bool("TESTFLIGHT_USES_NON_EXEMPT_ENCRYPTION", default: false)
+  }
+
+  changelog = ENV["TESTFLIGHT_CHANGELOG"]
+  options[:changelog] = changelog if changelog && !changelog.empty?
+
+  unless app_store_api_key_configured?
+    UI.important("App Store Connect API key is not configured. Uploading with app-specific password only; external TestFlight distribution will be skipped.")
+    return options
+  end
+
+  return options unless distribute_external
+  return options if groups.empty?
+
+  options.merge(
+    distribute_external: true,
+    groups: groups,
+    notify_external_testers: env_bool("TESTFLIGHT_NOTIFY_EXTERNAL_TESTERS", default: false),
+    submit_beta_review: submit_beta_review
+  )
+end
+
+def write_build_provenance
+  FileUtils.mkdir_p(BUILD_DIR)
+
+  ipa_path = lane_context[SharedValues::IPA_OUTPUT_PATH]
+  dsym_path = lane_context[SharedValues::DSYM_OUTPUT_PATH]
+  resolved_path = package_resolved_path
+  run_id = ci_value("GITHUB_RUN_ID")
+  run_url = ci_value("GITHUB_SERVER_URL") && ci_value("GITHUB_REPOSITORY") && run_id ?
+    "#{ci_value("GITHUB_SERVER_URL")}/#{ci_value("GITHUB_REPOSITORY")}/actions/runs/#{run_id}" : nil
+
+  provenance = {
+    repository: ci_value("GITHUB_REPOSITORY"),
+    git_sha: ci_value("GITHUB_SHA", shell_value("git rev-parse HEAD")),
+    git_ref: ci_value("GITHUB_REF"),
+    git_ref_name: ci_value("GITHUB_REF_NAME", shell_value("git branch --show-current")),
+    github_workflow: ci_value("GITHUB_WORKFLOW"),
+    github_run_id: run_id,
+    github_run_number: ci_value("GITHUB_RUN_NUMBER"),
+    github_run_attempt: ci_value("GITHUB_RUN_ATTEMPT"),
+    github_run_url: run_url,
+    project: PROJECT,
+    scheme: SCHEME,
+    app_identifier: APP_IDENTIFIER,
+    xcode_version: shell_value("xcodebuild -version"),
+    ruby_version: shell_value("ruby -v"),
+    fastlane_version: Fastlane::VERSION,
+    package_resolved_path: resolved_path,
+    package_resolved_sha256: sha256(resolved_path),
+    ipa_path: ipa_path,
+    ipa_sha256: sha256(ipa_path),
+    dsym_path: dsym_path,
+    dsym_sha256: sha256(dsym_path),
+    generated_at_utc: Time.now.utc.iso8601
+  }
+
+  File.write(PROVENANCE_PATH, JSON.pretty_generate(provenance))
+end
+
+def app_store_profile_name
+  "match AppStore #{APP_IDENTIFIER}"
+end
+
+platform :ios do
+  desc "Run the CI test subset"
+  lane :tests do
+    simulator_id = ci_value("SIMULATOR_ID", available_iphone_simulator_id)
+    UI.user_error!("No available iPhone simulator found") unless simulator_id
+    UI.message("Using simulator #{simulator_id}")
+
+    sh("make -C #{ROOT.shellescape} xcode-test-runtime-core SIMULATOR_ID=#{simulator_id.shellescape}")
+  end
+
+  desc "Build an App Store archive without uploading"
+  lane :build do |options|
+    setup_ci
+    write_build_metadata(options)
+    match(type: "appstore", readonly: true)
+    build_app(
+      project: PROJECT,
+      scheme: SCHEME,
+      configuration: "Release",
+      clean: true,
+      export_method: "app-store",
+      output_directory: BUILD_DIR,
+      output_name: "nodeseek.ipa",
+      include_symbols: true,
+      export_options: {
+        provisioningProfiles: {
+          APP_IDENTIFIER => app_store_profile_name
+        }
+      }
+    )
+    write_build_provenance
+  end
+
+  desc "Build and upload a public-source TestFlight build"
+  lane :beta do |options|
+    setup_ci
+    write_build_metadata(options)
+    match(type: "appstore", readonly: true)
+    build_app(
+      project: PROJECT,
+      scheme: SCHEME,
+      configuration: "Release",
+      clean: true,
+      export_method: "app-store",
+      output_directory: BUILD_DIR,
+      output_name: "nodeseek.ipa",
+      include_symbols: true,
+      export_options: {
+        provisioningProfiles: {
+          APP_IDENTIFIER => app_store_profile_name
+        }
+      }
+    )
+    write_build_provenance
+    upload_to_testflight(
+      **testflight_upload_options,
+      **testflight_distribution_options
+    )
+  end
+end
