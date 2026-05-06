@@ -24,13 +24,11 @@ struct PostSummaryCellNodeTests {
         )
 
         let text = PostSummaryCellNode.metadataAttributedText(for: post).string
-        let lastActivityText = PostSummaryCellNode.lastActivityAttributedText(for: post)?.string
 
         #expect(text.contains("mist"))
         #expect(text.contains("34"))
         #expect(text.contains("4"))
-        #expect(!text.contains("22s ago"))
-        #expect(lastActivityText == "22s ago")
+        #expect(text.contains("22s ago"))
         #expect(!text.contains("NodeSeek"))
         #expect(!text.contains(" · "))
     }
@@ -52,8 +50,7 @@ struct PostSummaryCellNodeTests {
         #expect(!text.contains("未知用户"))
         #expect(text.contains("10"))
         #expect(text.contains("2"))
-        #expect(!text.contains("1min ago"))
-        #expect(PostSummaryCellNode.lastActivityAttributedText(for: post)?.string == "1min ago")
+        #expect(text.contains("1min ago"))
         #expect(!text.hasPrefix("  "))
     }
 
@@ -80,10 +77,7 @@ struct PostSummaryCellNodeTests {
         #expect(metadataText.string.contains("shuai"))
         #expect(metadataText.string.contains("475454"))
         #expect(metadataText.string.contains("961"))
-        #expect(!metadataText.string.contains("6h 30min ago"))
-        #expect(PostSummaryCellStyle.lastActivityMaximumNumberOfLines == 1)
-        #expect((PostSummaryCellNode.lastActivityAttributedText(for: post)?.attribute(.font, at: 0, effectiveRange: nil) as? UIFont)?.pointSize == 13)
-        #expect(PostSummaryCellNode.lastActivityAttributedText(for: post)?.string == "6h 30min ago")
+        #expect(metadataText.string.contains("6h 30min ago"))
     }
 
     @Test func visitedPostTitleUsesSecondaryColor() {
@@ -144,12 +138,10 @@ struct PostSummaryCellNodeTests {
 
         let initialTitle = node.debugTitleAttributedText
         let initialMetadata = node.debugMetadataAttributedText
-        let initialLastActivity = node.debugLastActivityAttributedText
 
         node.refreshAppearanceForCurrentTraits()
 
         #expect(node.debugTitleAttributedText !== initialTitle)
         #expect(node.debugMetadataAttributedText !== initialMetadata)
-        #expect(node.debugLastActivityAttributedText !== initialLastActivity)
     }
 }

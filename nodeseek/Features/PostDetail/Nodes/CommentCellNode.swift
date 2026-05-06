@@ -65,6 +65,7 @@ final class CommentCellNode: ASCellNode {
     private let separatorNode = ASDisplayNode()
     private let bodyNodes: [ASDisplayNode]
     private(set) var debugActionsAreDisplayedBelowBody = false
+    private(set) var debugHeaderTimeIsOnSecondLine = false
     private var lastAppliedUserInterfaceStyle: UIUserInterfaceStyle?
 
     private lazy var avatarNode: ASDisplayNode = {
@@ -177,9 +178,6 @@ final class CommentCellNode: ASCellNode {
             identityChildren.append(posterBadgeNode)
         }
         identityChildren.append(contentsOf: authorBadgeNodes)
-        if comment.createdAtText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
-            identityChildren.append(timeNode)
-        }
         identityStack.children = identityChildren
         identityStack.style.flexGrow = 1
         identityStack.style.flexShrink = 1
@@ -201,7 +199,20 @@ final class CommentCellNode: ASCellNode {
         }
         headerStack.children = headerChildren
 
-        var textChildren: [ASLayoutElement] = headerChildren.isEmpty ? [] : [headerStack]
+        let hasTime = comment.createdAtText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        let headerBlockStack = ASStackLayoutSpec.vertical()
+        headerBlockStack.spacing = 3
+        var headerBlockChildren: [ASLayoutElement] = []
+        if headerChildren.isEmpty == false {
+            headerBlockChildren.append(headerStack)
+        }
+        if hasTime {
+            headerBlockChildren.append(timeNode)
+        }
+        headerBlockStack.children = headerBlockChildren
+        debugHeaderTimeIsOnSecondLine = headerChildren.isEmpty == false && hasTime
+
+        var textChildren: [ASLayoutElement] = headerBlockChildren.isEmpty ? [] : [headerBlockStack]
         for bodyNode in bodyNodes {
             textChildren.append(bodyNode)
         }
@@ -471,6 +482,26 @@ final class CommentCellNode: ASCellNode {
 
     var debugHotBadgeImage: UIImage? {
         comment.isHot ? hotBadgeNode.image : nil
+    }
+
+    var debugHeaderTopLineText: String {
+        var parts: [String] = []
+        if let authorName = AuthorDisplayPolicy.displayName(from: comment.authorName) {
+            parts.append(authorName)
+        }
+        if comment.isPoster {
+            parts.append(posterBadgeNode.attributedText?.string ?? "")
+        }
+        parts.append(contentsOf: debugAuthorBadgeTexts)
+        if let floorText = comment.floorText?.trimmingCharacters(in: .whitespacesAndNewlines),
+           floorText.isEmpty == false {
+            parts.append(floorText)
+        }
+        return parts.filter { $0.isEmpty == false }.joined(separator: " ")
+    }
+
+    var debugHeaderTimeLineText: String {
+        timeNode.attributedText?.string ?? ""
     }
 
     var debugReplyActionTitle: String? {

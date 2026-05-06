@@ -45,7 +45,6 @@ final class PostBodyCellNode: ASCellNode {
 
     private let titleNode = ASTextNode()
     private let authorButtonNode = ASButtonNode()
-    private let inlineMetadataNode = ASTextNode()
     private let metadataNode = ASTextNode()
     private let likeButtonNode = ASButtonNode()
     private let chickenLegButtonNode = ASButtonNode()
@@ -55,7 +54,6 @@ final class PostBodyCellNode: ASCellNode {
     private let commentButtonNode = ASButtonNode()
     private let bodyNodes: [ASDisplayNode]
     private var lastAppliedUserInterfaceStyle: UIUserInterfaceStyle?
-    private(set) var debugIdentityMetadataIsBelowAuthor = false
     private var hasReactionActions: Bool {
         [
             content.likeCount,
@@ -157,36 +155,19 @@ final class PostBodyCellNode: ASCellNode {
     override func layoutSpecThatFits(_ constrainedSize: ASSizeRange) -> ASLayoutSpec {
         titleNode.style.flexShrink = 1
         authorButtonNode.style.flexShrink = 0
-        inlineMetadataNode.style.flexShrink = 1
         metadataNode.style.flexShrink = 1
 
-        let identityTopLine = ASStackLayoutSpec.horizontal()
-        identityTopLine.spacing = 5
-        identityTopLine.alignItems = .center
-        var topLineChildren: [ASLayoutElement] = []
-        if hasDisplayableAuthor {
-            topLineChildren.append(authorButtonNode)
-        }
-        if Self.inlineMetadataText(for: content).isEmpty == false {
-            topLineChildren.append(inlineMetadataNode)
-        }
-        identityTopLine.children = topLineChildren
-        identityTopLine.style.flexShrink = 1
-        identityTopLine.style.flexGrow = 1
-
-        let identityStack = ASStackLayoutSpec.vertical()
-        identityStack.spacing = 3
-        identityStack.alignItems = .start
+        let identityStack = ASStackLayoutSpec.horizontal()
+        identityStack.spacing = 5
+        identityStack.alignItems = .center
         var identityChildren: [ASLayoutElement] = []
-        if topLineChildren.isEmpty == false {
-            identityChildren.append(identityTopLine)
+        if hasDisplayableAuthor {
+            identityChildren.append(authorButtonNode)
         }
-        let hasTimeMetadata = Self.timeMetadataText(for: content).isEmpty == false
-        if hasTimeMetadata {
+        if Self.metadataText(for: content).isEmpty == false {
             identityChildren.append(metadataNode)
         }
         identityStack.children = identityChildren
-        debugIdentityMetadataIsBelowAuthor = hasDisplayableAuthor && hasTimeMetadata
         identityStack.style.flexShrink = 1
         identityStack.style.flexGrow = 1
 
@@ -229,18 +210,9 @@ final class PostBodyCellNode: ASCellNode {
         )
         authorButtonNode.accessibilityLabel = "查看 \(AuthorDisplayPolicy.displayName(from: content.authorName) ?? "作者") 的主页"
 
-        inlineMetadataNode.maximumNumberOfLines = 1
-        inlineMetadataNode.attributedText = NSAttributedString(
-            string: Self.inlineMetadataText(for: content),
-            attributes: [
-                .font: UIFont.preferredFont(forTextStyle: .subheadline),
-                .foregroundColor: UIColor.secondaryLabel
-            ]
-        )
-
         metadataNode.maximumNumberOfLines = 0
         metadataNode.attributedText = NSAttributedString(
-            string: Self.timeMetadataText(for: content),
+            string: Self.metadataText(for: content),
             attributes: [
                 .font: UIFont.preferredFont(forTextStyle: .subheadline),
                 .foregroundColor: UIColor.secondaryLabel
@@ -295,20 +267,6 @@ final class PostBodyCellNode: ASCellNode {
 
     var debugTitleAttributedText: NSAttributedString? {
         titleNode.attributedText
-    }
-
-    var debugIdentityTopLineText: String {
-        [
-            AuthorDisplayPolicy.displayName(from: content.authorName),
-            inlineMetadataNode.attributedText?.string
-        ]
-            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { $0.isEmpty == false }
-            .joined(separator: " ")
-    }
-
-    var debugIdentityTimeLineText: String {
-        metadataNode.attributedText?.string ?? ""
     }
 
     private func configureActions() {
@@ -604,44 +562,10 @@ final class PostBodyCellNode: ASCellNode {
         avatarLoader.cancel(on: avatarImageView)
     }
 
-    private struct IdentityMetadata {
-        let timeText: String
-        let inlineText: String
-    }
-
-    private static func identityMetadata(for content: PostDetailHeaderContent) -> IdentityMetadata {
+    private static func metadataText(for content: PostDetailHeaderContent) -> String {
         let metadata = content.metadataText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard metadata.isEmpty == false else {
-            return IdentityMetadata(timeText: "", inlineText: "")
-        }
-
-        let parts = metadata
-            .split(separator: "·")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { $0.isEmpty == false }
-        guard let timeText = parts.first else {
-            return IdentityMetadata(timeText: "", inlineText: "")
-        }
-
-        let remainingText = parts.dropFirst().joined(separator: " · ")
-        let inlineText: String
-        if remainingText.isEmpty {
-            inlineText = ""
-        } else if AuthorDisplayPolicy.isDisplayable(content.authorName) {
-            inlineText = "· \(remainingText)"
-        } else {
-            inlineText = remainingText
-        }
-
-        return IdentityMetadata(timeText: timeText, inlineText: inlineText)
-    }
-
-    private static func inlineMetadataText(for content: PostDetailHeaderContent) -> String {
-        identityMetadata(for: content).inlineText
-    }
-
-    private static func timeMetadataText(for content: PostDetailHeaderContent) -> String {
-        identityMetadata(for: content).timeText
+        guard metadata.isEmpty == false else { return "" }
+        return AuthorDisplayPolicy.isDisplayable(content.authorName) ? "· \(metadata)" : metadata
     }
 
     var debugFooterActionAccessibilityLabels: [String] {

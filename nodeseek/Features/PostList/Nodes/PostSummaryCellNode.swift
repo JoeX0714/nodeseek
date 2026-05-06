@@ -41,12 +41,8 @@ final class PostSummaryCellNode: ASCellNode {
 
     private let titleNode = ASTextNode()
     private let metadataNode = ASTextNode()
-    private let lastActivityNode = ASTextNode()
     private weak var avatarImageView: UIImageView?
     private var lastAppliedUserInterfaceStyle: UIUserInterfaceStyle?
-    private var hasLastActivityText: Bool {
-        Self.lastActivityText(for: post) != nil
-    }
 
     convenience init(post: PostSummary) {
         self.init(post: post, isVisited: false)
@@ -95,13 +91,10 @@ final class PostSummaryCellNode: ASCellNode {
     override func layoutSpecThatFits(_ constrainedSize: ASSizeRange) -> ASLayoutSpec {
         titleNode.style.flexShrink = 1
         metadataNode.style.flexShrink = 1
-        lastActivityNode.style.flexShrink = 1
 
         let textStack = ASStackLayoutSpec.vertical()
         textStack.spacing = Layout.verticalSpacing
-        textStack.children = hasLastActivityText
-            ? [titleNode, metadataNode, lastActivityNode]
-            : [titleNode, metadataNode]
+        textStack.children = [titleNode, metadataNode]
         textStack.style.flexGrow = 1
         textStack.style.flexShrink = 1
 
@@ -121,10 +114,6 @@ final class PostSummaryCellNode: ASCellNode {
         metadataNode.maximumNumberOfLines = PostSummaryCellStyle.metadataMaximumNumberOfLines
         metadataNode.truncationMode = .byTruncatingTail
         metadataNode.attributedText = Self.metadataAttributedText(for: post)
-
-        lastActivityNode.maximumNumberOfLines = PostSummaryCellStyle.lastActivityMaximumNumberOfLines
-        lastActivityNode.truncationMode = .byTruncatingTail
-        lastActivityNode.attributedText = Self.lastActivityAttributedText(for: post)
     }
 
     func refreshAppearanceForCurrentTraits() {
@@ -142,10 +131,6 @@ final class PostSummaryCellNode: ASCellNode {
 
     var debugMetadataAttributedText: NSAttributedString? {
         metadataNode.attributedText
-    }
-
-    var debugLastActivityAttributedText: NSAttributedString? {
-        lastActivityNode.attributedText
     }
 
     private func requestAvatarIfNeeded() {
@@ -195,18 +180,12 @@ final class PostSummaryCellNode: ASCellNode {
             attributes: attributes
         ))
 
-        return metadata
-    }
+        if let lastActivity = lastActivityText(for: post) {
+            appendSeparatorIfNeeded()
+            metadata.append(NSAttributedString(string: lastActivity, attributes: attributes))
+        }
 
-    static func lastActivityAttributedText(for post: PostSummary) -> NSAttributedString? {
-        guard let lastActivity = lastActivityText(for: post) else { return nil }
-        return NSAttributedString(
-            string: lastActivity,
-            attributes: [
-                .font: PostSummaryCellStyle.lastActivityFont,
-                .foregroundColor: UIColor.tertiaryLabel
-            ]
-        )
+        return metadata
     }
 
     static func titleAttributedText(for post: PostSummary, isVisited: Bool = false) -> NSAttributedString {
@@ -330,8 +309,6 @@ final class PostSummaryCellNode: ASCellNode {
 enum PostSummaryCellStyle {
     static let titleMaximumNumberOfLines: UInt = 2
     static let metadataMaximumNumberOfLines: UInt = 1
-    static let lastActivityMaximumNumberOfLines: UInt = 1
     static let titleFont = UIFont.systemFont(ofSize: 19, weight: .semibold)
     static let metadataFont = UIFont.systemFont(ofSize: 14, weight: .regular)
-    static let lastActivityFont = UIFont.systemFont(ofSize: 13, weight: .regular)
 }

@@ -719,32 +719,6 @@ struct PostDetailViewControllerTests {
         #expect(title.foregroundColor(for: "1") == .systemRed)
     }
 
-    @Test func postBodyMetadataSplitsCategoryAndTimeAcrossTwoLines() {
-        let header = PostDetailHeaderContent(
-            postID: "714386",
-            title: "详情标题",
-            authorName: "mist",
-            avatarURL: nil,
-            metadataText: "2days ago · 日常",
-            contentHTML: "<p>正文</p>"
-        )
-        let node = PostBodyCellNode(
-            content: header,
-            renderedContent: [],
-            onImageTapped: { _, _ in },
-            onTextLayoutInvalidated: {}
-        )
-
-        _ = node.layoutThatFits(ASSizeRange(
-            min: .zero,
-            max: CGSize(width: 360, height: CGFloat.greatestFiniteMagnitude)
-        ))
-
-        #expect(node.debugIdentityMetadataIsBelowAuthor)
-        #expect(node.debugIdentityTopLineText == "mist · 日常")
-        #expect(node.debugIdentityTimeLineText == "2days ago")
-    }
-
     @Test func postBodyCellShowsReactionAndFavoriteCountsWhenAvailable() {
         let header = PostDetailHeaderContent(
             postID: "710379",
@@ -959,6 +933,35 @@ struct PostDetailViewControllerTests {
         )
 
         #expect(node.debugHotBadgeImage != nil)
+    }
+
+    @Test func commentCellDisplaysTimeOnSecondLineBelowCommentLabels() {
+        let comment = Comment(
+            id: "326",
+            authorName: "hostlocmjj",
+            isPoster: true,
+            avatarURL: nil,
+            authorBadgeTexts: ["已停用"],
+            floorText: "#326",
+            createdAtText: "34min ago",
+            contentHTML: "<p>评论</p>",
+            isHot: true
+        )
+        let node = CommentCellNode(
+            comment: comment,
+            renderedBody: [],
+            onImageTapped: { _, _ in },
+            onTextLayoutInvalidated: {}
+        )
+
+        _ = node.layoutThatFits(ASSizeRange(
+            min: .zero,
+            max: CGSize(width: 360, height: CGFloat.greatestFiniteMagnitude)
+        ))
+
+        #expect(node.debugHeaderTopLineText == "hostlocmjj 楼主 已停用 #326")
+        #expect(node.debugHeaderTimeLineText == "34min ago")
+        #expect(node.debugHeaderTimeIsOnSecondLine)
     }
 
     @Test func commentCellShowsDynamicAuthorBadgeText() {
