@@ -7,11 +7,87 @@
 
 import UIKit
 
+struct SettingsBuildInfo: Equatable {
+    let appVersion: String
+    let buildNumber: String
+    let gitSHA: String?
+    let workflowName: String?
+    let githubRunID: String?
+    let githubRunURL: URL?
+
+    init(
+        appVersion: String,
+        buildNumber: String,
+        gitSHA: String? = nil,
+        workflowName: String? = nil,
+        githubRunID: String? = nil,
+        githubRunURL: URL? = nil
+    ) {
+        self.appVersion = appVersion
+        self.buildNumber = buildNumber
+        self.gitSHA = gitSHA
+        self.workflowName = workflowName
+        self.githubRunID = githubRunID
+        self.githubRunURL = githubRunURL
+    }
+
+    init(bundle: Bundle = .main) {
+        let info = bundle.infoDictionary ?? [:]
+        self.init(
+            appVersion: Self.stringValue(info["CFBundleShortVersionString"]) ?? "未知",
+            buildNumber: Self.stringValue(info["CFBundleVersion"]) ?? "未知",
+            gitSHA: Self.stringValue(info["Build Git SHA"]),
+            workflowName: Self.stringValue(info["Build Workflow"]),
+            githubRunID: Self.stringValue(info["Build GitHub Run ID"]),
+            githubRunURL: Self.urlValue(info["Build GitHub Run URL"])
+        )
+    }
+
+    var shortGitSHA: String {
+        guard let gitSHA, gitSHA.isEmpty == false else {
+            return "未注入"
+        }
+        return String(gitSHA.prefix(7))
+    }
+
+    var workflowDisplayText: String {
+        switch (workflowName, githubRunID) {
+        case let (workflow?, runID?) where !workflow.isEmpty && !runID.isEmpty:
+            return "\(workflow) #\(runID)"
+        case let (workflow?, _) where !workflow.isEmpty:
+            return workflow
+        case let (_, runID?) where !runID.isEmpty:
+            return "Run #\(runID)"
+        default:
+            return "本地构建"
+        }
+    }
+
+    private static func stringValue(_ value: Any?) -> String? {
+        guard let string = value as? String else { return nil }
+        return string.isEmpty ? nil : string
+    }
+
+    private static func urlValue(_ value: Any?) -> URL? {
+        guard let string = stringValue(value) else { return nil }
+        return URL(string: string)
+    }
+}
+
 final class SettingsViewController: UITableViewController {
     private enum Section: Int, CaseIterable {
         case cache
         case debug
+        case build
         case account
+    }
+
+    private enum BuildRow: Int, CaseIterable {
+        case appVersion
+        case buildNumber
+        case gitSHA
+        case workflow
+        case githubURL
     }
 
     private enum DebugRow: Int, CaseIterable {
@@ -33,6 +109,7 @@ final class SettingsViewController: UITableViewController {
     private let cacheManager: SettingsCacheManaging
     private let sessionManager: SettingsSessionManaging
     private let currentAccountStore: CurrentAccountStore
+    private let buildInfo: SettingsBuildInfo
     private let confirmsActionsImmediately: Bool
     private let onLogout: @MainActor () -> Void
     private let onLogFile: @MainActor () -> Void
@@ -46,6 +123,7 @@ final class SettingsViewController: UITableViewController {
         cacheManager: SettingsCacheManaging? = nil,
         sessionManager: SettingsSessionManaging? = nil,
         currentAccountStore: CurrentAccountStore = .shared,
+        buildInfo: SettingsBuildInfo = SettingsBuildInfo(),
         confirmsActionsImmediately: Bool = false,
         onLogout: @escaping @MainActor () -> Void = {},
         onLogFile: @escaping @MainActor () -> Void = {},
@@ -54,6 +132,7 @@ final class SettingsViewController: UITableViewController {
         self.cacheManager = cacheManager ?? DefaultSettingsCacheManager()
         self.sessionManager = sessionManager ?? DefaultSettingsSessionManager()
         self.currentAccountStore = currentAccountStore
+        self.buildInfo = buildInfo
         self.confirmsActionsImmediately = confirmsActionsImmediately
         self.onLogout = onLogout
         self.onLogFile = onLogFile
@@ -82,6 +161,9 @@ final class SettingsViewController: UITableViewController {
         if Section(rawValue: section) == .debug {
             return DebugRow.visibleRows.count
         }
+        if Section(rawValue: section) == .build {
+            return BuildRow.allCases.count
+        }
         if Section(rawValue: section) == .account {
             return isLoggedIn ? 1 : 0
         }
@@ -94,6 +176,8 @@ final class SettingsViewController: UITableViewController {
             return "缓存"
         case .debug:
             return "调试"
+        case .build:
+            return "版本"
         case .account:
             return isLoggedIn ? "账号" : nil
         case .none:
@@ -107,6 +191,8 @@ final class SettingsViewController: UITableViewController {
             return cacheCell(for: indexPath)
         case .debug:
             return debugCell(for: indexPath)
+        case .build:
+            return buildCell(for: indexPath)
         case .account:
             return logoutCell(for: indexPath)
         case .none:
@@ -121,6 +207,8 @@ final class SettingsViewController: UITableViewController {
             confirmClearCache()
         case .debug:
             handleDebugSelection(at: indexPath)
+        case .build:
+            handleBuildSelection(at: indexPath)
         case .account:
             guard isLoggedIn else { return }
             confirmLogout()
@@ -148,6 +236,41 @@ final class SettingsViewController: UITableViewController {
         cell.selectionStyle = isLoggingOut ? .none : .default
         cell.isUserInteractionEnabled = !isLoggingOut
         cell.accessibilityIdentifier = "settings-logout-cell"
+        return cell
+    }
+
+    private func buildCell(for indexPath: IndexPath) -> UITableViewCell {
+        let isGitHubURLRow = BuildRow(rawValue: indexPath.row) == .githubURL
+        let cell = UITableViewCell(style: isGitHubURLRow ? .subtitle : .value1, reuseIdentifier: nil)
+        cell.selectionStyle = .none
+        cell.detailTextLabel?.textColor = .secondaryLabel
+        cell.detailTextLabel?.numberOfLines = isGitHubURLRow ? 2 : 1
+        switch BuildRow(rawValue: indexPath.row) {
+        case .appVersion:
+            cell.textLabel?.text = "版本"
+            cell.detailTextLabel?.text = buildInfo.appVersion
+            cell.accessibilityIdentifier = "settings-version-cell"
+        case .buildNumber:
+            cell.textLabel?.text = "Build"
+            cell.detailTextLabel?.text = buildInfo.buildNumber
+            cell.accessibilityIdentifier = "settings-build-number-cell"
+        case .gitSHA:
+            cell.textLabel?.text = "Git"
+            cell.detailTextLabel?.text = buildInfo.shortGitSHA
+            cell.accessibilityIdentifier = "settings-git-sha-cell"
+        case .workflow:
+            cell.textLabel?.text = "Workflow"
+            cell.detailTextLabel?.text = buildInfo.workflowDisplayText
+            cell.accessoryType = buildInfo.githubRunURL == nil ? .none : .disclosureIndicator
+            cell.selectionStyle = buildInfo.githubRunURL == nil ? .none : .default
+            cell.accessibilityIdentifier = "settings-workflow-cell"
+        case .githubURL:
+            cell.textLabel?.text = "GitHub"
+            cell.detailTextLabel?.text = buildInfo.githubRunURL?.absoluteString ?? "未注入"
+            cell.accessibilityIdentifier = "settings-github-run-url-cell"
+        case .none:
+            break
+        }
         return cell
     }
 
@@ -256,6 +379,12 @@ final class SettingsViewController: UITableViewController {
             }
             onDetailTest()
         }
+    }
+
+    private func handleBuildSelection(at indexPath: IndexPath) {
+        guard BuildRow(rawValue: indexPath.row) == .workflow,
+              let githubRunURL = buildInfo.githubRunURL else { return }
+        UIApplication.shared.open(githubRunURL)
     }
 
     @objc private func fileLoggingSwitchChanged(_ sender: UISwitch) {

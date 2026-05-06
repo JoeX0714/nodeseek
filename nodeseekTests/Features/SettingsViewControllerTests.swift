@@ -21,20 +21,23 @@ struct SettingsViewControllerTests {
         let viewController = SettingsViewController(
             cacheManager: FakeSettingsCacheManager(cacheByteSize: 4_096),
             sessionManager: FakeSettingsSessionManager(),
-            currentAccountStore: accountStore
+            currentAccountStore: accountStore,
+            buildInfo: .testFlightFixture
         )
         viewController.loadViewIfNeeded()
         viewController.view.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
         viewController.view.layoutIfNeeded()
-        try await waitUntil { viewController.tableView.numberOfRows(inSection: 2) == 1 }
+        try await waitUntil { viewController.tableView.numberOfRows(inSection: 3) == 1 }
 
         let tableView = try #require(viewController.tableView)
         #expect(viewController.title == "设置")
-        #expect(tableView.numberOfSections == 3)
+        #expect(tableView.numberOfSections == 4)
         #expect(tableView.numberOfRows(inSection: 0) == 1)
         #expect(tableView.numberOfRows(inSection: 1) == 3)
-        #expect(tableView.numberOfRows(inSection: 2) == 1)
+        #expect(tableView.numberOfRows(inSection: 2) == 5)
+        #expect(tableView.numberOfRows(inSection: 3) == 1)
         #expect(tableView.dataSource?.tableView?(tableView, titleForHeaderInSection: 1) == "调试")
+        #expect(tableView.dataSource?.tableView?(tableView, titleForHeaderInSection: 2) == "版本")
 
         let cacheCell = try #require(tableView.dataSource?.tableView(
             tableView,
@@ -52,9 +55,29 @@ struct SettingsViewControllerTests {
             tableView,
             cellForRowAt: IndexPath(row: 2, section: 1)
         ))
-        let logoutCell = try #require(tableView.dataSource?.tableView(
+        let appVersionCell = try #require(tableView.dataSource?.tableView(
             tableView,
             cellForRowAt: IndexPath(row: 0, section: 2)
+        ))
+        let buildNumberCell = try #require(tableView.dataSource?.tableView(
+            tableView,
+            cellForRowAt: IndexPath(row: 1, section: 2)
+        ))
+        let gitCell = try #require(tableView.dataSource?.tableView(
+            tableView,
+            cellForRowAt: IndexPath(row: 2, section: 2)
+        ))
+        let workflowCell = try #require(tableView.dataSource?.tableView(
+            tableView,
+            cellForRowAt: IndexPath(row: 3, section: 2)
+        ))
+        let githubCell = try #require(tableView.dataSource?.tableView(
+            tableView,
+            cellForRowAt: IndexPath(row: 4, section: 2)
+        ))
+        let logoutCell = try #require(tableView.dataSource?.tableView(
+            tableView,
+            cellForRowAt: IndexPath(row: 0, section: 3)
         ))
 
         #expect(cacheCell.textLabel?.text == "清除缓存")
@@ -64,6 +87,16 @@ struct SettingsViewControllerTests {
         #expect(loggingSwitch.isOn == false)
         #expect(logFileCell.textLabel?.text == "日志文件")
         #expect(detailTestCell.textLabel?.text == "详情测试")
+        #expect(appVersionCell.textLabel?.text == "版本")
+        #expect(appVersionCell.detailTextLabel?.text == "1.0.1")
+        #expect(buildNumberCell.textLabel?.text == "Build")
+        #expect(buildNumberCell.detailTextLabel?.text == "42")
+        #expect(gitCell.textLabel?.text == "Git")
+        #expect(gitCell.detailTextLabel?.text == "abcdef1")
+        #expect(workflowCell.textLabel?.text == "Workflow")
+        #expect(workflowCell.detailTextLabel?.text == "TestFlight #25443881348")
+        #expect(githubCell.textLabel?.text == "GitHub")
+        #expect(githubCell.detailTextLabel?.text == "https://github.com/tyrad/nodeseek/actions/runs/25443881348")
         #expect(logoutCell.textLabel?.text == "退出登录")
         #expect(logoutCell.textLabel?.textColor == .systemRed)
     }
@@ -78,9 +111,9 @@ struct SettingsViewControllerTests {
         )
 
         viewController.loadViewIfNeeded()
-        try await waitUntil { viewController.tableView.numberOfRows(inSection: 2) == 0 }
+        try await waitUntil { viewController.tableView.numberOfRows(inSection: 3) == 0 }
 
-        #expect(viewController.tableView.numberOfRows(inSection: 2) == 0)
+        #expect(viewController.tableView.numberOfRows(inSection: 3) == 0)
     }
 
     @Test func selectingClearCacheClearsCacheWithoutLoggingOut() async throws {
@@ -120,11 +153,11 @@ struct SettingsViewControllerTests {
             }
         )
         viewController.loadViewIfNeeded()
-        try await waitUntil { viewController.tableView.numberOfRows(inSection: 2) == 1 }
+        try await waitUntil { viewController.tableView.numberOfRows(inSection: 3) == 1 }
 
         viewController.tableView.delegate?.tableView?(
             viewController.tableView,
-            didSelectRowAt: IndexPath(row: 0, section: 2)
+            didSelectRowAt: IndexPath(row: 0, section: 3)
         )
         try await Task.sleep(nanoseconds: 100_000_000)
 
@@ -181,6 +214,17 @@ struct SettingsViewControllerTests {
 
         #expect(NodeSeekDebugConfig.enableFileLogging == true)
     }
+}
+
+private extension SettingsBuildInfo {
+    static let testFlightFixture = SettingsBuildInfo(
+        appVersion: "1.0.1",
+        buildNumber: "42",
+        gitSHA: "abcdef1234567890",
+        workflowName: "TestFlight",
+        githubRunID: "25443881348",
+        githubRunURL: URL(string: "https://github.com/tyrad/nodeseek/actions/runs/25443881348")
+    )
 }
 
 @MainActor
