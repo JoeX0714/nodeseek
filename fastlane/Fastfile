@@ -253,16 +253,6 @@ def app_store_profile_name
   "match AppStore #{APP_IDENTIFIER}"
 end
 
-def release_xcodebuild_args
-  args = [
-    "CODE_SIGN_IDENTITY=#{"Apple Distribution".shellescape}"
-  ]
-
-  team_id = ENV["APPLE_TEAM_ID"]
-  args << "DEVELOPMENT_TEAM=#{team_id.shellescape}" if team_id && !team_id.empty?
-  args.join(" ")
-end
-
 platform :ios do
   desc "Run the CI test subset"
   lane :tests do
@@ -287,7 +277,6 @@ platform :ios do
       output_directory: BUILD_DIR,
       output_name: "nodeseek.ipa",
       include_symbols: true,
-      xcargs: release_xcodebuild_args,
       export_options: {
         provisioningProfiles: {
           APP_IDENTIFIER => app_store_profile_name
@@ -311,7 +300,6 @@ platform :ios do
       output_directory: BUILD_DIR,
       output_name: "nodeseek.ipa",
       include_symbols: true,
-      xcargs: release_xcodebuild_args,
       export_options: {
         provisioningProfiles: {
           APP_IDENTIFIER => app_store_profile_name
