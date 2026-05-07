@@ -58,7 +58,10 @@ struct PostDetailViewControllerTests {
 
     @Test func showsSkeletonRowsWhileInitialDetailIsLoading() async throws {
         let presenter = SpyPostDetailPresenter()
-        let viewController = PostDetailViewController(presenter: presenter)
+        let viewController = PostDetailViewController(
+            presenter: presenter,
+            accountRefresher: StubPostDetailAccountRefresher(isLoggedIn: true)
+        )
 
         viewController.loadViewIfNeeded()
         viewController.showLoading()
@@ -2288,7 +2291,10 @@ struct PostDetailLoginViewControllerTests {
 
     @Test func replyAndQuoteActionsUpdateComposerState() async throws {
         let presenter = SpyPostDetailPresenter()
-        let viewController = PostDetailViewController(presenter: presenter)
+        let viewController = PostDetailViewController(
+            presenter: presenter,
+            accountRefresher: StubPostDetailAccountRefresher(isLoggedIn: true)
+        )
         let comment = Comment(
             id: "1",
             anchorID: "10",
@@ -2312,6 +2318,7 @@ struct PostDetailLoginViewControllerTests {
         ))
         await waitForDetailContent(in: viewController, expectedRowCount: 1)
         viewController.handleReply(to: comment)
+        await Task.yield()
         let contextLabel = try #require(viewController.view.firstLabel(accessibilityIdentifier: "post-detail-reply-context-label"))
         #expect(contextLabel.text == "回复 netcup #10")
 
@@ -2320,10 +2327,12 @@ struct PostDetailLoginViewControllerTests {
         #expect(contextLabel.text == nil)
 
         viewController.handleQuote(comment)
+        await Task.yield()
         let replyTextView = try #require(viewController.view.firstTextView(accessibilityIdentifier: "post-detail-reply-text-view"))
         replyTextView.text = "正文"
         let sendButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-reply-send-button"))
         sendButton.sendActions(for: .touchUpInside)
+        await Task.yield()
         #expect(presenter.sentReplyContent?.contains("> @netcup [#10]") == true)
         #expect(presenter.sentReplyContent?.contains("第一段") == true)
         #expect(presenter.sentReplyContent?.contains("第二段") == false)
@@ -2331,7 +2340,10 @@ struct PostDetailLoginViewControllerTests {
 
     @Test func postHeaderReplyActionUsesPosterContext() async throws {
         let presenter = SpyPostDetailPresenter()
-        let viewController = PostDetailViewController(presenter: presenter)
+        let viewController = PostDetailViewController(
+            presenter: presenter,
+            accountRefresher: StubPostDetailAccountRefresher(isLoggedIn: true)
+        )
         let detail = PostDetail(
             id: "714386",
             title: "详情标题",
@@ -2346,6 +2358,7 @@ struct PostDetailLoginViewControllerTests {
         viewController.render(detail: detail)
         await waitForDetailContent(in: viewController, expectedRowCount: 1)
         viewController.handleReply(toPostHeader: PostDetailHeaderContent(detail: detail))
+        await Task.yield()
 
         let contextLabel = try #require(viewController.view.firstLabel(accessibilityIdentifier: "post-detail-reply-context-label"))
         #expect(contextLabel.text == "回复 楼主 #0")
@@ -2354,12 +2367,13 @@ struct PostDetailLoginViewControllerTests {
         replyTextView.text = "收到"
         let sendButton = try #require(viewController.view.firstButton(accessibilityIdentifier: "post-detail-reply-send-button"))
         sendButton.sendActions(for: .touchUpInside)
+        await Task.yield()
         #expect(presenter.sentReplyContent?.contains("@楼主 [#0]") == true)
         #expect(presenter.sentReplyContent?.contains("#0") == true)
         #expect(presenter.sentReplyContent?.contains("收到") == true)
     }
 
-    @Test func inlineReplyEditorPlacesStickerButtonBelowSendButton() throws {
+    @Test func inlineReplyEditorPlacesActionsInToolbarAboveTextInput() throws {
         let presenter = SpyPostDetailPresenter()
         let viewController = PostDetailViewController(presenter: presenter)
         viewController.loadViewIfNeeded()
@@ -2368,7 +2382,8 @@ struct PostDetailLoginViewControllerTests {
         viewController.displayMode = .content
 
         viewController.presentReplyEditor(mode: .plain)
-        viewController.view.layoutIfNeeded()
+        viewController.replyEditorContainer.frame = CGRect(x: 12, y: 600, width: 366, height: 180)
+        viewController.replyEditorContainer.layoutIfNeeded()
 
         let sendButton = try #require(
             viewController.view.firstButton(accessibilityIdentifier: "post-detail-reply-send-button")
@@ -2376,7 +2391,45 @@ struct PostDetailLoginViewControllerTests {
         let stickerButton = try #require(
             viewController.view.firstButton(accessibilityIdentifier: "post-detail-reply-sticker-button")
         )
-        #expect(stickerButton.frame.minY > sendButton.frame.maxY)
+        let uploadButton = try #require(
+            viewController.view.firstButton(accessibilityIdentifier: "post-detail-reply-image-upload-button")
+        )
+        let replyTextView = try #require(
+            viewController.view.firstTextView(accessibilityIdentifier: "post-detail-reply-text-view")
+        )
+
+        #expect(uploadButton.frame.maxY <= replyTextView.frame.minY)
+        #expect(stickerButton.frame.maxY <= replyTextView.frame.minY)
+        #expect(sendButton.frame.maxY <= replyTextView.frame.minY)
+        #expect(abs(uploadButton.frame.midY - stickerButton.frame.midY) < 1)
+        #expect(abs(stickerButton.frame.midY - sendButton.frame.midY) < 1)
+    }
+
+    @Test func inlineReplyEditorShowsOnlyTextSendButtonWithoutPreview() throws {
+        let presenter = SpyPostDetailPresenter()
+        let viewController = PostDetailViewController(presenter: presenter)
+        viewController.loadViewIfNeeded()
+        viewController.view.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
+        viewController.showsReplyEntry = true
+        viewController.displayMode = .content
+
+        viewController.presentReplyEditor(mode: .plain)
+        viewController.replyEditorContainer.frame = CGRect(x: 12, y: 600, width: 366, height: 180)
+        viewController.replyEditorContainer.layoutIfNeeded()
+
+        let sendButton = try #require(
+            viewController.view.firstButton(accessibilityIdentifier: "post-detail-reply-send-button")
+        )
+        let replyTextView = try #require(
+            viewController.view.firstTextView(accessibilityIdentifier: "post-detail-reply-text-view")
+        )
+
+        #expect(sendButton.frame.maxY <= replyTextView.frame.minY)
+        #expect(sendButton.configuration?.title == "发送")
+        #expect(sendButton.configuration?.image == nil)
+        #expect(sendButton.titleLabel?.font.pointSize == 13)
+        #expect(sendButton.configuration?.background.backgroundColor == .label)
+        #expect(viewController.view.firstButton(accessibilityIdentifier: "post-detail-reply-preview-button") == nil)
     }
 
     @Test func insertingStickerTokenUpdatesReplyTextAtSelection() throws {
@@ -2388,8 +2441,84 @@ struct PostDetailLoginViewControllerTests {
 
         viewController.insertStickerToken("xhj022")
 
-        #expect(viewController.replyTextView.text == "hello :xhj022:")
-        #expect(viewController.replyTextView.selectedRange.location == 14)
+        #expect(viewController.replyTextView.text == "hello :xhj022: ")
+        #expect(viewController.replyTextView.selectedRange.location == 15)
+    }
+
+    @Test func nodeImageUploadParserUsesReturnedMarkdownWhenAvailable() throws {
+        let data = try #require("""
+        {
+          "success": true,
+          "data": {
+            "url": "https://cdn.nodeimage.com/demo.jpg",
+            "markdown": "![demo](https://cdn.nodeimage.com/demo.jpg)"
+          }
+        }
+        """.data(using: .utf8))
+
+        let result = try #require(NodeImageUploadResponseParser.uploadResult(from: data))
+
+        #expect(result.imageURL.absoluteString == "https://cdn.nodeimage.com/demo.jpg")
+        #expect(result.markdownText == "![demo](https://cdn.nodeimage.com/demo.jpg)")
+    }
+
+    @Test func nodeImageUploadParserBuildsMarkdownFromNestedURL() throws {
+        let data = try #require("""
+        {
+          "image": {
+            "links": {
+              "direct": "https://cdn.nodeimage.com/demo.webp"
+            }
+          }
+        }
+        """.data(using: .utf8))
+
+        let result = try #require(NodeImageUploadResponseParser.uploadResult(from: data))
+
+        #expect(result.markdownText == "![](https://cdn.nodeimage.com/demo.webp)")
+    }
+
+    @Test func nodeImageAPIKeyNormalizerAcceptsPastedHeaderLine() {
+        #expect(NodeImageAPIKeyNormalizer.normalized("X-API-Key: nodeimage-demo-key") == "nodeimage-demo-key")
+        #expect(NodeImageAPIKeyNormalizer.normalized("Bearer nodeimage-demo-key") == "nodeimage-demo-key")
+        #expect(NodeImageAPIKeyNormalizer.normalized("  nodeimage-demo-key  ") == "nodeimage-demo-key")
+    }
+
+    @Test func nodeImageAuthorizationMessageExtractsAPIKeyFromNestedPayload() {
+        let body: [String: Any] = [
+            "type": "auth-success",
+            "data": [
+                "api_key": " X-API-Key: nodeimage-message-key "
+            ]
+        ]
+
+        #expect(NodeImageAuthorizationMessage.apiKey(from: body) == "nodeimage-message-key")
+    }
+
+    @Test func nodeImageAuthorizationMessageExtractsAPIKeyFromUserStatusResponse() {
+        let body: [String: Any] = [
+            "success": true,
+            "user": [
+                "api_key": "Bearer nodeimage-status-key"
+            ]
+        ]
+
+        #expect(NodeImageAuthorizationMessage.apiKey(from: body) == "nodeimage-status-key")
+    }
+
+    @Test func nodeImageUploadCompressorKeepsLargeImagesUnderOneMegabyte() throws {
+        let sourceData = try Self.makeNoisyJPEGData(width: 1400, height: 1400, quality: 0.98)
+        #expect(sourceData.count > NodeImageUploadImageCompressor.maxUploadByteCount)
+
+        let payload = NodeImageUploadImageCompressor.compressedPayload(
+            data: sourceData,
+            fileName: "large-source.png",
+            mimeType: "image/png"
+        )
+
+        #expect(payload.data.count <= NodeImageUploadImageCompressor.maxUploadByteCount)
+        #expect(payload.mimeType == "image/jpeg")
+        #expect(payload.fileName == "large-source.jpg")
     }
 
     @Test func renderShowsToastMessage() throws {
@@ -2403,6 +2532,34 @@ struct PostDetailLoginViewControllerTests {
         #expect(label.text == "评论已发布，可到最后一页查看")
         #expect(label.isHidden == false)
     }
+
+    private static func makeNoisyJPEGData(width: Int, height: Int, quality: CGFloat) throws -> Data {
+        var seed: UInt64 = 0x1234_5678_9abc_def0
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        for index in stride(from: 0, to: bytes.count, by: 4) {
+            seed = seed &* 6364136223846793005 &+ 1
+            bytes[index] = UInt8((seed >> 16) & 0xff)
+            bytes[index + 1] = UInt8((seed >> 24) & 0xff)
+            bytes[index + 2] = UInt8((seed >> 32) & 0xff)
+            bytes[index + 3] = 255
+        }
+        let provider = try #require(CGDataProvider(data: Data(bytes) as CFData))
+        let image = try #require(CGImage(
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+            provider: provider,
+            decode: nil,
+            shouldInterpolate: false,
+            intent: .defaultIntent
+        ))
+        return try #require(UIImage(cgImage: image).jpegData(compressionQuality: quality))
+    }
+
 }
 
 private final class SpyPostDetailPresenter: PostDetailPresenterProtocol {
@@ -2640,6 +2797,20 @@ private extension PostDetailViewController {
 
     func testPendingScrollRow() -> Int? {
         Mirror(reflecting: self).children.first { $0.label == "pendingScrollToRow" }?.value as? Int
+    }
+}
+
+private struct StubPostDetailAccountRefresher: CurrentAccountRefreshing {
+    let isLoggedIn: Bool
+
+    func refreshIfNeeded(force: Bool, maxAge: TimeInterval) async -> AccountResponse? {
+        AccountResponse(
+            displayName: isLoggedIn ? "mist" : "",
+            isLoggedIn: isLoggedIn,
+            avatarURL: nil,
+            profileURL: nil,
+            stats: []
+        )
     }
 }
 

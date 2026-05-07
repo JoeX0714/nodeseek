@@ -428,9 +428,10 @@ extension PostDetailViewController: PostDetailViewProtocol {
     func setReplySubmitting(_ isSubmitting: Bool) {
         var configuration = inlineReplySendButton.configuration ?? UIButton.Configuration.plain()
         configuration.showsActivityIndicator = isSubmitting
-        configuration.image = isSubmitting ? nil : UIImage(systemName: "arrow.up")
-        configuration.baseForegroundColor = .label
-        configuration.background.backgroundColor = .clear
+        configuration.image = nil
+        configuration.title = isSubmitting ? nil : "发送"
+        configuration.baseForegroundColor = .systemBackground
+        configuration.background.backgroundColor = .label
         inlineReplySendButton.configuration = configuration
         inlineReplySendButton.accessibilityLabel = isSubmitting ? "正在发送评论" : "发送"
         replyTextView.isEditable = !isSubmitting

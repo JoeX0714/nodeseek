@@ -74,9 +74,35 @@ struct SettingsBuildInfo: Equatable {
     }
 }
 
+@MainActor
+protocol NodeImageAuthorizationPresenting: AnyObject {
+    func presentAuthorization(
+        from presentingViewController: UIViewController,
+        onAPIKey: @escaping @MainActor (String) -> Void
+    )
+}
+
+@MainActor
+final class DefaultNodeImageAuthorizationPresenter: NodeImageAuthorizationPresenting {
+    func presentAuthorization(
+        from presentingViewController: UIViewController,
+        onAPIKey: @escaping @MainActor (String) -> Void
+    ) {
+        let authViewController = NodeImageAuthViewController { [weak presentingViewController] apiKey in
+            presentingViewController?.dismiss(animated: true) {
+                Task { @MainActor in
+                    onAPIKey(apiKey)
+                }
+            }
+        }
+        presentingViewController.present(UINavigationController(rootViewController: authViewController), animated: true)
+    }
+}
+
 final class SettingsViewController: UITableViewController {
     private enum Section: Int, CaseIterable {
         case cache
+        case nodeImage
         case debug
         case build
         case account
@@ -110,6 +136,8 @@ final class SettingsViewController: UITableViewController {
     private let sessionManager: SettingsSessionManaging
     private let currentAccountStore: CurrentAccountStore
     private let buildInfo: SettingsBuildInfo
+    private let nodeImageAPIKeyStore: NodeImageAPIKeyStoring
+    private let nodeImageAuthorizationPresenter: NodeImageAuthorizationPresenting
     private let confirmsActionsImmediately: Bool
     private let onLogout: @MainActor () -> Void
     private let onLogFile: @MainActor () -> Void
@@ -124,6 +152,8 @@ final class SettingsViewController: UITableViewController {
         sessionManager: SettingsSessionManaging? = nil,
         currentAccountStore: CurrentAccountStore = .shared,
         buildInfo: SettingsBuildInfo = SettingsBuildInfo(),
+        nodeImageAPIKeyStore: NodeImageAPIKeyStoring = KeychainNodeImageAPIKeyStore(),
+        nodeImageAuthorizationPresenter: NodeImageAuthorizationPresenting? = nil,
         confirmsActionsImmediately: Bool = false,
         onLogout: @escaping @MainActor () -> Void = {},
         onLogFile: @escaping @MainActor () -> Void = {},
@@ -133,6 +163,8 @@ final class SettingsViewController: UITableViewController {
         self.sessionManager = sessionManager ?? DefaultSettingsSessionManager()
         self.currentAccountStore = currentAccountStore
         self.buildInfo = buildInfo
+        self.nodeImageAPIKeyStore = nodeImageAPIKeyStore
+        self.nodeImageAuthorizationPresenter = nodeImageAuthorizationPresenter ?? DefaultNodeImageAuthorizationPresenter()
         self.confirmsActionsImmediately = confirmsActionsImmediately
         self.onLogout = onLogout
         self.onLogFile = onLogFile
@@ -174,6 +206,8 @@ final class SettingsViewController: UITableViewController {
         switch Section(rawValue: section) {
         case .cache:
             return "缓存"
+        case .nodeImage:
+            return "NodeImage"
         case .debug:
             return "调试"
         case .build:
@@ -189,6 +223,8 @@ final class SettingsViewController: UITableViewController {
         switch Section(rawValue: indexPath.section) {
         case .cache:
             return cacheCell(for: indexPath)
+        case .nodeImage:
+            return nodeImageAuthorizationCell(for: indexPath)
         case .debug:
             return debugCell(for: indexPath)
         case .build:
@@ -205,6 +241,8 @@ final class SettingsViewController: UITableViewController {
         switch Section(rawValue: indexPath.section) {
         case .cache:
             confirmClearCache()
+        case .nodeImage:
+            handleNodeImageAuthorizationSelection()
         case .debug:
             handleDebugSelection(at: indexPath)
         case .build:
@@ -225,6 +263,23 @@ final class SettingsViewController: UITableViewController {
         cell.selectionStyle = isClearingCache ? .none : .default
         cell.isUserInteractionEnabled = !isClearingCache
         cell.accessibilityIdentifier = "settings-clear-cache-cell"
+        return cell
+    }
+
+    private func nodeImageAuthorizationCell(for indexPath: IndexPath) -> UITableViewCell {
+        let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+        if hasNodeImageAuthorization {
+            cell.textLabel?.text = "取消 NodeImage 授权"
+            cell.textLabel?.textColor = .systemRed
+            cell.imageView?.image = UIImage(systemName: "xmark.circle")
+            cell.accessoryType = .none
+        } else {
+            cell.textLabel?.text = "NodeImage 授权"
+            cell.textLabel?.textColor = .label
+            cell.imageView?.image = UIImage(systemName: "photo.badge.plus")
+            cell.accessoryType = .disclosureIndicator
+        }
+        cell.accessibilityIdentifier = "settings-nodeimage-authorization-cell"
         return cell
     }
 
@@ -307,6 +362,10 @@ final class SettingsViewController: UITableViewController {
         return ByteCountFormatter.string(fromByteCount: Int64(cacheByteSize), countStyle: .file)
     }
 
+    private var hasNodeImageAuthorization: Bool {
+        nodeImageAPIKeyStore.apiKey()?.isEmpty == false
+    }
+
     private func refreshCacheSize() {
         Task { @MainActor [weak self] in
             guard let self else { return }
@@ -341,6 +400,46 @@ final class SettingsViewController: UITableViewController {
             self?.performClearCache()
         })
         present(alert, animated: true)
+    }
+
+    private func handleNodeImageAuthorizationSelection() {
+        if hasNodeImageAuthorization {
+            confirmCancelNodeImageAuthorization()
+        } else {
+            presentNodeImageAuthorization()
+        }
+    }
+
+    private func confirmCancelNodeImageAuthorization() {
+        guard !confirmsActionsImmediately else {
+            performCancelNodeImageAuthorization()
+            return
+        }
+
+        let alert = UIAlertController(
+            title: "取消 NodeImage 授权",
+            message: "将清除本机保存的 NodeImage API Key，不会退出 NodeSeek。",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        alert.addAction(UIAlertAction(title: "取消授权", style: .destructive) { [weak self] _ in
+            self?.performCancelNodeImageAuthorization()
+        })
+        present(alert, animated: true)
+    }
+
+    private func performCancelNodeImageAuthorization() {
+        nodeImageAPIKeyStore.clear()
+        tableView.reloadSections(IndexSet(integer: Section.nodeImage.rawValue), with: .none)
+        showAlert(title: "已取消 NodeImage 授权", message: "之后上传图片时需要重新授权。")
+    }
+
+    private func presentNodeImageAuthorization() {
+        nodeImageAuthorizationPresenter.presentAuthorization(from: self) { [weak self] apiKey in
+            guard let self else { return }
+            nodeImageAPIKeyStore.save(apiKey: apiKey)
+            tableView.reloadSections(IndexSet(integer: Section.nodeImage.rawValue), with: .none)
+        }
     }
 
     private func confirmLogout() {

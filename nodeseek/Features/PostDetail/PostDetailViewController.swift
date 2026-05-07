@@ -184,6 +184,10 @@ class PostDetailViewController: UIViewController {
     var pendingScrollToRow: Int?
     #endif
     let skeletonCommentRowCount = 4
+    let accountRefresher: any CurrentAccountRefreshing
+    let nodeImageAPIKeyStore: NodeImageAPIKeyStoring
+    let nodeImageUploadClient: NodeImageUploading
+    var imageUploadTask: Task<Void, Never>?
     let renderQueue = DispatchQueue(
         label: "com.nodeseek.app.postdetail.render",
         qos: .userInitiated
@@ -323,14 +327,49 @@ class PostDetailViewController: UIViewController {
         return textView
     }()
 
-    let inlineReplySendButton: UIButton = {
+    let replyToolbarView: UIStackView = {
+        let stackView = UIStackView()
+        stackView.axis = .horizontal
+        stackView.alignment = .center
+        stackView.distribution = .fill
+        stackView.spacing = 8
+        stackView.accessibilityIdentifier = "post-detail-reply-toolbar"
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        return stackView
+    }()
+
+    let replyToolbarSpacer = UIView()
+
+    let replyImageUploadButton: UIButton = {
         let button = UIButton(type: .system)
         var configuration = UIButton.Configuration.plain()
-        configuration.image = UIImage(systemName: "arrow.up")
+        configuration.image = UIImage(systemName: "photo")
         configuration.baseForegroundColor = .label
         configuration.background.backgroundColor = .clear
+        configuration.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 17, weight: .regular)
         configuration.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 6, bottom: 6, trailing: 6)
         button.configuration = configuration
+        button.accessibilityIdentifier = "post-detail-reply-image-upload-button"
+        button.accessibilityLabel = "上传图片"
+        button.translatesAutoresizingMaskIntoConstraints = false
+        return button
+    }()
+
+    let inlineReplySendButton: UIButton = {
+        let button = UIButton(type: .system)
+        var configuration = UIButton.Configuration.filled()
+        configuration.title = "发送"
+        configuration.baseForegroundColor = .systemBackground
+        configuration.background.backgroundColor = .label
+        configuration.background.cornerRadius = 8
+        configuration.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 10, bottom: 6, trailing: 10)
+        button.configuration = configuration
+        button.titleLabel?.font = .systemFont(ofSize: 13, weight: .semibold)
+        button.titleLabel?.numberOfLines = 1
+        button.titleLabel?.adjustsFontSizeToFitWidth = true
+        button.titleLabel?.minimumScaleFactor = 0.9
+        button.layer.cornerRadius = 8
+        button.clipsToBounds = true
         button.accessibilityIdentifier = "post-detail-reply-send-button"
         button.accessibilityLabel = "发送"
         button.translatesAutoresizingMaskIntoConstraints = false
@@ -343,6 +382,7 @@ class PostDetailViewController: UIViewController {
         configuration.image = UIImage(systemName: "face.smiling")
         configuration.baseForegroundColor = .label
         configuration.background.backgroundColor = .clear
+        configuration.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 17, weight: .regular)
         configuration.contentInsets = NSDirectionalEdgeInsets(top: 6, leading: 6, bottom: 6, trailing: 6)
         button.configuration = configuration
         button.accessibilityIdentifier = "post-detail-reply-sticker-button"
@@ -393,12 +433,18 @@ class PostDetailViewController: UIViewController {
         initialHeader: PostDetailHeaderContent? = nil,
         sourcePostURL: URL? = nil,
         currentPage: Int = 1,
-        initialAnchorID: String? = nil
+        initialAnchorID: String? = nil,
+        accountRefresher: (any CurrentAccountRefreshing)? = nil,
+        nodeImageAPIKeyStore: NodeImageAPIKeyStoring = KeychainNodeImageAPIKeyStore(),
+        nodeImageUploadClient: NodeImageUploading = NodeImageUploadClient()
     ) {
         self.presenter = presenter
         self.sourcePostURL = sourcePostURL
         self.currentPage = max(currentPage, 1)
         self.pendingInitialAnchorID = initialAnchorID
+        self.accountRefresher = accountRefresher ?? CurrentAccountRefresher.shared
+        self.nodeImageAPIKeyStore = nodeImageAPIKeyStore
+        self.nodeImageUploadClient = nodeImageUploadClient
         super.init(nibName: nil, bundle: nil)
 
         if let initialHeader {
@@ -416,6 +462,7 @@ class PostDetailViewController: UIViewController {
         attachmentLayoutRefreshWorkItem?.cancel()
         tableReloadWorkItem?.cancel()
         toastHideWorkItem?.cancel()
+        imageUploadTask?.cancel()
         NotificationCenter.default.removeObserver(self)
     }
 
@@ -572,19 +619,23 @@ class PostDetailViewController: UIViewController {
             replyContextCloseButton.heightAnchor.constraint(equalToConstant: 24),
 
             replyTextView.leadingAnchor.constraint(equalTo: replyEditorContainer.leadingAnchor, constant: 12),
-            replyTextView.topAnchor.constraint(equalTo: replyContextBar.bottomAnchor, constant: 8),
-            replyTextView.trailingAnchor.constraint(equalTo: inlineReplySendButton.leadingAnchor, constant: -8),
+            replyTextView.topAnchor.constraint(equalTo: replyToolbarView.bottomAnchor, constant: 8),
+            replyTextView.trailingAnchor.constraint(equalTo: replyEditorContainer.trailingAnchor, constant: -12),
             replyTextView.heightAnchor.constraint(greaterThanOrEqualToConstant: 88),
 
-            inlineReplySendButton.trailingAnchor.constraint(equalTo: replyEditorContainer.trailingAnchor, constant: -12),
-            inlineReplySendButton.topAnchor.constraint(equalTo: replyTextView.topAnchor, constant: 4),
-            inlineReplySendButton.widthAnchor.constraint(equalToConstant: 40),
-            inlineReplySendButton.heightAnchor.constraint(equalToConstant: 40),
+            replyToolbarView.leadingAnchor.constraint(equalTo: replyEditorContainer.leadingAnchor, constant: 12),
+            replyToolbarView.trailingAnchor.constraint(equalTo: replyEditorContainer.trailingAnchor, constant: -12),
+            replyToolbarView.topAnchor.constraint(equalTo: replyContextBar.bottomAnchor, constant: 8),
+            replyToolbarView.heightAnchor.constraint(equalToConstant: 36),
 
-            replyStickerButton.centerXAnchor.constraint(equalTo: inlineReplySendButton.centerXAnchor),
-            replyStickerButton.topAnchor.constraint(equalTo: inlineReplySendButton.bottomAnchor, constant: 8),
-            replyStickerButton.widthAnchor.constraint(equalToConstant: 40),
-            replyStickerButton.heightAnchor.constraint(equalToConstant: 40),
+            replyImageUploadButton.widthAnchor.constraint(equalToConstant: 36),
+            replyImageUploadButton.heightAnchor.constraint(equalToConstant: 36),
+
+            replyStickerButton.widthAnchor.constraint(equalToConstant: 36),
+            replyStickerButton.heightAnchor.constraint(equalToConstant: 36),
+
+            inlineReplySendButton.widthAnchor.constraint(equalToConstant: 64),
+            inlineReplySendButton.heightAnchor.constraint(equalToConstant: 36),
 
             replyStickerPickerView.leadingAnchor.constraint(equalTo: replyEditorContainer.leadingAnchor, constant: 12),
             replyStickerPickerView.trailingAnchor.constraint(equalTo: replyEditorContainer.trailingAnchor, constant: -12),
@@ -618,16 +669,21 @@ class PostDetailViewController: UIViewController {
         view.addSubview(replyEditorBackdrop)
         inlineReplySendButton.addTarget(self, action: #selector(sendReplyTapped), for: .touchUpInside)
         replyStickerButton.addTarget(self, action: #selector(toggleStickerPicker), for: .touchUpInside)
+        replyImageUploadButton.addTarget(self, action: #selector(uploadImageTapped), for: .touchUpInside)
         replyStickerPickerView.onSelectSticker = { [weak self] item in
             self?.insertStickerToken(item.token)
         }
         replyContextCloseButton.addTarget(self, action: #selector(clearReplyContext), for: .touchUpInside)
         replyContextBar.addSubview(replyContextLabel)
         replyContextBar.addSubview(replyContextCloseButton)
+        replyToolbarSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        replyToolbarView.addArrangedSubview(replyImageUploadButton)
+        replyToolbarView.addArrangedSubview(replyStickerButton)
+        replyToolbarView.addArrangedSubview(replyToolbarSpacer)
+        replyToolbarView.addArrangedSubview(inlineReplySendButton)
         replyEditorContainer.addSubview(replyContextBar)
+        replyEditorContainer.addSubview(replyToolbarView)
         replyEditorContainer.addSubview(replyTextView)
-        replyEditorContainer.addSubview(inlineReplySendButton)
-        replyEditorContainer.addSubview(replyStickerButton)
         replyEditorContainer.addSubview(replyStickerPickerView)
         view.addSubview(replyEditorContainer)
     }

@@ -49,18 +49,22 @@ final class DefaultSettingsCacheManager: SettingsCacheManaging {
 final class DefaultSettingsSessionManager: SettingsSessionManaging {
     private let cookieBridge: CookieBridge
     private let currentAccountStore: CurrentAccountStore
+    private let nodeImageAPIKeyStore: NodeImageAPIKeyStoring
 
     init(
         cookieBridge: CookieBridge? = nil,
-        currentAccountStore: CurrentAccountStore = .shared
+        currentAccountStore: CurrentAccountStore = .shared,
+        nodeImageAPIKeyStore: NodeImageAPIKeyStoring = KeychainNodeImageAPIKeyStore()
     ) {
         self.cookieBridge = cookieBridge ?? CookieBridge()
         self.currentAccountStore = currentAccountStore
+        self.nodeImageAPIKeyStore = nodeImageAPIKeyStore
     }
 
     func logout() async {
         await cookieBridge.clearSession()
         await currentAccountStore.clear()
+        nodeImageAPIKeyStore.clear()
         NotificationCenter.default.post(name: .nodeSeekLoginSessionDidClose, object: nil)
     }
 }

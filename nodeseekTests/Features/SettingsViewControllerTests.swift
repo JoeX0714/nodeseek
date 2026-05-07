@@ -22,66 +22,75 @@ struct SettingsViewControllerTests {
             cacheManager: FakeSettingsCacheManager(cacheByteSize: 4_096),
             sessionManager: FakeSettingsSessionManager(),
             currentAccountStore: accountStore,
-            buildInfo: .testFlightFixture
+            buildInfo: .testFlightFixture,
+            nodeImageAPIKeyStore: FakeNodeImageAPIKeyStore()
         )
         viewController.loadViewIfNeeded()
         viewController.view.frame = CGRect(x: 0, y: 0, width: 390, height: 844)
         viewController.view.layoutIfNeeded()
-        try await waitUntil { viewController.tableView.numberOfRows(inSection: 3) == 1 }
+        try await waitUntil { viewController.tableView.numberOfRows(inSection: 4) == 1 }
 
         let tableView = try #require(viewController.tableView)
         #expect(viewController.title == "设置")
-        #expect(tableView.numberOfSections == 4)
+        #expect(tableView.numberOfSections == 5)
         #expect(tableView.numberOfRows(inSection: 0) == 1)
-        #expect(tableView.numberOfRows(inSection: 1) == 3)
-        #expect(tableView.numberOfRows(inSection: 2) == 5)
-        #expect(tableView.numberOfRows(inSection: 3) == 1)
-        #expect(tableView.dataSource?.tableView?(tableView, titleForHeaderInSection: 1) == "调试")
-        #expect(tableView.dataSource?.tableView?(tableView, titleForHeaderInSection: 2) == "版本")
+        #expect(tableView.numberOfRows(inSection: 1) == 1)
+        #expect(tableView.numberOfRows(inSection: 2) == 3)
+        #expect(tableView.numberOfRows(inSection: 3) == 5)
+        #expect(tableView.numberOfRows(inSection: 4) == 1)
+        #expect(tableView.dataSource?.tableView?(tableView, titleForHeaderInSection: 1) == "NodeImage")
+        #expect(tableView.dataSource?.tableView?(tableView, titleForHeaderInSection: 2) == "调试")
+        #expect(tableView.dataSource?.tableView?(tableView, titleForHeaderInSection: 3) == "版本")
 
         let cacheCell = try #require(tableView.dataSource?.tableView(
             tableView,
             cellForRowAt: IndexPath(row: 0, section: 0)
         ))
-        let logCell = try #require(tableView.dataSource?.tableView(
+        let nodeImageCell = try #require(tableView.dataSource?.tableView(
             tableView,
             cellForRowAt: IndexPath(row: 0, section: 1)
         ))
-        let logFileCell = try #require(tableView.dataSource?.tableView(
-            tableView,
-            cellForRowAt: IndexPath(row: 1, section: 1)
-        ))
-        let detailTestCell = try #require(tableView.dataSource?.tableView(
-            tableView,
-            cellForRowAt: IndexPath(row: 2, section: 1)
-        ))
-        let appVersionCell = try #require(tableView.dataSource?.tableView(
+        let logCell = try #require(tableView.dataSource?.tableView(
             tableView,
             cellForRowAt: IndexPath(row: 0, section: 2)
         ))
-        let buildNumberCell = try #require(tableView.dataSource?.tableView(
+        let logFileCell = try #require(tableView.dataSource?.tableView(
             tableView,
             cellForRowAt: IndexPath(row: 1, section: 2)
         ))
-        let gitCell = try #require(tableView.dataSource?.tableView(
+        let detailTestCell = try #require(tableView.dataSource?.tableView(
             tableView,
             cellForRowAt: IndexPath(row: 2, section: 2)
         ))
+        let appVersionCell = try #require(tableView.dataSource?.tableView(
+            tableView,
+            cellForRowAt: IndexPath(row: 0, section: 3)
+        ))
+        let buildNumberCell = try #require(tableView.dataSource?.tableView(
+            tableView,
+            cellForRowAt: IndexPath(row: 1, section: 3)
+        ))
+        let gitCell = try #require(tableView.dataSource?.tableView(
+            tableView,
+            cellForRowAt: IndexPath(row: 2, section: 3)
+        ))
         let workflowCell = try #require(tableView.dataSource?.tableView(
             tableView,
-            cellForRowAt: IndexPath(row: 3, section: 2)
+            cellForRowAt: IndexPath(row: 3, section: 3)
         ))
         let githubCell = try #require(tableView.dataSource?.tableView(
             tableView,
-            cellForRowAt: IndexPath(row: 4, section: 2)
+            cellForRowAt: IndexPath(row: 4, section: 3)
         ))
         let logoutCell = try #require(tableView.dataSource?.tableView(
             tableView,
-            cellForRowAt: IndexPath(row: 0, section: 3)
+            cellForRowAt: IndexPath(row: 0, section: 4)
         ))
 
         #expect(cacheCell.textLabel?.text == "清除缓存")
         #expect(cacheCell.detailTextLabel?.text == "4 KB")
+        #expect(nodeImageCell.textLabel?.text == "NodeImage 授权")
+        #expect(nodeImageCell.accessoryType == .disclosureIndicator)
         #expect(logCell.textLabel?.text == "记录日志")
         let loggingSwitch = try #require(logCell.accessoryView as? UISwitch)
         #expect(loggingSwitch.isOn == false)
@@ -107,13 +116,14 @@ struct SettingsViewControllerTests {
         let viewController = SettingsViewController(
             cacheManager: FakeSettingsCacheManager(cacheByteSize: 4_096),
             sessionManager: FakeSettingsSessionManager(),
-            currentAccountStore: accountStore
+            currentAccountStore: accountStore,
+            nodeImageAPIKeyStore: FakeNodeImageAPIKeyStore()
         )
 
         viewController.loadViewIfNeeded()
-        try await waitUntil { viewController.tableView.numberOfRows(inSection: 3) == 0 }
+        try await waitUntil { viewController.tableView.numberOfRows(inSection: 4) == 0 }
 
-        #expect(viewController.tableView.numberOfRows(inSection: 3) == 0)
+        #expect(viewController.tableView.numberOfRows(inSection: 4) == 0)
     }
 
     @Test func selectingClearCacheClearsCacheWithoutLoggingOut() async throws {
@@ -122,6 +132,7 @@ struct SettingsViewControllerTests {
         let viewController = SettingsViewController(
             cacheManager: cacheManager,
             sessionManager: sessionManager,
+            nodeImageAPIKeyStore: FakeNodeImageAPIKeyStore(),
             confirmsActionsImmediately: true
         )
         viewController.loadViewIfNeeded()
@@ -147,17 +158,18 @@ struct SettingsViewControllerTests {
             cacheManager: cacheManager,
             sessionManager: sessionManager,
             currentAccountStore: accountStore,
+            nodeImageAPIKeyStore: FakeNodeImageAPIKeyStore(),
             confirmsActionsImmediately: true,
             onLogout: {
                 logoutCallbackCount += 1
             }
         )
         viewController.loadViewIfNeeded()
-        try await waitUntil { viewController.tableView.numberOfRows(inSection: 3) == 1 }
+        try await waitUntil { viewController.tableView.numberOfRows(inSection: 4) == 1 }
 
         viewController.tableView.delegate?.tableView?(
             viewController.tableView,
-            didSelectRowAt: IndexPath(row: 0, section: 3)
+            didSelectRowAt: IndexPath(row: 0, section: 4)
         )
         try await Task.sleep(nanoseconds: 100_000_000)
 
@@ -172,6 +184,7 @@ struct SettingsViewControllerTests {
         let viewController = SettingsViewController(
             cacheManager: FakeSettingsCacheManager(cacheByteSize: 0),
             sessionManager: FakeSettingsSessionManager(),
+            nodeImageAPIKeyStore: FakeNodeImageAPIKeyStore(),
             onLogFile: {
                 logFileTapCount += 1
             },
@@ -183,11 +196,11 @@ struct SettingsViewControllerTests {
 
         viewController.tableView.delegate?.tableView?(
             viewController.tableView,
-            didSelectRowAt: IndexPath(row: 1, section: 1)
+            didSelectRowAt: IndexPath(row: 1, section: 2)
         )
         viewController.tableView.delegate?.tableView?(
             viewController.tableView,
-            didSelectRowAt: IndexPath(row: 2, section: 1)
+            didSelectRowAt: IndexPath(row: 2, section: 2)
         )
 
         #expect(logFileTapCount == 1)
@@ -200,7 +213,29 @@ struct SettingsViewControllerTests {
         NodeSeekDebugConfig.enableFileLogging = false
         let viewController = SettingsViewController(
             cacheManager: FakeSettingsCacheManager(cacheByteSize: 0),
-            sessionManager: FakeSettingsSessionManager()
+            sessionManager: FakeSettingsSessionManager(),
+            nodeImageAPIKeyStore: FakeNodeImageAPIKeyStore()
+        )
+        viewController.loadViewIfNeeded()
+
+        let cell = try #require(viewController.tableView.dataSource?.tableView(
+            viewController.tableView,
+            cellForRowAt: IndexPath(row: 0, section: 2)
+        ))
+        let loggingSwitch = try #require(cell.accessoryView as? UISwitch)
+        loggingSwitch.isOn = true
+        loggingSwitch.sendActions(for: .valueChanged)
+
+        #expect(NodeSeekDebugConfig.enableFileLogging == true)
+    }
+
+    @Test func nodeImageCellShowsCancelAuthorizationWhenAPIKeyExists() throws {
+        let nodeImageAPIKeyStore = FakeNodeImageAPIKeyStore()
+        nodeImageAPIKeyStore.save(apiKey: "nodeimage-key")
+        let viewController = SettingsViewController(
+            cacheManager: FakeSettingsCacheManager(cacheByteSize: 0),
+            sessionManager: FakeSettingsSessionManager(),
+            nodeImageAPIKeyStore: nodeImageAPIKeyStore
         )
         viewController.loadViewIfNeeded()
 
@@ -208,11 +243,111 @@ struct SettingsViewControllerTests {
             viewController.tableView,
             cellForRowAt: IndexPath(row: 0, section: 1)
         ))
-        let loggingSwitch = try #require(cell.accessoryView as? UISwitch)
-        loggingSwitch.isOn = true
-        loggingSwitch.sendActions(for: .valueChanged)
 
-        #expect(NodeSeekDebugConfig.enableFileLogging == true)
+        #expect(cell.textLabel?.text == "取消 NodeImage 授权")
+        #expect(cell.textLabel?.textColor == .systemRed)
+        #expect(cell.accessoryType == .none)
+    }
+
+    @Test func selectingNodeImageAuthorizationStoresAPIKeyAndRefreshesCell() throws {
+        let nodeImageAPIKeyStore = FakeNodeImageAPIKeyStore()
+        let authorizationPresenter = FakeNodeImageAuthorizationPresenter(apiKeyToReturn: "new-nodeimage-key")
+        let viewController = SettingsViewController(
+            cacheManager: FakeSettingsCacheManager(cacheByteSize: 0),
+            sessionManager: FakeSettingsSessionManager(),
+            nodeImageAPIKeyStore: nodeImageAPIKeyStore,
+            nodeImageAuthorizationPresenter: authorizationPresenter,
+            confirmsActionsImmediately: true
+        )
+        viewController.loadViewIfNeeded()
+
+        viewController.tableView.delegate?.tableView?(
+            viewController.tableView,
+            didSelectRowAt: IndexPath(row: 0, section: 1)
+        )
+
+        #expect(authorizationPresenter.presentCount == 1)
+        #expect(nodeImageAPIKeyStore.apiKey() == "new-nodeimage-key")
+        let cell = try #require(viewController.tableView.dataSource?.tableView(
+            viewController.tableView,
+            cellForRowAt: IndexPath(row: 0, section: 1)
+        ))
+        #expect(cell.textLabel?.text == "取消 NodeImage 授权")
+    }
+
+    @Test func selectingNodeImageAuthorizationDoesNotShowSuccessAlertAfterSavingAPIKey() async throws {
+        let nodeImageAPIKeyStore = FakeNodeImageAPIKeyStore()
+        let authorizationPresenter = FakeNodeImageAuthorizationPresenter(apiKeyToReturn: "new-nodeimage-key")
+        let viewController = SettingsViewController(
+            cacheManager: FakeSettingsCacheManager(cacheByteSize: 0),
+            sessionManager: FakeSettingsSessionManager(),
+            nodeImageAPIKeyStore: nodeImageAPIKeyStore,
+            nodeImageAuthorizationPresenter: authorizationPresenter
+        )
+        viewController.loadViewIfNeeded()
+        let window = UIWindow(frame: UIScreen.main.bounds)
+        window.rootViewController = viewController
+        window.makeKeyAndVisible()
+        defer {
+            viewController.dismiss(animated: false)
+            window.isHidden = true
+        }
+
+        viewController.tableView.delegate?.tableView?(
+            viewController.tableView,
+            didSelectRowAt: IndexPath(row: 0, section: 1)
+        )
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        #expect(nodeImageAPIKeyStore.apiKey() == "new-nodeimage-key")
+        #expect(viewController.presentedViewController == nil)
+    }
+
+    @Test func selectingCancelNodeImageAuthorizationClearsAPIKeyAndRefreshesCell() throws {
+        let nodeImageAPIKeyStore = FakeNodeImageAPIKeyStore()
+        nodeImageAPIKeyStore.save(apiKey: "nodeimage-key")
+        let viewController = SettingsViewController(
+            cacheManager: FakeSettingsCacheManager(cacheByteSize: 0),
+            sessionManager: FakeSettingsSessionManager(),
+            nodeImageAPIKeyStore: nodeImageAPIKeyStore,
+            confirmsActionsImmediately: true
+        )
+        viewController.loadViewIfNeeded()
+
+        viewController.tableView.delegate?.tableView?(
+            viewController.tableView,
+            didSelectRowAt: IndexPath(row: 0, section: 1)
+        )
+
+        #expect(nodeImageAPIKeyStore.clearCount == 1)
+        #expect(nodeImageAPIKeyStore.apiKey() == nil)
+        let cell = try #require(viewController.tableView.dataSource?.tableView(
+            viewController.tableView,
+            cellForRowAt: IndexPath(row: 0, section: 1)
+        ))
+        #expect(cell.textLabel?.text == "NodeImage 授权")
+    }
+
+    @Test func defaultSessionLogoutClearsNodeImageAuthorization() async throws {
+        let nodeImageAPIKeyStore = FakeNodeImageAPIKeyStore()
+        nodeImageAPIKeyStore.save(apiKey: "nodeimage-key")
+        let defaults = try #require(UserDefaults(suiteName: "settings-session-\(UUID().uuidString)"))
+        let accountStore = CurrentAccountStore(userDefaults: defaults, storageKey: "account")
+        let cookieStorage = try #require(URLSessionConfiguration.ephemeral.httpCookieStorage)
+        let manager = DefaultSettingsSessionManager(
+            cookieBridge: CookieBridge(
+                webCookieStore: FakeWebCookieStore(),
+                urlCookieStorage: cookieStorage,
+                allowedDomains: []
+            ),
+            currentAccountStore: accountStore,
+            nodeImageAPIKeyStore: nodeImageAPIKeyStore
+        )
+
+        await manager.logout()
+
+        #expect(nodeImageAPIKeyStore.clearCount == 1)
+        #expect(nodeImageAPIKeyStore.apiKey() == nil)
     }
 }
 
@@ -253,6 +388,53 @@ private final class FakeSettingsSessionManager: SettingsSessionManaging {
     func logout() async {
         logoutCount += 1
     }
+}
+
+private final class FakeNodeImageAPIKeyStore: NodeImageAPIKeyStoring {
+    private(set) var clearCount = 0
+    private var storedAPIKey: String?
+
+    func apiKey() -> String? {
+        storedAPIKey
+    }
+
+    func save(apiKey: String) {
+        storedAPIKey = apiKey
+    }
+
+    func clear() {
+        clearCount += 1
+        storedAPIKey = nil
+    }
+}
+
+@MainActor
+private final class FakeNodeImageAuthorizationPresenter: NodeImageAuthorizationPresenting {
+    private(set) var presentCount = 0
+    private let apiKeyToReturn: String
+
+    init(apiKeyToReturn: String) {
+        self.apiKeyToReturn = apiKeyToReturn
+    }
+
+    func presentAuthorization(
+        from presentingViewController: UIViewController,
+        onAPIKey: @escaping @MainActor (String) -> Void
+    ) {
+        presentCount += 1
+        onAPIKey(apiKeyToReturn)
+    }
+}
+
+@MainActor
+private final class FakeWebCookieStore: WebCookieStore {
+    func allCookies() async -> [HTTPCookie] {
+        []
+    }
+
+    func setCookie(_ cookie: HTTPCookie) async {}
+
+    func deleteCookie(_ cookie: HTTPCookie) async {}
 }
 
 @MainActor
