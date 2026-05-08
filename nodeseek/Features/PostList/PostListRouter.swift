@@ -8,30 +8,31 @@
 import UIKit
 
 class PostListRouter: PostListRouterProtocol {
-    
+
     // MARK: - Properties
     weak var viewController: UIViewController?
-    
+
     // MARK: - Static Methods
     static func createModule() -> UIViewController {
-        let router = PostListRouter()
-        let interactor = PostListInteractor()
-        let presenter = PostListPresenter(
-            interactor: interactor,
-            router: router,
-            visitedStore: VisitedPostStore.shared
-        )
-        
-        interactor.presenter = presenter
-        
-        let view = PostListViewController(presenter: presenter)
-        
-        presenter.setView(view)
-        router.viewController = view
-        
-        return view
+        MainActor.assumeIsolated {
+            let router = PostListRouter()
+            let interactor = PostListInteractor()
+            let presenter = PostListPresenter(
+                interactor: interactor,
+                router: router,
+                visitedStore: VisitedPostStore.shared
+            )
+
+            interactor.presenter = presenter
+
+            let view = PostListViewController(presenter: presenter)
+            presenter.setView(view)
+            router.viewController = view
+
+            return view
+        }
     }
-    
+
     // MARK: - Navigation
     func navigateToPostDetail(post: PostSummary) {
         navigateToPostDetail(post: post, page: 1)
@@ -73,13 +74,14 @@ class PostListRouter: PostListRouterProtocol {
             let post = Self.postSummary(from: record)
             let page = Self.page(from: record.url)
             let detailViewController = PostDetailRouter.createModule(post: post, page: page)
+
             if let navigationController = recentViewController?.navigationController {
                 navigationController.pushViewController(detailViewController, animated: true)
                 return
             }
+
             self?.viewController?.navigationController?.pushViewController(detailViewController, animated: true)
         }
-
         show(recentViewController)
     }
 
@@ -126,10 +128,11 @@ class PostListRouter: PostListRouterProtocol {
         let components = url.lastPathComponent.split(separator: "-")
         guard components.count >= 3,
               components.first == "post",
-              let page = Int(components[2]) else {
+              let page = Int(components[2])
+        else {
             return 1
         }
+
         return max(page, 1)
     }
-
 }
