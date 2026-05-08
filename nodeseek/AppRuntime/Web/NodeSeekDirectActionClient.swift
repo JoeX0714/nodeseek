@@ -38,10 +38,10 @@ final class NodeSeekDirectActionClient {
 
     init(
         session: URLSession = .shared,
-        cookieBridge: CookieSynchronizing = CookieBridge()
+        cookieBridge: CookieSynchronizing? = nil
     ) {
         self.session = session
-        self.cookieBridge = cookieBridge
+        self.cookieBridge = cookieBridge ?? CookieBridge()
     }
 
     func submitCollection(
@@ -227,6 +227,7 @@ final class NodeSeekDirectActionClient {
         )
     }
 }
+
 @MainActor
 final class DirectPostCollectionAutomator: PostCollectionAutomating {
 
@@ -234,11 +235,11 @@ final class DirectPostCollectionAutomator: PostCollectionAutomating {
     private let fallback: PostCollectionAutomating
 
     init(
-        client: NodeSeekDirectActionClient = .shared,
-        fallback: PostCollectionAutomating = WebViewPostCollectionAutomator()
+        client: NodeSeekDirectActionClient? = nil,
+        fallback: PostCollectionAutomating? = nil
     ) {
-        self.client = client
-        self.fallback = fallback
+        self.client = client ?? .shared
+        self.fallback = fallback ?? WebViewPostCollectionAutomator()
     }
 
     func submitCollection(
@@ -279,11 +280,11 @@ final class DirectCommentUpvoteAutomator: CommentUpvoteAutomating {
     private let fallback: CommentUpvoteAutomating
 
     init(
-        client: NodeSeekDirectActionClient = .shared,
-        fallback: CommentUpvoteAutomating = WebViewCommentUpvoteAutomator()
+        client: NodeSeekDirectActionClient? = nil,
+        fallback: CommentUpvoteAutomating? = nil
     ) {
-        self.client = client
-        self.fallback = fallback
+        self.client = client ?? .shared
+        self.fallback = fallback ?? WebViewCommentUpvoteAutomator()
     }
 
     func submitUpvote(
@@ -325,11 +326,11 @@ final class DirectPostUpvoteAutomator: PostUpvoteAutomating {
     private let fallback: PostUpvoteAutomating
 
     init(
-        client: NodeSeekDirectActionClient = .shared,
-        fallback: PostUpvoteAutomating = WebViewPostUpvoteAutomator()
+        client: NodeSeekDirectActionClient? = nil,
+        fallback: PostUpvoteAutomating? = nil
     ) {
-        self.client = client
-        self.fallback = fallback
+        self.client = client ?? .shared
+        self.fallback = fallback ?? WebViewPostUpvoteAutomator()
     }
 
     func submitUpvote(
@@ -371,11 +372,11 @@ final class DirectCommentChickenLegAutomator: CommentChickenLegAutomating {
     private let fallback: CommentChickenLegAutomating
 
     init(
-        client: NodeSeekDirectActionClient = .shared,
-        fallback: CommentChickenLegAutomating = WebViewCommentChickenLegAutomator()
+        client: NodeSeekDirectActionClient? = nil,
+        fallback: CommentChickenLegAutomating? = nil
     ) {
-        self.client = client
-        self.fallback = fallback
+        self.client = client ?? .shared
+        self.fallback = fallback ?? WebViewCommentChickenLegAutomator()
     }
 
     func submitChickenLeg(
@@ -417,11 +418,11 @@ final class DirectPostChickenLegAutomator: PostChickenLegAutomating {
     private let fallback: PostChickenLegAutomating
 
     init(
-        client: NodeSeekDirectActionClient = .shared,
-        fallback: PostChickenLegAutomating = WebViewPostChickenLegAutomator()
+        client: NodeSeekDirectActionClient? = nil,
+        fallback: PostChickenLegAutomating? = nil
     ) {
-        self.client = client
-        self.fallback = fallback
+        self.client = client ?? .shared
+        self.fallback = fallback ?? WebViewPostChickenLegAutomator()
     }
 
     func submitChickenLeg(
@@ -463,11 +464,11 @@ final class DirectCommentDislikeAutomator: CommentDislikeAutomating {
     private let fallback: CommentDislikeAutomating
 
     init(
-        client: NodeSeekDirectActionClient = .shared,
-        fallback: CommentDislikeAutomating = WebViewCommentDislikeAutomator()
+        client: NodeSeekDirectActionClient? = nil,
+        fallback: CommentDislikeAutomating? = nil
     ) {
-        self.client = client
-        self.fallback = fallback
+        self.client = client ?? .shared
+        self.fallback = fallback ?? WebViewCommentDislikeAutomator()
     }
 
     func submitDislike(
@@ -509,11 +510,11 @@ final class DirectPostDislikeAutomator: PostDislikeAutomating {
     private let fallback: PostDislikeAutomating
 
     init(
-        client: NodeSeekDirectActionClient = .shared,
-        fallback: PostDislikeAutomating = WebViewPostDislikeAutomator()
+        client: NodeSeekDirectActionClient? = nil,
+        fallback: PostDislikeAutomating? = nil
     ) {
-        self.client = client
-        self.fallback = fallback
+        self.client = client ?? .shared
+        self.fallback = fallback ?? WebViewPostDislikeAutomator()
     }
 
     func submitDislike(
