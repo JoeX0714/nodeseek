@@ -14,6 +14,7 @@ class PostDetailRouter: PostDetailRouterProtocol {
     weak var viewController: UIViewController?
     
     // MARK: - Static Methods
+    @MainActor
     static func createModule(
         post: PostSummary? = nil,
         page: Int = 1,
