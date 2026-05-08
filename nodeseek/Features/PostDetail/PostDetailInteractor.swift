@@ -28,6 +28,7 @@ class PostDetailInteractor: PostDetailInteractorInput {
     private let postDislikeSubmitter: PostDislikeSubmitting
     private let commentDislikeSubmitter: CommentDislikeSubmitting
     private let sessionStore: NodeSeekSessionStore
+    private let cookieSynchronizer: CookieSynchronizing?
     
     // MARK: - Initialization
     init(
@@ -42,10 +43,11 @@ class PostDetailInteractor: PostDetailInteractorInput {
         postDislikeSubmitter: PostDislikeSubmitting? = nil,
         commentDislikeSubmitter: CommentDislikeSubmitting? = nil,
         page: Int = 1,
-        sessionStore: NodeSeekSessionStore = .shared
+        sessionStore: NodeSeekSessionStore = .shared,
+        cookieSynchronizer: CookieSynchronizing? = nil
     ) {
         self.post = post
-        self.service = service ?? NodeSeekService()
+        self.service = service ?? NodeSeekService(htmlClient: HTTPHTMLClient())
         self.initialPage = max(1, page)
         self.commentSubmitter = commentSubmitter ?? NodeSeekCommentSubmitter()
         self.collectionSubmitter = collectionSubmitter ?? NodeSeekPostCollectionSubmitter()
@@ -56,6 +58,7 @@ class PostDetailInteractor: PostDetailInteractorInput {
         self.postDislikeSubmitter = postDislikeSubmitter ?? NodeSeekPostDislikeSubmitter()
         self.commentDislikeSubmitter = commentDislikeSubmitter ?? NodeSeekCommentDislikeSubmitter()
         self.sessionStore = sessionStore
+        self.cookieSynchronizer = cookieSynchronizer ?? (service == nil ? CookieBridge() : nil)
     }
     
     // MARK: - Methods
@@ -327,6 +330,7 @@ class PostDetailInteractor: PostDetailInteractorInput {
 
     private func loadDetail(postID: String, page: Int) async throws -> PostDetail? {
         AppLog.info(.postDetail, "详情请求开始，postID=\(postID), page=\(page)")
+        await syncWebViewCookiesIfNeeded()
         let result = try await service.loadPostDetail(postID: postID, page: page)
         switch result {
         case .value(let detail):
@@ -343,6 +347,11 @@ class PostDetailInteractor: PostDetailInteractorInput {
             }
             throw MessageError(message: message)
         }
+    }
+
+    private func syncWebViewCookiesIfNeeded() async {
+        guard let cookieSynchronizer else { return }
+        await cookieSynchronizer.syncWebViewCookiesToURLSession()
     }
 
     private static func isCancelledLoad(_ error: Error) -> Bool {

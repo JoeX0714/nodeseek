@@ -7,20 +7,24 @@
 
 import Foundation
 
+@MainActor
 class PostListInteractor: PostListInteractorInput {
     
     // MARK: - Properties
     weak var presenter: PostListInteractorOutput?
     private let service: NodeSeekService
     private let sessionStore: NodeSeekSessionStore
+    private let cookieSynchronizer: CookieSynchronizing?
     
     // MARK: - Initialization
     init(
-        service: NodeSeekService = NodeSeekService(),
-        sessionStore: NodeSeekSessionStore = .shared
+        service: NodeSeekService? = nil,
+        sessionStore: NodeSeekSessionStore = .shared,
+        cookieSynchronizer: CookieSynchronizing? = nil
     ) {
-        self.service = service
+        self.service = service ?? NodeSeekService(htmlClient: HTTPHTMLClient())
         self.sessionStore = sessionStore
+        self.cookieSynchronizer = cookieSynchronizer ?? (service == nil ? CookieBridge() : nil)
     }
     
     // MARK: - Methods
@@ -60,6 +64,7 @@ class PostListInteractor: PostListInteractorInput {
 
     private func loadPosts(page: Int, category: PostListCategory, sortMode: PostListSortMode) async throws -> [PostSummary] {
         AppLog.info(.postList, "列表请求开始，category=\(category.rawValue), sort=\(sortMode.rawValue), page=\(page)")
+        await syncWebViewCookiesIfNeeded()
         let result = try await service.loadPostList(page: page, category: category, sortMode: sortMode)
         switch result {
         case .value(let posts):
@@ -71,6 +76,11 @@ class PostListInteractor: PostListInteractorInput {
             let message = await sessionStore.recordChallenge(challenge)
             throw PostListLoadError.challengeRequired(message)
         }
+    }
+
+    private func syncWebViewCookiesIfNeeded() async {
+        guard let cookieSynchronizer else { return }
+        await cookieSynchronizer.syncWebViewCookiesToURLSession()
     }
 }
 
