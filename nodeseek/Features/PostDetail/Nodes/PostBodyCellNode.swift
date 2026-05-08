@@ -501,6 +501,7 @@ final class PostBodyCellNode: ASCellNode {
         onCommentTapped()
     }
 
+    @MainActor
     private func requestAvatarIfNeeded() {
         guard hasDisplayableAuthor else { return }
         guard !hasRequestedAvatar else { return }
@@ -509,6 +510,7 @@ final class PostBodyCellNode: ASCellNode {
         avatarLoader.loadAvatar(into: avatarImageView, postID: content.postID, avatarURL: content.avatarURL)
     }
 
+    @MainActor
     private func cancelAvatarLoad() {
         guard let avatarImageView else { return }
         avatarLoader.cancel(on: avatarImageView)
