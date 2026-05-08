@@ -9,40 +9,41 @@ import Foundation
 import UIKit
 
 class PostDetailRouter: PostDetailRouterProtocol {
-    
+
     // MARK: - Properties
     weak var viewController: UIViewController?
-    
+
     // MARK: - Static Methods
-    @MainActor
     static func createModule(
         post: PostSummary? = nil,
         page: Int = 1,
         initialAnchorID: String? = nil
     ) -> UIViewController {
-        let router = PostDetailRouter()
-        let interactor = PostDetailInteractor(post: post, page: page)
-        let presenter = PostDetailPresenter(
-            interactor: interactor,
-            router: router,
-            initialPage: page,
-            visitedStore: VisitedPostStore.shared
-        )
-        
-        interactor.presenter = presenter
-        
-        let view = PostDetailViewController(
-            presenter: presenter,
-            initialHeader: post.map(PostDetailHeaderContent.init(post:)),
-            sourcePostURL: post?.url,
-            currentPage: page,
-            initialAnchorID: initialAnchorID
-        )
-        
-        presenter.setView(view)
-        router.viewController = view
-        
-        return view
+        MainActor.assumeIsolated {
+            let router = PostDetailRouter()
+            let interactor = PostDetailInteractor(post: post, page: page)
+            let presenter = PostDetailPresenter(
+                interactor: interactor,
+                router: router,
+                initialPage: page,
+                visitedStore: VisitedPostStore.shared
+            )
+
+            interactor.presenter = presenter
+
+            let view = PostDetailViewController(
+                presenter: presenter,
+                initialHeader: post.map(PostDetailHeaderContent.init(post:)),
+                sourcePostURL: post?.url,
+                currentPage: page,
+                initialAnchorID: initialAnchorID
+            )
+
+            presenter.setView(view)
+            router.viewController = view
+
+            return view
+        }
     }
 
     func navigateToLogin(onClose: @escaping @MainActor () -> Void) {
