@@ -1,0 +1,31 @@
+name: iOS Build Check
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Show schemes
+        run: xcodebuild -list -project nodeseek.xcodeproj
+
+      - name: Build for iOS Simulator
+        run: |
+          xcodebuild \
+            -project nodeseek.xcodeproj \
+            -scheme nodeseek \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath .build/XcodeDerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            build
