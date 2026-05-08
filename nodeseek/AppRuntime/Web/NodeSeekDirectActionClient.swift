@@ -227,3 +227,323 @@ final class NodeSeekDirectActionClient {
         )
     }
 }
+@MainActor
+final class DirectPostCollectionAutomator: PostCollectionAutomating {
+
+    private let client: NodeSeekDirectActionClient
+    private let fallback: PostCollectionAutomating
+
+    init(
+        client: NodeSeekDirectActionClient = .shared,
+        fallback: PostCollectionAutomating = WebViewPostCollectionAutomator()
+    ) {
+        self.client = client
+        self.fallback = fallback
+    }
+
+    func submitCollection(
+        postID: Int,
+        action: String,
+        referer: URL
+    ) async throws -> PostCollectionAutomationResponse {
+        do {
+            let response = try await client.submitCollection(
+                postID: postID,
+                action: action,
+                referer: referer
+            )
+
+            if response.ok {
+                return response
+            }
+
+            return try await fallback.submitCollection(
+                postID: postID,
+                action: action,
+                referer: referer
+            )
+        } catch {
+            return try await fallback.submitCollection(
+                postID: postID,
+                action: action,
+                referer: referer
+            )
+        }
+    }
+}
+
+@MainActor
+final class DirectCommentUpvoteAutomator: CommentUpvoteAutomating {
+
+    private let client: NodeSeekDirectActionClient
+    private let fallback: CommentUpvoteAutomating
+
+    init(
+        client: NodeSeekDirectActionClient = .shared,
+        fallback: CommentUpvoteAutomating = WebViewCommentUpvoteAutomator()
+    ) {
+        self.client = client
+        self.fallback = fallback
+    }
+
+    func submitUpvote(
+        commentID: Int,
+        action: String,
+        referer: URL
+    ) async throws -> CommentUpvoteAutomationResponse {
+        do {
+            let response = try await client.submitCommentReaction(
+                commentID: commentID,
+                kind: .upvote,
+                action: action,
+                referer: referer
+            )
+
+            if response.ok {
+                return response
+            }
+
+            return try await fallback.submitUpvote(
+                commentID: commentID,
+                action: action,
+                referer: referer
+            )
+        } catch {
+            return try await fallback.submitUpvote(
+                commentID: commentID,
+                action: action,
+                referer: referer
+            )
+        }
+    }
+}
+
+@MainActor
+final class DirectPostUpvoteAutomator: PostUpvoteAutomating {
+
+    private let client: NodeSeekDirectActionClient
+    private let fallback: PostUpvoteAutomating
+
+    init(
+        client: NodeSeekDirectActionClient = .shared,
+        fallback: PostUpvoteAutomating = WebViewPostUpvoteAutomator()
+    ) {
+        self.client = client
+        self.fallback = fallback
+    }
+
+    func submitUpvote(
+        postID: Int,
+        action: String,
+        referer: URL
+    ) async throws -> PostUpvoteAutomationResponse {
+        do {
+            let response = try await client.submitPostReaction(
+                postID: postID,
+                kind: .upvote,
+                action: action,
+                referer: referer
+            )
+
+            if response.ok {
+                return response
+            }
+
+            return try await fallback.submitUpvote(
+                postID: postID,
+                action: action,
+                referer: referer
+            )
+        } catch {
+            return try await fallback.submitUpvote(
+                postID: postID,
+                action: action,
+                referer: referer
+            )
+        }
+    }
+}
+
+@MainActor
+final class DirectCommentChickenLegAutomator: CommentChickenLegAutomating {
+
+    private let client: NodeSeekDirectActionClient
+    private let fallback: CommentChickenLegAutomating
+
+    init(
+        client: NodeSeekDirectActionClient = .shared,
+        fallback: CommentChickenLegAutomating = WebViewCommentChickenLegAutomator()
+    ) {
+        self.client = client
+        self.fallback = fallback
+    }
+
+    func submitChickenLeg(
+        commentID: Int,
+        action: String,
+        referer: URL
+    ) async throws -> CommentUpvoteAutomationResponse {
+        do {
+            let response = try await client.submitCommentReaction(
+                commentID: commentID,
+                kind: .chickenLeg,
+                action: action,
+                referer: referer
+            )
+
+            if response.ok {
+                return response
+            }
+
+            return try await fallback.submitChickenLeg(
+                commentID: commentID,
+                action: action,
+                referer: referer
+            )
+        } catch {
+            return try await fallback.submitChickenLeg(
+                commentID: commentID,
+                action: action,
+                referer: referer
+            )
+        }
+    }
+}
+
+@MainActor
+final class DirectPostChickenLegAutomator: PostChickenLegAutomating {
+
+    private let client: NodeSeekDirectActionClient
+    private let fallback: PostChickenLegAutomating
+
+    init(
+        client: NodeSeekDirectActionClient = .shared,
+        fallback: PostChickenLegAutomating = WebViewPostChickenLegAutomator()
+    ) {
+        self.client = client
+        self.fallback = fallback
+    }
+
+    func submitChickenLeg(
+        postID: Int,
+        action: String,
+        referer: URL
+    ) async throws -> PostUpvoteAutomationResponse {
+        do {
+            let response = try await client.submitPostReaction(
+                postID: postID,
+                kind: .chickenLeg,
+                action: action,
+                referer: referer
+            )
+
+            if response.ok {
+                return response
+            }
+
+            return try await fallback.submitChickenLeg(
+                postID: postID,
+                action: action,
+                referer: referer
+            )
+        } catch {
+            return try await fallback.submitChickenLeg(
+                postID: postID,
+                action: action,
+                referer: referer
+            )
+        }
+    }
+}
+
+@MainActor
+final class DirectCommentDislikeAutomator: CommentDislikeAutomating {
+
+    private let client: NodeSeekDirectActionClient
+    private let fallback: CommentDislikeAutomating
+
+    init(
+        client: NodeSeekDirectActionClient = .shared,
+        fallback: CommentDislikeAutomating = WebViewCommentDislikeAutomator()
+    ) {
+        self.client = client
+        self.fallback = fallback
+    }
+
+    func submitDislike(
+        commentID: Int,
+        action: String,
+        referer: URL
+    ) async throws -> CommentUpvoteAutomationResponse {
+        do {
+            let response = try await client.submitCommentReaction(
+                commentID: commentID,
+                kind: .dislike,
+                action: action,
+                referer: referer
+            )
+
+            if response.ok {
+                return response
+            }
+
+            return try await fallback.submitDislike(
+                commentID: commentID,
+                action: action,
+                referer: referer
+            )
+        } catch {
+            return try await fallback.submitDislike(
+                commentID: commentID,
+                action: action,
+                referer: referer
+            )
+        }
+    }
+}
+
+@MainActor
+final class DirectPostDislikeAutomator: PostDislikeAutomating {
+
+    private let client: NodeSeekDirectActionClient
+    private let fallback: PostDislikeAutomating
+
+    init(
+        client: NodeSeekDirectActionClient = .shared,
+        fallback: PostDislikeAutomating = WebViewPostDislikeAutomator()
+    ) {
+        self.client = client
+        self.fallback = fallback
+    }
+
+    func submitDislike(
+        postID: Int,
+        action: String,
+        referer: URL
+    ) async throws -> PostUpvoteAutomationResponse {
+        do {
+            let response = try await client.submitPostReaction(
+                postID: postID,
+                kind: .dislike,
+                action: action,
+                referer: referer
+            )
+
+            if response.ok {
+                return response
+            }
+
+            return try await fallback.submitDislike(
+                postID: postID,
+                action: action,
+                referer: referer
+            )
+        } catch {
+            return try await fallback.submitDislike(
+                postID: postID,
+                action: action,
+                referer: referer
+            )
+        }
+    }
+}
